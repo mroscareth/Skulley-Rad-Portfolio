@@ -8,6 +8,7 @@ import { applyToonBanding } from '../lib/toonBanding.js'
 import SpeechBubble3D from './SpeechBubble3D.jsx'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import { playSfx } from '../lib/sfx.js'
+import { escuchar as escucharJuego } from '../lib/juegoEsferas.js'
 
 // Zoidian — NPC dueño del juego de las esferas. Vive donde antes flotaba solo
 // el "!" amarillo (entre los portales de Store y Contact); ahora el signo
@@ -525,7 +526,7 @@ export default function ZoidianNPC({
       for (const id of mockTimersRef.current) { clearTimeout(id); clearInterval(id) }
       mockTimersRef.current = []
     }
-    const sayMock = (key) => {
+    const sayMock = (key, { delay = 700, dura = 5600, tecleo = 60 } = {}) => {
       clearTimers()
       // La key puede resolver a un string o a un POOL de frases (mockEgg):
       // con pool, cada despiece saca una burla distinta al azar.
@@ -541,12 +542,12 @@ export default function ZoidianNPC({
           i += 1
           setMock({ on: true, typed: full.slice(0, i), full })
           if (i >= full.length) clearInterval(typeId)
-        }, 60)
+        }, tecleo)
         mockTimersRef.current.push(typeId)
         mockTimersRef.current.push(setTimeout(() => {
           setMock({ on: false, typed: '', full: '' })
-        }, 5600))
-      }, 700))
+        }, dura))
+      }, delay))
     }
     const onBoltShatter = () => sayMock('zoidian.mock')
     const onEggShatter = () => sayMock('zoidian.mockEgg')
@@ -554,10 +555,35 @@ export default function ZoidianNPC({
     window.addEventListener('character-disassembled-by-bolt', onBoltShatter)
     window.addEventListener('bolt-strike', onEggShatter)
     window.addEventListener('character-disassembled-by-argus', onPushShatter)
+
+    // El juego de esferas: Argus es quien ofreció el trato, así que comenta la
+    // partida (rachas, fiebre, carambolas, dorada, fuego, tiempo). Las grandes
+    // interrumpen; las chicas esperan a que termine la anterior.
+    let ocupadoHasta = 0
+    const comenta = (key, grande = false) => {
+      const ahora = performance.now()
+      if (!grande && ahora < ocupadoHasta) return
+      ocupadoHasta = ahora + 2400
+      sayMock(`zoidian.juego.${key}`, { delay: 0, dura: 2600, tecleo: 35 })
+    }
+    const quitarJuego = escucharJuego((tipo, d) => {
+      if (tipo === 'captura') {
+        if (d.fiebre) comenta('fiebre', true)
+        else if (d.dorada) comenta('doradaAtrapada', true)
+        else if (d.subioMult && d.mult >= 3) comenta(`x${d.mult}`)
+        else if (d.carambola) comenta('carambola')
+        else if (d.rompioRacha) comenta('rompe')
+      } else if (tipo === 'doblete') comenta('doblete', true)
+      else if (tipo === 'dorada') comenta('dorada', true)
+      else if (tipo === 'dorada-fin') comenta('doradaFin')
+      else if (tipo === 'fuego') comenta('fuego')
+      else if (tipo === 'tiempo') comenta('tiempo', true)
+    })
     return () => {
       window.removeEventListener('character-disassembled-by-bolt', onBoltShatter)
       window.removeEventListener('bolt-strike', onEggShatter)
       window.removeEventListener('character-disassembled-by-argus', onPushShatter)
+      quitarJuego()
       clearTimers()
     }
   }, [t])

@@ -22,6 +22,8 @@
 //   memoria, porque según el método de login Privy puede recargar la página y
 //   una variable se perdería justo con el premio dentro.
 
+import { puntajeDe } from './juegoEsferas.js'
+
 const API = `${import.meta.env.BASE_URL}api/profile.php`
 const CLAIM_KEY = 'skulley_pending_score'
 const BEAT_MS = 5000
@@ -31,6 +33,9 @@ const MAX_BATCH = 80
 let pending = null // promesa del boleto de la partida en curso
 let ending = null // promesa del cierre (últimas capturas + sello)
 let run = null // { token, t0, events, acked, timer, sending }
+// Calendario de la dorada y del portal en llamas que dio el servidor con el
+// boleto (ver juegoEsferas.js). Sin servidor, null: el juego arma uno propio.
+let schedule = null
 
 function post(action, body, keepalive = false) {
   return fetch(`${API}?action=${action}`, {
@@ -66,19 +71,38 @@ if (typeof document !== 'undefined') {
 export function startGameSession() {
   if (run) clearInterval(run.timer)
   ending = null
-  pending = post('game_start', {})
-    .then(d => (d?.ok ? d.game_token : null))
-    .catch(() => null)
+  schedule = null
+  const start = post('game_start', {}).catch(() => null)
+  pending = start.then(d => (d?.ok ? d.game_token : null))
   const r = { token: pending, t0: performance.now(), events: [], acked: 0, timer: null, sending: null }
+  start.then((d) => {
+    if (run === r && Array.isArray(d?.schedule)) schedule = d.schedule
+  })
   r.timer = setInterval(() => beat(r), BEAT_MS)
   run = r
   return pending
 }
 
-/** Anota una captura de la partida en curso: delta = puntos que sumó o restó. */
-export function recordCapture(delta) {
+/** Ms de reloj de pared desde que empezó la partida (lo que va en la bitácora). */
+export function gameElapsedMs() {
+  return run ? performance.now() - run.t0 : 0
+}
+
+/** El calendario del servidor, o null si todavía no llega o no hay servidor. */
+export function gameSchedule() {
+  return schedule
+}
+
+/**
+ * Anota una captura de la partida en curso: `base` = lo que vale la esfera por
+ * tamaño (negativa si fue al portal equivocado) o los 500 de la dorada;
+ * `flags` = BANDERA de juegoEsferas.js (carambola, portal en llamas). El
+ * servidor calcula el puntaje con las mismas reglas.
+ */
+export function recordCapture(base, flags = 0) {
   if (!run) return
-  run.events.push([Math.round(performance.now() - run.t0), delta])
+  const t = Math.round(performance.now() - run.t0)
+  run.events.push(flags ? [t, base, flags] : [t, base])
 }
 
 async function closeRun(r) {
@@ -145,24 +169,11 @@ export async function endGameSession(score, tier, { authenticated = false } = {}
 let lastStats = null
 
 function summarize(events) {
-  let correct = 0
-  let wrong = 0
-  let streak = 0
-  let bestStreak = 0
-  for (const [, delta] of events) {
-    if (delta > 0) {
-      correct += 1
-      streak += 1
-      bestStreak = Math.max(bestStreak, streak)
-    } else {
-      wrong += 1
-      streak = 0
-    }
-  }
-  return { captures: events.length, correct, wrong, bestStreak }
+  const r = puntajeDe(events)
+  return { captures: r.capturas, correct: r.aciertos, wrong: r.errores, bestStreak: r.mejorRacha, caroms: r.carambolas }
 }
 
-/** { captures, correct, wrong, bestStreak } de la partida que acaba de cerrar. */
+/** { captures, correct, wrong, bestStreak, caroms } de la partida que acaba de cerrar. */
 export function lastRunStats() {
   return lastStats
 }

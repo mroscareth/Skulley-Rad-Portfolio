@@ -2,7 +2,15 @@ import React, { useMemo, useRef, forwardRef, useImperativeHandle, useEffect } fr
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import scoreStore from '../lib/scoreStore'
-import { recordCapture } from '../lib/gameSession.js'
+import { recordCapture, gameElapsedMs, gameSchedule } from '../lib/gameSession.js'
+import {
+  PUNTOS, tamanoDe, BANDERA, DORADA, FIEBRE, juego, enFiebre, portalEnLlamas,
+  avanzarJuego, capturar, ponerCalendario, armarCalendario, avisoJuego,
+} from '../lib/juegoEsferas.js'
+import {
+  playSubeRacha, playRompeRacha, playFiebre, playDoradaAparece, playDoradaAtrapada,
+  playDoradaEscapa, playDoradaNo, playCarambola, playDoblete, playFuegoPortal,
+} from '../lib/juegoSonidos.js'
 import makeHullOutline from '../lib/makeHullOutline'
 import { applyToonBanding } from '../lib/toonBanding'
 import { applyNeonOrb } from '../lib/applyNeonOrb'
@@ -83,6 +91,23 @@ const _derechaCamara = new THREE.Vector3()
 // tiempo → cheat penalty. Después se olvida.
 const TAINT_WINDOW_S = 4.0
 
+// ── Juego de esferas (reglas en lib/juegoEsferas.js) ──
+// Cada esfera recuerda quién la movió por última vez en `_toque`
+// ({ tipo, kick, at } con at = reloj de la escena): 'patada' (el pie de Skulley;
+// `kick` es el Set de golpes de esa patada, uno por patada), 'carambola' (la
+// golpeó otra que venía de una patada, con el mismo `kick`), 'empuje' (el cuerpo
+// o la bola de fuego). Al entrar a un portal, si la movió una carambola hace
+// menos de TOQUE_S, vale doble; dos capturas de la misma patada son doblete.
+const TOQUE_S = 8
+// Velocidad de choque mínima para que cuente como carambola: un roce de dos
+// esferas casi quietas no es una jugada.
+const CARAMBOLA_CHOQUE = 1.2
+// La dorada solo entra si el jugador la tocó hace poco; si llega sola al
+// portal, el portal la escupe.
+const DORADA_TOQUE_S = 2.5
+// Cada cuánto el portal en llamas escupe un "×2" encima.
+const FUEGO_POPUP_S = 1.3
+
 // ===== THUNDER EASTER EGG (comer cursed orb → invocar rayo) =====
 // Cooldown desde el CAST (no desde comer): mientras corre, el cursed orb
 // permanece oculto y reaparece al expirar. Persistente en localStorage para
@@ -124,6 +149,8 @@ function createPopupPool(capacity) {
       text: '',
       color: '#ffffff',
       ttl: 0,
+      vida: 1.2,
+      escala: 1,
       opacity: 1,
     })
   }
@@ -190,6 +217,11 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
   const runeBurstRef = useRef(null)         // trigger imperativo de runas
   const shieldRef = useRef(null)            // escudo del domo: se enciende donde pegan
   const portalBurstRef = useRef(null)       // estallido toon al entrar a un portal
+  // Juego de esferas: si ya se puso el calendario de la partida, cuándo salió el
+  // último "×2" del portal en llamas y cuántas capturas lleva cada patada.
+  const calendarioPuestoRef = useRef(false)
+  const ultimoFuegoPopupRef = useRef(0)
+  const capturasPorPatadaRef = useRef(new WeakMap())
   const _groundPlane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), [])
 
   // Circular texture for particles
@@ -275,8 +307,10 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
     ctx.shadowOffsetX = 0
     ctx.shadowOffsetY = 0
 
-    // Text
+    // Text: 72 px, o menos si no cabe ("¡CARAMBOLA!" no cabe a 72 en 256).
     ctx.font = 'bold 72px Arial, sans-serif'
+    const ancho = ctx.measureText(text).width
+    if (ancho > size - 36) ctx.font = `bold ${Math.floor(72 * (size - 36) / ancho)}px Arial, sans-serif`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillStyle = color
@@ -406,6 +440,8 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
           s.vel.x += nx * impulse
           s.vel.z += nz * impulse
           s.vel.y += impulse * 0.4
+          // La bola de fuego la movió el jugador, pero no es carambola.
+          s._toque = { tipo: 'empuje', kick: null, at: performance.now() / 1000 }
         }
       }
     },
@@ -429,6 +465,8 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
         // Marca de "golpeada por el jugador": el mismo sello que usa el
         // shockwave del rayo, así el unlock de Oil cuenta las pateadas.
         if (!s._isCursed) s._boltKnockedAt = performance.now()
+        // `skip` es uno por patada: sirve de id para las carambolas y el doblete.
+        s._toque = { tipo: 'patada', kick: skip || {}, at: performance.now() / 1000 }
         if (skip) skip.add(s)
         hits.push({ x: s.pos.x, y: s.pos.y, z: s.pos.z, power: k.imp / Math.max(1e-4, strength), color: s.color || '' })
       }
@@ -918,8 +956,9 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
     }
   }
 
-  // Add popup to pool (without creating new objects)
-  const addPopup = (x, y, z, text, color) => {
+  // Add popup to pool (without creating new objects). `escala` agranda el letrero
+  // (los puntos crecen con el multiplicador) y `vida` lo deja más tiempo.
+  const addPopup = (x, y, z, text, color, escala = 1, vida = 1.2) => {
     const pool = popupPoolRef.current
     if (!pool) return
 
@@ -947,7 +986,9 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
     slot.z = z
     slot.text = text
     slot.color = color
-    slot.ttl = 1.2
+    slot.ttl = vida
+    slot.vida = vida
+    slot.escala = escala
     slot.opacity = 1
   }
 
@@ -1075,6 +1116,79 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
       s.portalDwellTime = 0
       s._isDragging = false
       s._wasDragged = false
+      s._toque = null
+    }
+
+    // ── Juego de esferas: reloj, calendario, dorada y portal en llamas ──
+    const jugando = gameActive && juego.activo
+    const ahoraS = performance.now() / 1000
+    const soltarDorada = (ms) => {
+      const candidatas = orbsRef.current.filter((o) => !o._isCursed && !o._isDragging && !o._dorada && !o._thunderHidden)
+      if (!candidatas.length) return
+      const s = candidatas[Math.floor(Math.random() * candidatas.length)]
+      const ang = Math.random() * Math.PI * 2
+      const rr = 5 + Math.random() * 3
+      s.pos.set(Math.cos(ang) * rr, 3.2, Math.sin(ang) * rr)
+      s.vel.set(0, 0, 0)
+      s._px = s.pos.x
+      s._pz = s.pos.z
+      s._dorada = { hastaMs: ms + DORADA.vida * 1000 }
+      s.color = DORADA.color
+      s.radius = DORADA.radio
+      s.spawnCooldown = 0.6
+      s.blinkT = 0.6
+      s._blinkPhase = 0
+      s._toque = null
+      s._doradaSalto = 0.5
+      s._doradaHuye = 0
+      s.portalDwellTime = 0
+      portalBurstRef.current?.burst([s.pos.x, GROUND_Y, s.pos.z], DORADA.color, 0.5, 2)
+      playDoradaAparece()
+      avisoJuego('dorada', {})
+    }
+    // La dorada se va (atrapada o no) y vuelve a ser una esfera normal.
+    const quitarDorada = (s, escapo) => {
+      if (escapo) {
+        portalBurstRef.current?.burst([s.pos.x, GROUND_Y, s.pos.z], DORADA.color, 0.5, 2)
+        playDoradaEscapa()
+        avisoJuego('dorada-fin', {})
+      }
+      s._dorada = null
+      respawnAtCenter(s)
+      s._px = s.pos.x
+      s._pz = s.pos.z
+    }
+    if (jugando) {
+      const ms = gameElapsedMs()
+      // El calendario del servidor llega con el boleto; si en 8 s no llegó (sin
+      // red), uno propio: el primer evento nunca sale antes de los 20 s.
+      if (!calendarioPuestoRef.current) {
+        const cal = gameSchedule()
+        if (cal) { ponerCalendario(cal); calendarioPuestoRef.current = true }
+        else if (ms > 8000) { ponerCalendario(armarCalendario()); calendarioPuestoRef.current = true }
+      }
+      const tocan = avanzarJuego(dt, ms)
+      for (const ev of tocan) {
+        if (ev.k === 'oro') soltarDorada(ms)
+        if (ev.k === 'fuego') {
+          const pf = portals?.find?.((pp) => pp.id === ev.p)
+          if (pf) portalBurstRef.current?.burst([pf.position[0], GROUND_Y, pf.position[2]], '#ff7a1a', 0.6, portalRadius)
+          playFuegoPortal()
+          ultimoFuegoPopupRef.current = 0
+        }
+      }
+      for (const s of orbsRef.current) {
+        if (s._dorada && ms >= s._dorada.hastaMs) quitarDorada(s, true)
+      }
+      const enLlamas = portalEnLlamas()
+      if (enLlamas && ahoraS - ultimoFuegoPopupRef.current > FUEGO_POPUP_S) {
+        ultimoFuegoPopupRef.current = ahoraS
+        const pf = portals?.find?.((pp) => pp.id === enLlamas)
+        if (pf) addPopup(pf.position[0], GROUND_Y + 3.2, pf.position[2], '×2', '#ff7a1a', 1.3, 1.2)
+      }
+    } else {
+      calendarioPuestoRef.current = false
+      for (const s of orbsRef.current) if (s._dorada) quitarDorada(s, false)
     }
 
     // Drag position update (before physics)
@@ -1272,6 +1386,56 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
         }
       }
 
+      // ── ESFERA DORADA: inestable, se escapa (Oscar) ──
+      // De vez en cuando da un saltito a un lado y, si Skulley ya está encima,
+      // se hace a un lado. Primero brincaba cada medio segundo y huía desde
+      // lejos: Oscar no la pudo alcanzar ("es inalcanzable"), así que los
+      // movimientos son esporádicos y cortos. Después de un toque del jugador
+      // se deja llevar un rato, para que una buena patada la lleve a donde
+      // apuntaste. Si se aleja del centro sin que nadie la toque, regresa.
+      if (s._dorada && !s._isDragging) {
+        const tocada = s._toque && ahoraS - s._toque.at < 1.2
+        s._doradaSalto = (s._doradaSalto || 0) - dt
+        s._doradaHuye = (s._doradaHuye || 0) - dt
+        if (!tocada && s._onFloor) {
+          if (s._doradaSalto <= 0) {
+            const ang = Math.random() * Math.PI * 2
+            const fuerza = 1.2 + Math.random() * 1
+            s.vel.x += Math.cos(ang) * fuerza
+            s.vel.z += Math.sin(ang) * fuerza
+            s.vel.y += 0.5 + Math.random() * 0.4
+            s._doradaSalto = 1.6 + Math.random() * 1.4
+          }
+          const p = player?.position
+          if (p && s._doradaHuye <= 0) {
+            const hx = s.pos.x - p.x
+            const hz = s.pos.z - p.z
+            const hd = Math.hypot(hx, hz)
+            if (hd < 1.8 && hd > 1e-3) {
+              const fuerza = 1.6 + Math.random() * 0.8
+              s.vel.x += (hx / hd) * fuerza
+              s.vel.z += (hz / hd) * fuerza
+              s.vel.y += 0.6
+              s._doradaHuye = 1.8
+            }
+          }
+          const dxz = Math.hypot(s.pos.x, s.pos.z)
+          if (dxz > 12) {
+            s.vel.x -= (s.pos.x / dxz) * dt * 3
+            s.vel.z -= (s.pos.z / dxz) * dt * 3
+          }
+          const sp = Math.hypot(s.vel.x, s.vel.z)
+          if (sp > 3.5) {
+            s.vel.x *= 3.5 / sp
+            s.vel.z *= 3.5 / sp
+          }
+        }
+        // Los últimos segundos parpadea: se va a ir.
+        if (s._dorada.hastaMs - gameElapsedMs() < DORADA.aviso * 1000) {
+          s._visible = Math.floor(performance.now() / 140) % 2 === 0
+        }
+      }
+
       // Out-of-bounds: los orbs normales respawnean a 55u del centro. Los
       // ORBS CURSED (antimatter o purified) NO tienen límite — pueden ir a
       // cualquier parte del escenario. Solo respawnean cuando entran a un
@@ -1306,6 +1470,12 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
           // taintea a esas orbs (cubre el caso "preparo la cursed con el
           // cuerpo y dejo que sus kicks la lleven al target").
           if (s._isCursed) s._userInteractedAt = state.clock.elapsedTime
+          // Empujada con el cuerpo: una esfera que va así no hace carambolas. Una
+          // recién pateada que sigue pegada al cuerpo conserva su patada.
+          const ahoraT = performance.now() / 1000
+          if (!(s._toque && s._toque.tipo === 'patada' && ahoraT - s._toque.at < 0.4)) {
+            s._toque = { tipo: 'empuje', kick: null, at: ahoraT }
+          }
           const playerSpeed = Math.min(playerVelRef.current.length(), 8)
           const playerPush = THREE.MathUtils.clamp(playerSpeed * PLAYER_PUSH_K, 0, 2.0)
           const impulseBase = (IMPULSE_BASE + playerPush) * THREE.MathUtils.clamp(0.6 + (0.5 / Math.max(0.18, s.radius)), 0.6, 3.0)
@@ -1412,6 +1582,23 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
           if (resolveOrbHit(a, b, nx, nz) && contra > SUENA_CHOQUE) {
             playOrbHit(Math.min(1, (contra - SUENA_CHOQUE) / 12), Math.min(a.radius, b.radius), dondeSuena(a))
           }
+          // Carambola: la que venía de una patada (o de otra carambola) le pasa la
+          // jugada a la que golpea, si su toque es más viejo.
+          if (contra > CARAMBOLA_CHOQUE) {
+            const ahora = performance.now() / 1000
+            const deJugada = (tq) => tq && (tq.tipo === 'patada' || tq.tipo === 'carambola') && ahora - tq.at < TOQUE_S
+            // Se decide con los toques de antes del choque: si no, la golpeada
+            // le devolvería la carambola a la que la golpeó.
+            const ta = a._toque
+            const tb = b._toque
+            const pasa = (deToque, a2, suToque) => {
+              if (!deJugada(deToque) || a2._isCursed) return
+              if (suToque && suToque.at >= deToque.at) return
+              a2._toque = { tipo: 'carambola', kick: deToque.kick, at: ahora }
+            }
+            pasa(ta, b, tb)
+            pasa(tb, a, ta)
+          }
         }
       }
     }
@@ -1439,13 +1626,33 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
         }
         if (!nearest) continue
         const d = Math.sqrt(bestD2)
-        const inZone = d <= Math.max(0.1, portalRad - s.radius * 0.5) && s.pos.y <= (GROUND_Y + s.radius + 0.02)
+        // La dorada cuenta aunque vaya brincando bajito: no se queda quieta nunca.
+        const alturaZona = s._dorada ? 0.6 : 0.02
+        const inZone = d <= Math.max(0.1, portalRad - s.radius * 0.5) && s.pos.y <= (GROUND_Y + s.radius + alturaZona)
 
         if (inZone) {
           s.portalDwellTime = (s.portalDwellTime || 0) + dt
         } else {
           s.portalDwellTime = 0
           continue
+        }
+
+        // La dorada entra en cuanto toca el portal, pero solo si la llevó el
+        // jugador; si llegó sola, el portal la escupe.
+        if (s._dorada) {
+          if (!jugando) continue
+          const tocadaPorJugador = s._toque && ahoraS - s._toque.at < DORADA_TOQUE_S
+          if (!tocadaPorJugador) {
+            const ex = s.pos.x - nearest.position[0]
+            const ez = s.pos.z - nearest.position[2]
+            const ed = Math.max(1e-3, Math.hypot(ex, ez))
+            s.vel.x = (ex / ed) * 5
+            s.vel.z = (ez / ed) * 5
+            s.vel.y = 3
+            s.portalDwellTime = 0
+            playDoradaNo()
+            continue
+          }
         }
 
         const speed = s.vel.length()
@@ -1460,26 +1667,65 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
         if (sinRayo && isCursed && !isOffering) continue
         // La ofrenda se captura AL INSTANTE — sin exigir que vaya lenta ni que
         // repose: si la avientas con fuerza igual cuenta el tributo.
-        if (!isOffering && speed > SPEED_STOP && s.portalDwellTime < DWELL_CAPTURE_TIME) continue
+        if (!isOffering && !s._dorada && speed > SPEED_STOP && s.portalDwellTime < DWELL_CAPTURE_TIME) continue
 
         // === DETERMINAR CASO ===
         // Rayo: cursed (antimatter o purified) hitting cualquier portal EXCEPTO
         // la ofrenda sagrada. La purified invoca rayos en TODOS los portales.
         const triggerLightning = isCursed && !isOffering
+        // Acierto: su color, o cualquiera durante la fiebre. La dorada siempre.
+        const mismoColor = (nearest.color || '').toLowerCase() === (s.color || '').toLowerCase()
+        const acierto = !!s._dorada || mismoColor || (jugando && !isCursed && enFiebre())
+        const px0 = nearest.position[0]
+        const pz0 = nearest.position[2]
 
         // === SCORING + DETECCIÓN DE CHEAT ===
-        if (gameActive) {
+        if (jugando && s._dorada) {
+          const r = capturar({ base: DORADA.puntos, tamano: 'chica' })
+          scoreStore.add(r.puntos)
+          recordCapture(DORADA.puntos, 0)
+          addPopup(px0, GROUND_Y + 2.6, pz0, `+${r.puntos}`, DORADA.color, 1.9, 1.8)
+          playDoradaAtrapada()
+          if (r.subioMult) playSubeRacha(r.mult)
+          if (r.fiebre) playFiebre()
+          s._wasDragged = false
+          s._taintedByCursedAt = 0
+        } else if (jugando) {
           if (!isCursed) {
-            // Three scoring tiers: small (100), medium (30), large (5)
-            const correct = (nearest.color || '').toLowerCase() === (s.color || '').toLowerCase()
-            const base = s.radius <= 0.28 ? 100 : s.radius <= 0.42 ? 30 : 5
-            const delta = correct ? base : -base
-            scoreStore.add(delta)
-            recordCapture(delta)
+            // Lo que vale por tamaño (100 / 30 / 5) y, si entró bien, si fue
+            // carambola o si el portal está en llamas (lib/juegoEsferas.js).
+            const tam = tamanoDe(s.radius)
+            const base = acierto ? PUNTOS[tam] : -PUNTOS[tam]
+            const tq = s._toque && ahoraS - s._toque.at < TOQUE_S ? s._toque : null
+            let banderas = 0
+            if (acierto && tq?.tipo === 'carambola') banderas |= BANDERA.carambola
+            if (acierto && portalEnLlamas() === nearest.id) banderas |= BANDERA.fuego
+            const r = capturar({ base, banderas, tamano: tam })
+            scoreStore.add(r.puntos)
+            recordCapture(base, banderas)
 
-            const popupText = `${delta > 0 ? '+' : ''}${delta}`
-            const popupColor = delta > 0 ? '#f5ff00' : '#ef4444'
-            addPopup(nearest.position[0], GROUND_Y + 2.6, nearest.position[2], popupText, popupColor)
+            const popupText = `${r.puntos > 0 ? '+' : ''}${r.puntos}`
+            const popupColor = r.puntos > 0 ? '#f5ff00' : '#ef4444'
+            const escala = r.puntos > 0 ? 1 + (r.mult - 1) * 0.18 + (banderas ? 0.25 : 0) : 1
+            addPopup(px0, GROUND_Y + 2.6, pz0, popupText, popupColor, escala, 1.2 + (escala - 1))
+            if (banderas & BANDERA.carambola) {
+              addPopup(px0, GROUND_Y + 3.5, pz0, '¡CARAMBOLA!', '#22e3ff', 1.5, 1.6)
+              playCarambola()
+            }
+            // Dos (o tres) esferas de la misma patada: doblete.
+            if (acierto && tq?.kick && (tq.tipo === 'patada' || tq.tipo === 'carambola')) {
+              const mapa = capturasPorPatadaRef.current
+              const n = (mapa.get(tq.kick) || 0) + 1
+              mapa.set(tq.kick, n)
+              if (n >= 2) {
+                addPopup(px0, GROUND_Y + 4.4, pz0, n >= 3 ? '¡TRIPLETE!' : '¡DOBLETE!', '#ff4fd8', 1.6, 1.8)
+                playDoblete()
+                avisoJuego('doblete', { n })
+              }
+            }
+            if (r.subioMult) playSubeRacha(r.mult)
+            if (r.rompioRacha) playRompeRacha()
+            if (r.fiebre) playFiebre()
 
             // Cheat detection: (1) la esfera fue arrastrada por el user, o
             // (2) fue TAINTED por contacto con la cursed (player usó la
@@ -1506,7 +1752,7 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
 
         // La corrupta ya tiene su rayo.
         if (!isCursed) {
-          playOrbPortal((nearest.color || '').toLowerCase() === (s.color || '').toLowerCase(), s.radius, dondeSuena(s))
+          playOrbPortal(acierto, s.radius, dondeSuena(s))
         }
 
         // === EXPLOSIÓN DE PARTÍCULAS ===
@@ -1515,9 +1761,9 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
           // Cursed: explota en su propio color (rojo o púrpura) — lectura
           // mística, no scoring.
           explosionColor = s.color || '#10b981'
-        } else if (gameActive) {
-          const matchColor = (nearest.color || '').toLowerCase() === (s.color || '').toLowerCase()
-          explosionColor = matchColor ? (s.color || '#10b981') : '#ef4444'
+        } else if (jugando) {
+          const enColor = s._dorada ? DORADA.color : (enFiebre() ? FIEBRE.color : s.color)
+          explosionColor = acierto ? (enColor || '#10b981') : '#ef4444'
         } else {
           explosionColor = s.color || '#10b981'
         }
@@ -1567,7 +1813,7 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
         // esfera fue empujada por el shockwave del rayo recientemente — Oil SOLO
         // cuenta esas (no las que arrastras/empujas a mano). Corre también en
         // modo libre (no gated por gameActive).
-        if (!isCursed && nearest.id) {
+        if (!isCursed && !s._dorada && nearest.id) {
           const boltKnocked = !!s._boltKnockedAt && (performance.now() - s._boltKnockedAt) < 6000
           try {
             window.dispatchEvent(new CustomEvent('orb-captured', {
@@ -1584,6 +1830,8 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
           // Cursed hitting portal (no-ofrenda): mantiene su color actual
           // (rojo si antimatter, púrpura si purified).
           respawnAtCenter(s, { keepColor: s.color })
+        } else if (s._dorada) {
+          quitarDorada(s, false)
         } else {
           respawnAtCenter(s)
         }
@@ -1635,6 +1883,10 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
     // always matches the physics data (position, scale, color, visibility).
     // This prevents the desync where a respawned sphere keeps its old visual
     // size while scoring uses the new radius.
+    // En la fiebre todas las esferas se ven del color de la fiebre (su color de
+    // verdad sigue ahí para cuando acabe); la dorada siempre se ve dorada.
+    const fiebreVisual = jugando && enFiebre()
+    const colorVisto = (s) => (s._dorada ? DORADA.color : (fiebreVisual && !s._isCursed ? FIEBRE.color : s.color))
     for (let i = 0; i < orbsRef.current.length; i++) {
       const s = orbsRef.current[i]
       const grp = orbGroupsRef.current[i]
@@ -1653,12 +1905,14 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
         // Flash de escala — easeOut sobre 0.18s. Boost máx ~1.35x.
         const flashT = cursed && s._curseFlash ? Math.max(0, s._curseFlash) / 0.18 : 0
         const flashBoost = 1.0 + flashT * 0.35
-        mesh.scale.setScalar(Math.max(0.01, s.radius * flashBoost))
+        // La dorada late: inestable también a la vista.
+        const late = s._dorada ? 1 + Math.sin(performance.now() * 0.012) * 0.14 : 1
+        mesh.scale.setScalar(Math.max(0.01, s.radius * flashBoost * late))
         if (mesh.material && mesh.material.emissive) {
           // NEÓN: color (diffuse) se mantiene NEGRO permanente — ver material
           // del orb. Solo el emissive cambia al color del orb. Si esto se
           // sincronizara al color de la esfera, el IBL volvería a blanquear.
-          _tempColor.set(s.color)
+          _tempColor.set(colorVisto(s))
           if (!mesh.material.emissive.equals(_tempColor)) {
             mesh.material.emissive.copy(_tempColor)
           }
@@ -1666,7 +1920,7 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
       }
       const light = lightRigRef?.current?.children[i]
       if (light) {
-        _tempColor.set(s.color)
+        _tempColor.set(colorVisto(s))
         if (!light.color.equals(_tempColor)) light.color.copy(_tempColor)
         light.position.copy(grp.position)
         light.intensity = s._visible ? ORB_LIGHT_INTENSITY : 0
@@ -1683,9 +1937,11 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
       // color del orb → aura roja pre-unlock, aura púrpura post-unlock.
       const aura = orbAurasRef.current[i]
       if (aura) {
-        aura.setVisible(!!s._isCursed && !!s._visible)
+        // La dorada lleva el aura de la corrupta en dorado: el mismo programa, ya
+        // compilado, así que no recompila nada al aparecer.
+        aura.setVisible((!!s._isCursed || !!s._dorada) && !!s._visible)
         aura.setRadius(s.radius)
-        aura.setColor(s.color)
+        aura.setColor(s._dorada ? DORADA.color : s.color)
       }
     }
 
@@ -1717,11 +1973,12 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
         if (p.active) {
           p.ttl -= dt
           p.y += dt * 0.8 // Float up gently
-          p.opacity = Math.max(0, p.ttl / 1.2)
+          p.opacity = Math.max(0, Math.min(1, (p.ttl / (p.vida || 1.2)) * 1.6))
 
           // Imperative update (no React props)
           if (sprite) {
             sprite.position.set(p.x, p.y, p.z)
+            sprite.scale.set(2.5 * (p.escala || 1), 1.25 * (p.escala || 1), 1)
             sprite.visible = true
           }
           if (mat) {

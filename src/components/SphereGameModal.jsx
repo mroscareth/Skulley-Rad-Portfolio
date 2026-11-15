@@ -93,6 +93,16 @@ const SCORE_ROWS = [
   { key: 'large', color: '#39ff14', size: 50, pts: '+5' },
 ]
 
+// Los bonos de la partida, con el color con que salen en el juego.
+const EXTRAS = [
+  { key: 'reloj', color: '#ffffff' },
+  { key: 'racha', color: '#f5ff00' },
+  { key: 'carambola', color: '#22e3ff' },
+  { key: 'fiebre', color: '#f5ff00' },
+  { key: 'dorada', color: '#ffc21a' },
+  { key: 'fuego', color: '#ff7a1a' },
+]
+
 function SphereGameModal({ t, open, onClose, gameActive = false, onStartGame }) {
   const { lang } = useLanguage()
   // Escape to close
@@ -179,6 +189,16 @@ function SphereGameModal({ t, open, onClose, gameActive = false, onStartGame }) 
                   </li>
                 ))}
               </ul>
+              {/* Los bonos (lib/juegoEsferas.js): renglones con divisor, sin tarjetas. */}
+              <h3 className="text-sm font-bold text-white mt-8 mb-1">{t('spheresTutorial.extrasTitle')}</h3>
+              <dl className="divide-y-2 divide-white/10 border-y-2 border-white/10">
+                {EXTRAS.map(({ key, color }) => (
+                  <div key={key} className="flex items-baseline gap-4 py-3">
+                    <dt className="argus-display shrink-0 w-28 text-[1.15rem] leading-none" style={{ color }}>{t(`spheresTutorial.${key}Tag`)}</dt>
+                    <dd className="text-white/75 text-sm leading-relaxed">{t(`spheresTutorial.${key}`)}</dd>
+                  </div>
+                ))}
+              </dl>
             </section>
           </div>
 

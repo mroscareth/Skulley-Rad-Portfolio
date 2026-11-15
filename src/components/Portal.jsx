@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
 import { runeCell } from '../lib/runeAlphabet.js'
 import { getRuneAtlas, RUNE_ATLAS_GLSL } from '../lib/runeAtlas.js'
+import { enFiebre, portalEnLlamas, FIEBRE } from '../lib/juegoEsferas.js'
 
 /**
  * Portal — ritual arcano compuesto por tres capas:
@@ -670,6 +671,8 @@ export default function Portal({
   // Portal antimateria (section6): apaga plasma base del torus → lectura
   // "agujero negro con destellos rojos tipo lava".
   antimatter = false,
+  // Id de la sección: con él sabe si el juego de esferas lo prendió en llamas.
+  juegoId = null,
 }) {
   const groupRef = useRef()
   const torusRef = useRef()
@@ -775,10 +778,20 @@ export default function Portal({
     const t = state?.clock ? state.clock.getElapsedTime() : 0
     // Avanza tiempo en uniforms
     uniforms.uTime.value = t
-    // Actualiza colores del lerp (por si los props cambiaron sin remount)
-    uniforms.uColor.value.set(color)
-    uniforms.uTargetColor.value.set(targetColor)
+    // Actualiza colores del lerp (por si los props cambiaron sin remount). En la
+    // fiebre del juego de esferas todos los portales se ven del color de la
+    // fiebre (lib/juegoEsferas.js); son uniforms, no recompila nada.
+    const fiebre = !antimatter && enFiebre()
+    uniforms.uColor.value.set(fiebre ? FIEBRE.color : color)
+    uniforms.uTargetColor.value.set(fiebre ? FIEBRE.color : targetColor)
     uniforms.uMix.value = THREE.MathUtils.clamp(mix, 0, 1)
+    // En llamas: el anillo y el disco arden más y laten rápido mientras dure.
+    // Tope bajo: arriba de ~2.3 el color se lava a blanco (sin tonemapping) y ya
+    // no se lee de qué color es el portal, que es lo que importa para acertar.
+    const enLlamas = juegoId && portalEnLlamas() === juegoId
+    const arde = enLlamas ? 0.5 + 0.5 * Math.sin(t * 13) : 0
+    torusUniforms.uIntensity.value = 1.5 + arde * 0.8
+    discUniforms.uIntensity.value = 1.4 + arde * 0.6
     // Cicla la runa central por las letras del nombre. Período de 1.2s por
     // letra. El offset por-portal (uRuneSeed * 0.7) evita que 2 portales
     // muestren la misma letra a la vez aunque tengan la misma longitud.
@@ -801,7 +814,7 @@ export default function Portal({
 
     // Pulso de escala sutil — apenas perceptible pero rompe el look mecánico
     if (groupRef.current) {
-      const s = 1 + Math.sin(t * 0.7) * 0.015
+      const s = 1 + Math.sin(t * 0.7) * 0.015 + arde * 0.07
       groupRef.current.scale.setScalar(s)
     }
 

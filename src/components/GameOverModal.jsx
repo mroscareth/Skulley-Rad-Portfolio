@@ -55,7 +55,7 @@ const ES = {
   },
   unit: 'puntos',
   newRecord: '¡Nuevo récord!',
-  stats: { captures: 'Esferas', correct: 'Aciertos', streak: 'Mejor racha' },
+  stats: { correct: 'Aciertos', streak: 'Mejor racha', caroms: 'Carambolas' },
   goals: { silver: 'Silver', gold: 'Golden y skin dorada' },
   goalName: { silver: 'el Silver Ticket', gold: 'el Golden Ticket y la skin dorada' },
   toNext: (n, name) => `Te faltan ${n} puntos para ${name}`,
@@ -92,7 +92,7 @@ const EN = {
   },
   unit: 'points',
   newRecord: 'New record!',
-  stats: { captures: 'Orbs', correct: 'Hits', streak: 'Best streak' },
+  stats: { correct: 'Hits', streak: 'Best streak', caroms: 'Caroms' },
   goals: { silver: 'Silver', gold: 'Golden + gold skin' },
   goalName: { silver: 'the Silver Ticket', gold: 'the Golden Ticket and the gold skin' },
   toNext: (n, name) => `${n} points to go for ${name}`,
@@ -385,16 +385,16 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
             style={reveal(done, 14)}
           >
             <div>
-              <dt>{tr.stats.captures}</dt>
-              <dd>{fmt(stats.captures)}</dd>
-            </div>
-            <div>
               <dt>{tr.stats.correct}</dt>
               <dd>{fmt(stats.correct)}</dd>
             </div>
             <div>
               <dt>{tr.stats.streak}</dt>
               <dd>{fmt(stats.bestStreak)}</dd>
+            </div>
+            <div>
+              <dt>{tr.stats.caroms}</dt>
+              <dd>{fmt(stats.caroms || 0)}</dd>
             </div>
           </dl>
         )}

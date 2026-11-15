@@ -899,6 +899,7 @@ export default function HomeScene({
                 flickerKey={section}
                 sectionName={p.name}
                 antimatter={p.antimatter}
+                juegoId={p.id}
               />
               {/* Cristal: se arma con el hover del item de menú de ESTA sección
                   o cuando el personaje pisa el portal, y se desarma al salir de

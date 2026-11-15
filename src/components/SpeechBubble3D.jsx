@@ -269,7 +269,15 @@ export default function SpeechBubble3D({
   })
 
   const shouldRender = Boolean(visible && (displayText || layoutText))
-  if (!shouldRender) return null
+  // Después de su primera frase el globo se queda montado y solo se oculta: al
+  // desmontarse, la siguiente frase creaba Text nuevos de troika y three
+  // compilaba 2 programas cada vez que alguien hablaba (medido el 2026-11-15 con
+  // las reacciones de Argus en el juego de esferas; a Skulley le pasaba igual).
+  const ultimoRef = useRef({ display: '', layout: '' })
+  if (shouldRender) ultimoRef.current = { display: displayText, layout: layoutText }
+  if (!shouldRender && !ultimoRef.current.display && !ultimoRef.current.layout) return null
+  const textoVisible = shouldRender ? displayText : ultimoRef.current.display
+  const textoMedida = shouldRender ? layoutText : ultimoRef.current.layout
 
   const CY = 0.72 // local Y center of the bubble
   const SEG = 64
@@ -278,7 +286,7 @@ export default function SpeechBubble3D({
   const noRaycast = () => null
 
   return (
-    <group ref={groupRef} rotation={[0, 0, -0.04]} raycast={noRaycast}>
+    <group ref={groupRef} rotation={[0, 0, -0.04]} raycast={noRaycast} visible={shouldRender}>
       {/* Shadow: hard offset black burst + tail (pop-art drop) */}
       <mesh geometry={burstGeos.border} position={[0.12, CY - 0.12, -0.02]} raycast={noRaycast}>
         <meshBasicMaterial color={'#000000'} opacity={0.9} />
@@ -346,7 +354,7 @@ export default function SpeechBubble3D({
           } catch {}
         }}
       >
-        {layoutText || displayText}
+        {textoMedida || textoVisible}
       </Text>
 
       {/* VISIBLE text: shows the typed-in characters. No onSync (doesn't drive
@@ -366,7 +374,7 @@ export default function SpeechBubble3D({
         outlineColor={isEgg ? '#000000' : '#fbfbfb'}
         raycast={noRaycast}
       >
-        {displayText || layoutText}
+        {textoVisible || textoMedida}
       </Text>
     </group>
   )

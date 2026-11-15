@@ -49,9 +49,31 @@ const GAME_SESSION_MAX_AGE = 43200; // 12 h
 //
 // Las esferas renacen en el centro y los portales están a 16 u; el personaje
 // corre a ~7.8 u/s. Una esfera chica (100) por viaje de ida y vuelta da ~25
-// pts/s sostenidos en el mejor caso. 40 deja margen para rachas con suerte;
-// con eso el Golden (6,000) pide al menos ~135 s de juego.
-const GAME_CAPTURE_DELTAS = [100, 30, 5, -100, -30, -5];
+// pts/s sostenidos en el mejor caso. 40 deja margen para rachas con suerte.
+// El ritmo y las rachas se miden con lo que vale cada esfera por tamaño (la
+// base), sin multiplicadores ni la dorada: eso es lo que limita la física.
+//
+// Desde el 2026-11-15 cada captura es [ms, base, banderas] y el puntaje lo
+// calcula el servidor con las reglas de src/lib/juegoEsferas.js
+// (gameScoreFromEvents): racha que multiplica, carambola y portal en llamas que
+// doblan, dorada de 500 fijos. El navegador no puede inventarse un ×4: la racha
+// sale de la secuencia. La dorada y el fuego solo valen dentro de las ventanas
+// del calendario que el servidor dio en game_start; las carambolas tienen tope.
+const GAME_CAPTURE_DELTAS = [100, 30, 5, -100, -30, -5, 500];
+const GAME_GOLD_POINTS = 500;
+const GAME_FLAG_CAROM = 1;
+const GAME_FLAG_FIRE = 2;
+const GAME_STREAK_MULT = [[10, 4], [6, 3], [3, 2]];
+const GAME_GOLD_LIFE_MS = 15000; // = DORADA.vida en juegoEsferas.js
+const GAME_FIRE_MS = 10000;
+// El reloj del cliente arranca antes de que llegue el boleto, y started_at va
+// truncado a segundos.
+const GAME_WINDOW_SLACK_MS = 3000;
+const GAME_SCHEDULE_MS = 30 * 60 * 1000;
+const GAME_SCHEDULE_PORTALS = ['section1', 'section2', 'section3', 'section4', 'section5'];
+// Una de cada dos capturas como carambola ya es mucha suerte; 3 de gracia.
+const GAME_CAROM_SHARE = 0.6;
+const GAME_CAROM_GRACE = 3;
 const GAME_PACE_POINTS_PER_SECOND = 40;
 const GAME_PACE_GRACE = 600;
 // Varias esferas pueden caer juntas en un portal, pero 7 chicas en 10 s no.
@@ -227,11 +249,75 @@ function openGameSession(string $token): ?array
     return $session;
 }
 
+/** Multiplicador por aciertos seguidos. Espejo de multiplicadorDe() en juegoEsferas.js. */
+function gameStreakMult(int $streak): int
+{
+    foreach (GAME_STREAK_MULT as [$from, $mult]) {
+        if ($streak >= $from) return $mult;
+    }
+    return 1;
+}
+
+/** Puntaje de la bitácora completa. Espejo de puntajeDe() en juegoEsferas.js. */
+function gameScoreFromEvents(array $events): int
+{
+    $total = 0;
+    $streak = 0;
+    foreach ($events as $e) {
+        $base = (int)$e[1];
+        $flags = (int)($e[2] ?? 0);
+        if ($base < 0) {
+            $total += $base;
+            $streak = 0;
+            continue;
+        }
+        $streak++;
+        if ($base === GAME_GOLD_POINTS) {
+            $total += $base;
+            continue;
+        }
+        $points = $base * gameStreakMult($streak);
+        if ($flags & GAME_FLAG_CAROM) $points *= 2;
+        if ($flags & GAME_FLAG_FIRE) $points *= 2;
+        $total += $points;
+    }
+    return $total;
+}
+
+/**
+ * Cuándo sale la esfera dorada y qué portal se enciende, en ms desde el inicio.
+ * La misma receta que armarCalendario() en juegoEsferas.js.
+ */
+function gameSchedule(): array
+{
+    $between = fn(int $a, int $b): int => random_int($a * 1000, $b * 1000);
+    $events = [];
+    for ($t = $between(20, 30); $t < GAME_SCHEDULE_MS; $t += $between(30, 45)) {
+        $events[] = ['k' => 'oro', 't' => $t];
+    }
+    for ($t = $between(40, 50); $t < GAME_SCHEDULE_MS; $t += $between(35, 50)) {
+        $events[] = ['k' => 'fuego', 't' => $t, 'p' => GAME_SCHEDULE_PORTALS[random_int(0, count(GAME_SCHEDULE_PORTALS) - 1)]];
+    }
+    usort($events, fn($a, $b) => $a['t'] <=> $b['t']);
+    return $events;
+}
+
+/** La ventana del calendario de tipo `$kind` que contiene `$t`, o null. */
+function gameWindowAt(array $schedule, string $kind, int $t, int $lengthMs): ?int
+{
+    foreach ($schedule as $i => $ev) {
+        if (($ev['k'] ?? '') !== $kind) continue;
+        $at = (int)($ev['t'] ?? -1);
+        if ($t >= $at - GAME_WINDOW_SLACK_MS && $t <= $at + $lengthMs + GAME_WINDOW_SLACK_MS) return $i;
+    }
+    return null;
+}
+
 /**
  * Agrega capturas a la bitácora de la partida y devuelve cuántas lleva
  * recibidas, para que el cliente sepa desde dónde seguir.
  *
- * Cada captura es [ms desde el inicio, delta]. `seq` es el índice de la
+ * Cada captura es [ms desde el inicio, base, banderas?]. `seq` es el índice de la
  * primera del lote: si una respuesta se pierde y el cliente reenvía, las ya
  * recibidas se saltan en vez de contarse dos veces.
  *
@@ -251,34 +337,62 @@ function ingestGameEvents(array $session, array $data): int
     if (!$batch) return $received;
 
     $events = json_decode((string)($session['events'] ?? ''), true) ?: [];
-    $score = (int)$session['server_score'];
+    $schedule = json_decode((string)($session['schedule'] ?? ''), true) ?: [];
     $earned = (int)$session['earned'];
     $lastT = (int)$session['last_t'];
     $flag = $session['flag'];
     $nowMs = (int)((microtime(true) - (int)strtotime((string)$session['started_at'])) * 1000);
+    $positives = 0;
+    $caroms = 0;
+    $goldWindows = [];
+    foreach ($events as $prev) {
+        if ($prev[1] > 0) $positives++;
+        if ((($prev[2] ?? 0) & GAME_FLAG_CAROM) !== 0) $caroms++;
+        if ($prev[1] === GAME_GOLD_POINTS) {
+            $w = gameWindowAt($schedule, 'oro', (int)$prev[0], GAME_GOLD_LIFE_MS);
+            if ($w !== null) $goldWindows[$w] = true;
+        }
+    }
 
     foreach ($batch as $e) {
         if ($flag !== null || count($events) >= GAME_MAX_EVENTS) break;
         if (!is_array($e) || !is_int($e[0] ?? null) || !is_int($e[1] ?? null)) { $flag = 'shape'; break; }
-        [$t, $d] = $e;
+        $t = $e[0];
+        $d = $e[1];
+        $f = $e[2] ?? 0;
+        if (!is_int($f) || $f < 0 || $f > (GAME_FLAG_CAROM | GAME_FLAG_FIRE)) { $flag = 'shape'; break; }
         if (!in_array($d, GAME_CAPTURE_DELTAS, true)) { $flag = 'delta'; break; }
+        // Las banderas solo van en aciertos normales: un error vale su base y la
+        // dorada vale 500 fijos.
+        if ($f !== 0 && ($d < 0 || $d === GAME_GOLD_POINTS)) { $flag = 'flags'; break; }
         if ($t < $lastT || $t < 0) { $flag = 'order'; break; }
         if ($t > $nowMs + GAME_EVENT_FUTURE_SLACK_MS) { $flag = 'future'; break; }
         if ($t < $nowMs - GAME_EVENT_MAX_DELAY_MS) continue;
 
-        if ($d > 0) {
+        if ($d === GAME_GOLD_POINTS) {
+            // Una dorada por ventana del calendario.
+            $w = gameWindowAt($schedule, 'oro', $t, GAME_GOLD_LIFE_MS);
+            if ($w === null || isset($goldWindows[$w])) { $flag = 'gold'; break; }
+            $goldWindows[$w] = true;
+        } elseif ($d > 0) {
             if ($earned + $d > intdiv($t, 1000) * GAME_PACE_POINTS_PER_SECOND + GAME_PACE_GRACE) { $flag = 'pace'; break; }
             $burst = $d;
             for ($i = count($events) - 1; $i >= 0 && $events[$i][0] > $t - GAME_BURST_WINDOW_MS; $i--) {
-                if ($events[$i][1] > 0) $burst += $events[$i][1];
+                if ($events[$i][1] > 0 && $events[$i][1] !== GAME_GOLD_POINTS) $burst += $events[$i][1];
             }
             if ($burst > GAME_BURST_MAX) { $flag = 'burst'; break; }
+            if (($f & GAME_FLAG_FIRE) && gameWindowAt($schedule, 'fuego', $t, GAME_FIRE_MS) === null) { $flag = 'fire'; break; }
+            if ($f & GAME_FLAG_CAROM) {
+                $caroms++;
+                if ($caroms > GAME_CAROM_GRACE + ($positives + 1) * GAME_CAROM_SHARE) { $flag = 'carom'; break; }
+            }
             $earned += $d;
         }
-        $score += $d;
+        if ($d > 0) $positives++;
         $lastT = $t;
-        $events[] = [$t, $d];
+        $events[] = $f !== 0 ? [$t, $d, $f] : [$t, $d];
     }
+    $score = gameScoreFromEvents($events);
 
     if ($flag !== null && $session['flag'] === null) {
         error_log("[profile] game {$session['id']} flagged '{$flag}' at {$nowMs}ms, ip {$session['ip']}");
@@ -741,6 +855,8 @@ function ensureTables(): void
         'last_t'       => 'INT NOT NULL DEFAULT 0',
         'events'       => 'MEDIUMTEXT DEFAULT NULL',
         'flag'         => 'VARCHAR(20) DEFAULT NULL',
+        // Calendario de la dorada y del portal en llamas (gameSchedule()).
+        'schedule'     => 'MEDIUMTEXT DEFAULT NULL',
     ];
     foreach ($added as $col => $def) {
         if (!in_array($col, $have, true)) {
@@ -762,10 +878,14 @@ function handleGameStart(): void
         Middleware::error('rate_limited', 429);
     }
     $token = bin2hex(random_bytes(16));
+    // El calendario de la dorada y del portal en llamas lo decide el servidor:
+    // así sabe cuándo pueden valer esas capturas.
+    $schedule = gameSchedule();
     Database::insert('game_sessions', [
         'token'      => $token,
         'started_at' => date('Y-m-d H:i:s'),
         'ip'         => substr((string)($_SERVER['REMOTE_ADDR'] ?? ''), 0, 45),
+        'schedule'   => json_encode($schedule),
     ]);
     // Limpieza oportunista: boletos nunca usados de hace más de 2 días.
     if (random_int(1, 50) === 1) {
@@ -774,5 +894,5 @@ function handleGameStart(): void
             [date('Y-m-d H:i:s', time() - 2 * 86400)]
         );
     }
-    Middleware::success(['game_token' => $token]);
+    Middleware::success(['game_token' => $token, 'schedule' => $schedule]);
 }

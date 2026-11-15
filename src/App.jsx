@@ -157,6 +157,8 @@ import useSkinSystem from './game/useSkinSystem.js'
 import useTicketDiscount from './hooks/useTicketDiscount.js'
 import { useShopCartCtx } from './lib/shopCartContext.jsx'
 import { startGameSession, endGameSession } from './lib/gameSession.js'
+import { iniciarJuego, detenerJuego, escuchar as escucharJuego } from './lib/juegoEsferas.js'
+import JuegoHUD from './components/JuegoHUD.jsx'
 import useDwellTimeTracking from './hooks/useDwellTimeTracking.js'
 import useSectionVisitTracking from './hooks/useSectionVisitTracking.js'
 import { ACHIEVEMENTS, localizeAchievement, PIXEL_SKIN_SCORE_THRESHOLD } from './lib/achievementsCatalog.js'
@@ -484,6 +486,24 @@ function SiteApp() {
   const section6Unlocked = hasAchievement('section6_unlocked')
   const [gameOverOpen, setGameOverOpen] = useState(false)
   const [gameOverScore, setGameOverScore] = useState(0)
+  // Fin de partida: con END GAME o cuando el reloj llega a cero (lib/juegoEsferas.js).
+  // Sella el final en el servidor y, sin sesión, aparta el score para reclamarlo.
+  const terminarPartidaRef = useRef(null)
+  terminarPartidaRef.current = () => {
+    // Ya terminó (END GAME mientras corría el aviso del tiempo).
+    if (!sphereGameActive) return
+    const finalScore = scoreStore.get()
+    detenerJuego()
+    try { endGameSession(finalScore, getRewardTier(finalScore)?.tier, { authenticated }) } catch { }
+    setGameOverScore(finalScore)
+    setGameOverOpen(true)
+    setSphereGameActive(false)
+  }
+  // Se acabó el tiempo: un respiro para que se vea el aviso y suene la chicharra.
+  useEffect(() => escucharJuego((tipo) => {
+    if (tipo === 'tiempo') setTimeout(() => terminarPartidaRef.current?.(), 1600)
+  }), [])
+  useEffect(() => { if (!sphereGameActive) detenerJuego() }, [sphereGameActive])
 
   // Sistema de skins (base / dorada / animadas por shader). Ownership: base
   // siempre, dorada por flag de perfil, shader por achievements. Ver
@@ -3787,7 +3807,10 @@ function SiteApp() {
       )}
       {/* Score HUD - only show when game is active and character has landed */}
       {section === 'home' && !bootLoading && homeLanded && sphereGameActive && (
-        <ScoreHUD t={t} isCompactUi={isCompactUi} />
+        <>
+          <ScoreHUD t={t} isCompactUi={isCompactUi} />
+          <JuegoHUD isCompactUi={isCompactUi} lang={lang} sectionLabel={sectionLabel} />
+        </>
       )}
       {/* END GAME: en escritorio toma el lugar de la barra de secciones, que se va
           mientras dura la partida (uiJuego), y entra cuando ella ya salió. */}
@@ -3799,13 +3822,7 @@ function SiteApp() {
             type="button"
             onClick={() => {
               try { playSfx('click', { volume: 1.0 }) } catch { }
-              const finalScore = scoreStore.get()
-              // Sella el final de la partida en el servidor y, si no hay
-              // sesión, aparta el score para reclamarlo tras iniciarla.
-              try { endGameSession(finalScore, getRewardTier(finalScore)?.tier, { authenticated }) } catch { }
-              setGameOverScore(finalScore)
-              setGameOverOpen(true)
-              setSphereGameActive(false)
+              terminarPartidaRef.current?.()
             }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
             className={`h-9 px-5 rounded-full bg-red-600/90 hover:bg-red-500 active:bg-red-700 text-white text-xs font-marquee uppercase tracking-widest shadow-lg shadow-red-900/30 backdrop-blur-sm transition-all duration-200 ${isCompactUi ? 'animate-ui-enter-up' : ''}`}
@@ -3913,6 +3930,7 @@ function SiteApp() {
           setSphereGameActive(true)
           scoreStore.reset()
           startGameSession()
+          iniciarJuego([])
         }}
       />
       {/* Game Over modal */}
@@ -3955,6 +3973,7 @@ function SiteApp() {
           setCheatAlertVisible(false)
           setSphereGameActive(true)
           startGameSession()
+          iniciarJuego([])
         }}
       />
       {/* Mobile HUD: joystick + horizontal power bar (hamburger breakpoint, HOME, orb off).
