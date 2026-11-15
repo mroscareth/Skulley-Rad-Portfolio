@@ -439,7 +439,7 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
         />
         <p className="msh-sub dsp-sub">
           <span key={vueltas} className="dsp-sub-escribe" style={{ animationDelay: `${vueltas === 0 ? SUB_ENTRA_MS : SUB_REGRESO_MS}ms` }}>
-            {es ? 'El último diseñador de la humanidad' : 'The last designer of humankind'}
+            {es ? 'El último diseñador de la humanidad' : 'The last designer of humanity'}
           </span>
         </p>
         {/* La completa al centro y en amarillo; las otras dos, de vidrio

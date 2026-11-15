@@ -234,7 +234,7 @@ function buildBeats(lang, t) {
       // El H1 del home (oculto a la vista): quién sale en el glitch y su
       // oficio, en las palabras que la gente busca.
       descripcion: DESCRIPCION_HOME[es ? 'es' : 'en'],
-      sub: es ? 'El último diseñador de la humanidad' : 'The last designer of humankind',
+      sub: es ? 'El último diseñador de la humanidad' : 'The last designer of humanity',
       // "Desliza" y no "haz scroll": es lo que se dice en un teléfono.
       hint: es ? 'Desliza para leer más' : 'Scroll to read more',
     },
