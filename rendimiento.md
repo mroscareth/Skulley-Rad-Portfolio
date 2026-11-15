@@ -246,7 +246,7 @@ Dos cortes más, exactos los dos:
 
 Validados en Node con las fórmulas copiadas: 600 mil pixeles en 1,500 campos al azar (hasta 64 bocanadas, gotas y base), atacando cada descartado con el peor ruido (las esquinas de w y el que lo empuja hacia cada bocanada): ningún descartado tenía fuego; de 12 mil pantallas, ninguna juzgada sin fuego lo tenía. Se descarta el 67 % de los pixeles, tres cuartos ya en los grupos.
 
-| Llama en el teléfono (RTX 4060, 750 × 1624) | Antes | Recorte | Los dos cortes |
+| Llama en el teléfono (navegador integrado: Iris Xe, 750 × 1624) | Antes | Recorte | Los dos cortes |
 |---|---|---|---|
 | Primera pantalla | 0.55 ms | 0.34 ms | 0.23 ms |
 | Bajando, media pantalla | 0.56 ms | 0.41 ms | 0.31 ms |
@@ -256,6 +256,77 @@ Validados en Node con las fórmulas copiadas: 600 mil pixeles en 1,500 campos al
 El cuadro completo de la primera pantalla cuesta 4.84 ms de GPU con la llama y 4.56 ms sin ella: la llama es ~6 % y casi todo es el resto de la escena (pendiente abajo).
 
 Ese día también se quitó el tope de 11 × 10 radios del cuadro: mordía en línea recta las lenguas que la mano suelta al moverse rápido (Oscar lo vio en producción). Ahora el tope es de seguridad (120) y el recorte sigue a todas las bocanadas vivas; lo vacío lo descarta el shader.
+
+## 2026-11-15 · La primera pantalla del teléfono, pase por pase
+
+Lo que cuesta el resto de la escena de la primera pantalla (`MobileScrollHome` con `SkulleyFallRig`), sin contar la llama, que ya estaba optimizada.
+
+**Ojo con la GPU.** El navegador integrado de la app de escritorio no dibuja con la RTX 4060 sino con la Intel Iris Xe (`ANGLE (Intel, Intel(R) Iris(R) Xe Graphics … Direct3D11)`, leído con `WEBGL_debug_renderer_info`). Las mediciones de teléfono de este día, la de la llama incluida, son de la Iris Xe. Para un teléfono es mejor referencia que la 4060: está más cerca de la GPU de un teléfono bueno.
+
+### Cómo se midió
+
+Navegador integrado en modo teléfono (375 × 812 a densidad 2, canvas de 750 × 1624), servidor de desarrollo, ventana al frente (100–180 fps). Al store de R3F se llega con `_roots` del módulo ya empaquetado (`/node_modules/.vite/deps/@react-three_fiber.js?v=…`, con la misma `v` que pidió la app, o es otra copia del módulo). Con `EXT_disjoint_timer_query_webgl2`, tres modos que no se pueden mezclar porque las consultas no se anidan:
+
+- **Por cuadro:** una consulta alrededor de cada callback de `requestAnimationFrame`.
+- **Por llamada:** una consulta alrededor de cada `renderer.render` y `renderer.clear`, etiquetada por escena y destino. Suma lo mismo que el cuadro (5.27 contra 5.23 ms).
+- **Por objeto:** una consulta entre `onBeforeRender` y `onAfterRender` de cada malla, conservando los que ya tenían (la llama). Cada consulta le suma ~0.003–0.01 ms a su dibujo: sirve para ver qué pesa, no para sumar.
+
+Mediana de 150 a 200 cuadros, primera pantalla quieta. Cada idea se probó primero en vivo, parchando el renderer desde la consola, antes de escribirla.
+
+Para comprobar que el cuadro no cambia: `setFrameloop('never')`, dos `advance(T)` con el mismo `T` (el segundo con delta 0), `readPixels` del canvas en la misma tarea, el cambio, otro `advance(T)` y comparar. La llama se esconde para la prueba (va con `performance.now()`); en la historia además se congelan `performance.now` y `Math.random`. Ruido entre dos cuadros iguales: 0 pixeles.
+
+### En qué se iba
+
+| Primera pantalla (Iris Xe, 750 × 1624) | Antes | Después |
+|---|---|---|
+| **Cuadro completo** | **5.2 ms** (5.09–5.27) | **3.9–4.0 ms** |
+| Escena (RenderPass) | 3.24 | 1.67 |
+| · cráneo (`Skull071`) | 0.92 | 0.50 |
+| · haz del foco, dos dibujos, apagado (alfa 0) | 0.56 | — |
+| · pelo | 0.31 | 0.15 |
+| · llama de la mano | 0.27 | 0.25 |
+| · torso (`Skull014_8`) | 0.24 | 0.13 |
+| · las otras 27 piezas de Skulley | ~0.7 | ~0.6 |
+| · signos de duda, ojos de la historia, polvo y charco, en 0 | ~0.08 | ~0.01 |
+| Prepaso de profundidad, con el borrado del buffer | — | 0.52 |
+| Borrado doble del buffer del composer (ClearPass) | 0.26 | — |
+| Pase de normales de la tinta (`CharacterNormalPass`) | 0.82 + 0.12 de borrado | igual |
+| Tinta, película y puntos (un solo EffectPass) | 0.52 | igual |
+| Sombra (`SilhouetteShadow`, un cuadro sí y uno no) | 0.21 (0.41 cuando corre) | igual |
+
+Las filas con punto son del modo por objeto. En un primer plano de la historia (la frase del enojo, con los ojos rojos, el blanco y negro y el foco prendido) el cuadro pasó de 5.76 a 5.18 ms.
+
+**Casi todo era Skulley dos veces.** Sus 32 mallas tienen 147 mil vértices y 290 mil triángulos con skinning, y cada pase que lo dibuja paga ~0.4 ms solo en vértices y triángulos, sin importar la resolución (la sombra, a 160 × 160, cuesta 0.41 ms cuando corre). Además se dibuja DoubleSide: dentro de una malla los triángulos no van de adelante hacia atrás, y muchas caras de atrás pagaban el toon completo antes de que la de enfrente las tapara. Con FrontSide la escena bajaba 1 ms.
+
+### Qué se cambió
+
+| Archivo | Cambio | Ahorro |
+|---|---|---|
+| `src/lib/prepasoProfundidad.js` | Nuevo. Envuelve el `render` del RenderPass: primero dibuja solo en profundidad, con un `MeshBasicMaterial` sin color y `polygonOffset` hacia atrás, las mallas que se le piden; luego la escena encima, sin volver a borrar. Lo de atrás ya no pasa la prueba de profundidad y no se sombrea. Solo acepta mallas opacas que escriben profundidad y sin discard. Corre una vez al cargar aunque no toque, para compilar su programa ahí. | 0.4–0.6 ms |
+| `src/lib/prepasoProfundidad.js` | De paso apaga el ClearPass del RenderPass: el EffectComposer de @react-three/postprocessing pone `autoClear` en true, y three volvía a borrar el mismo buffer al dibujar la escena. Se queda el borrado de three, que además fuerza las máscaras antes de borrar. | 0.14 ms |
+| `src/components/mobile/SkulleyFallRig.jsx` | `PrepasoProfundidad`: el prepaso con cráneo, pelo, ojos y las dos piezas del torso que entran a cuadro (`PREPASO_PIEZAS`), y solo con Skulley más alto que la pantalla. | |
+| `src/components/mobile/SkulleyFallRig.jsx` | `LucesEscena`: el haz, el charco y el polvo se ocultan con el foco apagado, después de su primer dibujo (`yaDibujado` en `onAfterRender`, así el programa ya está compilado). Las luces del rig no cambian nunca, así que al prenderse no recompila. | 0.54 ms |
+| `src/components/mobile/SkulleyFallRig.jsx` | `SignosDuda`: sin salir, escala 0 (se siguen dibujando, sin pixeles; a escala 1 cada uno cubría ~400 × 400 px transparentes). `OjosMadre`: cerrados, `count = 0`. | ~0.07 ms |
+
+Comprobado pixel por pixel contra el camino de antes (borrado doble, sin prepaso, el haz dibujado en 0), en el mismo cuadro: **0 pixeles distintos** en la primera pantalla y en el primer plano de la historia. El programa del prepaso se compila al cargar: contando `linkProgram` durante la historia completa salen los mismos 6 programas que en producción antes del cambio (ver Pendiente), ninguno nuevo.
+
+### Por qué el prepaso solo de esas piezas
+
+Medido en la primera pantalla, con el borrado único en los tres casos:
+
+| Prepaso | Cuadro | Ahorro |
+|---|---|---|
+| Ninguno | 4.49 ms | — |
+| Las 32 mallas | 4.14 ms | 0.35 |
+| Cráneo, pelo y ojos | 4.09 ms | 0.40 |
+| Cráneo, pelo, ojos y dos del torso | 3.86 ms | 0.63 |
+
+Cada malla del prepaso vuelve a pasar por el skinning. En una pieza chica en pantalla (un dedo, una vértebra) eso cuesta lo mismo que lo que ahorra. El ahorro baja con el área de Skulley en pantalla y el costo se queda, por eso en planos abiertos (Skulley más bajo que la pantalla) no corre; en esa cuenta el empate cae cerca de 1.1 pantallas de alto. En un iPhone el sobredibujo opaco casi no cuesta (su GPU descarta lo tapado antes de sombrear), así que ahí el prepaso es casi neutro; en Android y en cualquier computadora ayuda.
+
+### Lo que no se usó
+
+- **FrontSide en las mallas cerradas.** Las 28 mallas de hueso y pelo son cerradas y con la orientación pareja (cero aristas sueltas; los ojos y pupilas no). Con FrontSide la escena baja 1 ms más que con el prepaso, pero en la primera pantalla cambian 3 pixeles, hasta 3/255, en la silueta, donde una cara de atrás le ganaba por redondeo a la de enfrente. Queda para que Oscar lo vea (Pendiente).
+- **Quitar el borrado de la pantalla antes del EffectPass.** El triángulo de pantalla completa la cubre entera sin mezcla, pero en un teléfono (GPU por mosaicos) un borrado al empezar es casi gratis y sin él el navegador borra igual.
 
 ## Reglas
 
@@ -273,6 +344,8 @@ Ese día también se quitó el tope de 11 × 10 radios del cuadro: mordía en l�
 12. **Todo canvas se precalienta antes de su primer cuadro, entre o no por el preloader.** Las entradas directas a una sección se saltan el preloader.
 13. **Un warm-up con EffectComposer también compila los pases del composer** (`compilarComposer`): no están en la escena y `compileAsync` no los ve.
 14. **El chequeo de errores de shaders va apagado en producción** (plugin de `vite.config.js`). Si un shader truena, el error solo se ve en `npm run dev`: revisar ahí antes de subir.
+15. **Transparente en 0 no es gratis:** el shader corre en cada pixel que cubre aunque no sume nada. Se apaga después de su primer dibujo (su programa ya quedó compilado): `count = 0` si es instanciado, escala 0 si es un sprite, y oculto solo donde las luces nunca cambian (el rig; en el home una luz que cambia recompila lo oculto, ver CLAUDE.md).
+16. **Una malla DoubleSide grande en pantalla paga sus caras de atrás.** Si no se puede pasar a FrontSide sin que cambie, prepaso de profundidad (`lib/prepasoProfundidad.js`) solo con las piezas grandes: cada pieza del prepaso vuelve a pagar sus vértices.
 
 ## Cómo medir
 
@@ -311,6 +384,8 @@ Envolver todas las funciones de `WebGL2RenderingContext.prototype` antes del bun
 - Las capturas de puppeteer redondean el recorte a píxeles CSS enteros; a 1.25× eso deja un desfase de fracción de píxel que vuelve a rasterizar el texto del DOM pero reescala los canvas. Para comparar pixeles, recortes en múltiplos de 4 px CSS.
 - La caché de shaders hace que todo parezca bien en la computadora de quien desarrolla. La corrida que importa es la primera visita.
 - `getProgramParameter` casi no bloquea: el tiempo se va al primer uso del programa. Por eso se mide con long animation frames y no envolviendo llamadas sueltas.
+- El navegador integrado de la app de escritorio dibuja con la Iris Xe, no con la RTX 4060. Revisar siempre con `WEBGL_debug_renderer_info` qué GPU se está midiendo.
+- En el modo por objeto, la consulta de tiempo le suma algo a cada dibujo y el primero de cada pase carga con el cambio de destino o el borrado pendiente. Sirve para ver qué pesa; los totales se toman por llamada o por cuadro.
 
 ## Pendiente
 
@@ -323,5 +398,14 @@ Por orden de lo que más se nota:
 5. **El globo de diálogo de Skulley** compila al aparecer (~67 ms).
 6. **El montaje de los personajes del About** cuesta un cuadro de ~65 ms: React clona los modelos, crea materiales y contornos, y `measureShape` saca la forma de choque con k-means sobre ~52 mil vértices. Leer el GLB es otro de ~40–65 ms. Las formas de choque son fijas por modelo: se podrían calcular una vez fuera del navegador y guardarse.
 7. **El warm-up del home todavía congela 0.5–2 s en primera visita**, aunque ya detrás de la palabra quieta: los materiales de override (pase de normales, sombra silueta) se compilan sin `compileAsync`, porque `gl.compile` no mira `scene.overrideMaterial`. Los del composer ya se precompilan. No se ve, pero alarga la espera de la palabra en máquinas lentas.
-8. **La primera pantalla del teléfono cuesta 4.6 ms de GPU sin la llama** en la RTX 4060 a 750 × 1624 (2026-11-15): en un teléfono es varias veces eso. No se ha desglosado (composer, tinta, puntos, sombras).
-9. **El overlay de WORK dibuja cada cuadro** aunque nada se mueva, a pantalla completa. Podría dibujar solo cuando hay scroll o hover.
+8. **La primera pantalla del teléfono** (desglosada el 2026-11-15) quedó en 3.9–4.0 ms de GPU en la Iris Xe a 750 × 1624. Lo que queda sin bajar, porque cambiaría la imagen o es una obra grande:
+   - **Los vértices de Skulley**: 147 mil con skinning y 290 mil triángulos, ~0.4 ms por pase completo sin importar la resolución, en la escena, el pase de normales, la sombra (un cuadro sí y uno no) y, en parte, el prepaso. Casi todas las piezas van atadas a un solo hueso: como mallas rígidas colgadas de su hueso no pagarían skinning, pero el numerito, el desarme, el pase de normales y la sombra cuentan con `SkinnedMesh`. Bajarle polígonos al modelo cambia cómo se ve.
+   - **FrontSide en las 28 mallas cerradas**: 1 ms menos que hoy, con 3 pixeles distintos (hasta 3/255) en la silueta de la primera pantalla. Falta que Oscar lo vea y revisar las piezas del desarme.
+   - **El buffer del composer en media precisión** (8 bytes por pixel, lo escriben la escena y lo lee el EffectPass). En RGBA8 con sRGB sería la mitad de memoria, pero cambia lo que pasa de 1 y los degradados oscuros.
+   - **El EffectPass (0.52 ms)**: la tinta lee 13 veces el buffer de normales en cada pixel de Skulley (65 % de la pantalla en la primera).
+   - **El pase de normales (0.94 ms con su borrado)**: otra pasada completa de Skulley. Juntarlo con la escena (dos salidas en un dibujo) obligaría a tocar todos los materiales.
+   - `resolutionScale={0.85}` del EffectComposer del rig no hace nada: en @react-three/postprocessing solo escala el pase de normales del propio composer (`enableNormalPass`), que aquí no se usa. El composer dibuja a resolución completa.
+9. **Los ojos rojos de la furia** cuestan 1 ms de GPU en el primer plano de la historia (Iris Xe): los tres grandes desenfocados cubren media pantalla con el shader completo de glitch y rayos. Duran unos 3 s.
+10. **El haz del foco prendido** cuesta ~0.29 ms por dibujo (son dos) en los primeros planos de la historia: el ruido de los rayos corre en cada pixel del cono.
+11. **"Conocer la historia" compila 6 programas a media escena** en el teléfono (igual en producción el 2026-11-15, antes y después del prepaso): `Emisive mat` a 1.5 s de empezar, un `MeshBasicMaterial` sin skinning hacia los 12 s y, justo cuando pega el rayo, las variantes sin skinning de `Head`, `Eyes`, el pase de normales y la sombra para las piezas del desarme. Son cuatro compilaciones en el cuadro del golpe. Habría que precompilarlas al montar el rig (regla 4).
+12. **El overlay de WORK dibuja cada cuadro** aunque nada se mueva, a pantalla completa. Podría dibujar solo cuando hay scroll o hover.

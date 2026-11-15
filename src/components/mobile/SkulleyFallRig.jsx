@@ -25,6 +25,7 @@ import { makeGeometrySet, boltCoreAlpha } from '../fx/LightningBolt.jsx'
 import { crearNumerito, NUMERITO, CABEZA_SALE, SIGNOS_DUDA, INSPECCION } from '../../lib/numeritoCabeza.js'
 import { RUNE_FONT_FAMILY_BOLD } from '../../lib/installRuneFont.js'
 import { registrarCabeza } from '../../lib/cabezaEnPantalla.js'
+import { instalarPrepaso } from '../../lib/prepasoProfundidad.js'
 import LlamaMano from '../fx/LlamaMano.jsx'
 
 // La caída: Skulley gira, le cae un rayo, se desarma y sus huesos aterrizan
@@ -2581,20 +2582,30 @@ function geometriaPolvo() {
   return g
 }
 
+// Para onAfterRender: el objeto ya se dibujó una vez, así que su programa ya
+// está compilado y se puede ocultar sin que vuelva a compilar al mostrarse (las
+// luces del rig no cambian nunca).
+function yaDibujado() { this.userData.dibujado = true }
+
 // `escenaRef` (opcional): { ambiente, foco } de 0 a 1, que la historia mueve
 // por cuadro. Sin él las luces se quedan fijas y no se monta el foco. Con él
-// el foco existe desde el primer cuadro con intensidad 0, y el haz y el charco
-// se dibujan siempre (transparentes en 0): una luz que aparece después
-// recompila todos los materiales iluminados, y un shader que se dibuja por
-// primera vez se compila en ese cuadro, justo al prenderse (CLAUDE.md, tirones
-// por compilación). Igual el polvo.
+// el foco existe desde el primer cuadro con intensidad 0: una luz que aparece
+// después recompila todos los materiales iluminados (CLAUDE.md, tirones por
+// compilación). El haz, el charco y el polvo se dibujan en los primeros
+// cuadros, para que su shader se compile ahí y no al prenderse, y después,
+// con el foco apagado, se ocultan: cada pixel del cono pagaba el ruido de los
+// rayos aunque no sumara nada (0.54 ms de GPU en la primera pantalla del
+// teléfono, rendimiento.md).
 function LucesEscena({ escenaRef, fitRef }) {
   const keyRef = useRef(null)
   const rellenoRef = useRef(null)
   const ambienteRef = useRef(null)
   const focoRef = useRef(null)
   const hazRef = useRef(null)
+  const hazDetrasRef = useRef(null)
+  const hazFrenteRef = useRef(null)
   const charcoRef = useRef(null)
+  const polvoRef = useRef(null)
   const objetivo = useMemo(() => new THREE.Object3D(), [])
   const colocado = useRef(false)
   const recursos = useMemo(() => {
@@ -2691,6 +2702,9 @@ function LucesEscena({ escenaRef, fitRef }) {
     charcoRef.current.scale.set(radio * 1.15, 1, radio * 1.15)
     const foco = Math.max(0, Math.min(1, e.foco ?? 0))
     focoRef.current.intensity = FOCO.intensidad * foco
+    for (const o of [hazDetrasRef.current, hazFrenteRef.current, charcoRef.current, polvoRef.current]) {
+      if (o) o.visible = foco > 0 || !o.userData.dibujado
+    }
     const bn = Math.max(0, Math.min(1, e.bn ?? 0))
     recursos.hazMat.uniforms.uAlpha.value = FOCO.haz * foco * (1 + FOCO.hazBN * bn)
     recursos.hazFrenteMat.uniforms.uAlpha.value = recursos.hazMat.uniforms.uAlpha.value * FOCO.hazFrente
@@ -2719,12 +2733,12 @@ function LucesEscena({ escenaRef, fitRef }) {
           <primitive object={objetivo} />
           <spotLight ref={focoRef} target={objetivo} intensity={0} angle={FOCO.angulo} penumbra={FOCO.penumbra} decay={0} color={FOCO.color} />
           <group ref={hazRef}>
-            <mesh geometry={recursos.hazGeo} material={recursos.hazMat} frustumCulled={false} renderOrder={-50} />
-            <mesh geometry={recursos.hazGeo} material={recursos.hazFrenteMat} frustumCulled={false} renderOrder={2} />
+            <mesh ref={hazDetrasRef} geometry={recursos.hazGeo} material={recursos.hazMat} frustumCulled={false} renderOrder={-50} onAfterRender={yaDibujado} />
+            <mesh ref={hazFrenteRef} geometry={recursos.hazGeo} material={recursos.hazFrenteMat} frustumCulled={false} renderOrder={2} onAfterRender={yaDibujado} />
           </group>
           {/* Antes que la sombra de Skulley (-18): la sombra oscurece el charco. */}
-          <mesh ref={charcoRef} geometry={recursos.charcoGeo} material={recursos.charcoMat} frustumCulled={false} renderOrder={-19} />
-          <points geometry={recursos.polvoGeo} material={recursos.polvoMat} frustumCulled={false} renderOrder={3} />
+          <mesh ref={charcoRef} geometry={recursos.charcoGeo} material={recursos.charcoMat} frustumCulled={false} renderOrder={-19} onAfterRender={yaDibujado} />
+          <points ref={polvoRef} geometry={recursos.polvoGeo} material={recursos.polvoMat} frustumCulled={false} renderOrder={3} onAfterRender={yaDibujado} />
         </>
       )}
     </>
@@ -3224,7 +3238,10 @@ function SignosDuda({ escenaRef, fitRef }) {
       const k = activo && hueso.current ? (tn - signo.t) / SIGNO.rebote : 0
       // Sale con pop: se infla un poco y desaparece.
       const k2 = (tn - Math.min(signo.t + signo.dura, SIGNOS_DUDA.seVan)) / SIGNO.sale
-      if (k <= 0 || k2 >= 1) { mat.opacity = 0; return }
+      // Sin salir, a escala 0: se sigue dibujando (su programa queda
+      // compilado desde el primer cuadro) pero no cubre ningún pixel. A escala
+      // 1 en transparente, cada uno pintaba unos 400 × 400 pixeles por cuadro.
+      if (k <= 0 || k2 >= 1) { mat.opacity = 0; sp.scale.setScalar(0); return }
       const fuera = k2 <= 0 ? 1 : k2 < 0.3 ? 1 + k2 : 1.3 * (1 - (k2 - 0.3) / 0.7) ** 2
       const alto = f.alto
       sp.position.copy(tmp.c)
@@ -3307,8 +3324,13 @@ function OjosMadre({ escenaRef, personalizaRef, fitRef, juego = JUEGOS_OJOS.madr
         recursos.estado.needsUpdate = true
       }
       st.abiertos = false
+      // Cerrados no rasterizan nada: con count en 0 el programa se sigue
+      // usando (compilado desde el primer cuadro) sin dibujar los cuadros
+      // descartados.
+      im.count = 0
       return
     }
+    im.count = OJOS_MAX
     const dt = Math.min(0.05, delta || 0)
     const enPausa = e.pausa != null
     if (!enPausa) recursos.mat.uniforms.uTiempo.value += dt
@@ -3871,6 +3893,37 @@ function CapturaWallpaper({ personalizaRef, composerRef }) {
   return null
 }
 
+// Prepaso de profundidad (lib/prepasoProfundidad.js): las caras de atrás de
+// Skulley ya no pagan el toon antes de que las tape la de enfrente. Solo las
+// piezas grandes en un primer plano: cráneo, pelo, ojos y las dos del torso
+// que entran a cuadro. Medido en la primera pantalla del teléfono: las demás
+// cuestan en el prepaso (otra vez el skinning) lo que ahorran. Y solo con
+// Skulley más alto que la pantalla: más lejos el ahorro baja con su área y el
+// costo del prepaso se queda.
+const PREPASO_PIEZAS = new Set(['Skull071', 'Skull071_1', 'Skull043', 'Skull044', 'Skull014_8', 'Skull014_4'])
+function PrepasoProfundidad({ composerRef, rootRef, fitRef }) {
+  const puesto = useRef({ composer: null, quitar: null })
+  // El composer se puede rehacer (cambia la cámara o el renderer): se vuelve
+  // a poner en el nuevo. Antes del composer (prioridad 1).
+  useFrame(() => {
+    const c = composerRef.current || null
+    const p = puesto.current
+    if (c === p.composer) return
+    p.quitar?.()
+    p.composer = c
+    p.quitar = c && instalarPrepaso(c, {
+      raiz: () => rootRef.current,
+      incluye: (o) => o.isSkinnedMesh && PREPASO_PIEZAS.has(o.name),
+      activo: (cam) => {
+        const f = fitRef.current
+        return Boolean(f?.ready) && f.alto * cam.zoom > cam.top - cam.bottom
+      },
+    })
+  }, 0.9)
+  useEffect(() => () => { puesto.current.quitar?.() }, [])
+  return null
+}
+
 // El estallido del rayo de la historia: el azul del rayo del juego
 // (BOLT_BURST_COLOR de HomeOrbs), qué tan grandes salen las bolitas y hasta
 // dónde llegan (en altos de Skulley). PortalBurst está hecho a la medida del
@@ -4000,6 +4053,7 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike, perso
             el cuadro es el EffectComposer (prioridad 1); sin él, el canvas se
             queda congelado. */}
         <CharacterNormalPass playerRef={rootRef} target={posterNormalTexture} fixedScale />
+        <PrepasoProfundidad composerRef={composerRef} rootRef={rootRef} fitRef={fitRef} />
         <EffectComposer ref={composerRef} multisampling={0} resolutionScale={0.85}>
           {/* color: el de la skin activa (Vacío las lleva blancas), el mismo
               array que escritorio y el retrato; se muta en sitio y el effect
