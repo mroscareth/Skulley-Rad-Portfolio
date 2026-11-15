@@ -294,7 +294,7 @@ Para comprobar que el cuadro no cambia: `setFrameloop('never')`, dos `advance(T)
 | Tinta, película y puntos (un solo EffectPass) | 0.52 | igual |
 | Sombra (`SilhouetteShadow`, un cuadro sí y uno no) | 0.21 (0.41 cuando corre) | igual |
 
-Las filas con punto son del modo por objeto. En un primer plano de la historia (la frase del enojo, con los ojos rojos, el blanco y negro y el foco prendido) el cuadro pasó de 5.76 a 5.18 ms.
+Las filas con punto son del modo por objeto. En producción, con el build real y la misma medición por cuadro: **4.85 → 3.78 ms** de mediana (p90 5.12 → 4.04), antes y después del deploy de `79b52af`. En un primer plano de la historia (la frase del enojo, con los ojos rojos, el blanco y negro y el foco prendido) el cuadro pasó de 5.76 a 5.18 ms.
 
 **Casi todo era Skulley dos veces.** Sus 32 mallas tienen 147 mil vértices y 290 mil triángulos con skinning, y cada pase que lo dibuja paga ~0.4 ms solo en vértices y triángulos, sin importar la resolución (la sombra, a 160 × 160, cuesta 0.41 ms cuando corre). Además se dibuja DoubleSide: dentro de una malla los triángulos no van de adelante hacia atrás, y muchas caras de atrás pagaban el toon completo antes de que la de enfrente las tapara. Con FrontSide la escena bajaba 1 ms.
 
