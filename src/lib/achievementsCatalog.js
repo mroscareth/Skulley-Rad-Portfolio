@@ -157,12 +157,12 @@ export const ACHIEVEMENTS = [
     live: true,
     title: { en: 'Poltergeist Skin', es: 'Skin Poltergeist' },
     description: {
-      en: 'Listened to the lobby song at half speed and unlocked the Poltergeist skin.',
-      es: 'Escuchaste la canción del lobby a media velocidad y desbloqueaste la skin Poltergeist.',
+      en: 'Listened to the whole lobby song at half speed and unlocked the Poltergeist skin.',
+      es: 'Escuchaste completa la canción del lobby a media velocidad y desbloqueaste la skin Poltergeist.',
     },
     hint: {
-      en: 'Play the lobby song at half speed in the music player.',
-      es: 'Pon la canción del lobby a media velocidad en el reproductor.',
+      en: 'Listen to the whole lobby song at half speed in the music player.',
+      es: 'Escucha completa la canción del lobby a media velocidad en el reproductor.',
     },
   },
 ]

@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react'
 import { BackwardIcon, ForwardIcon, PlayIcon, PauseIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowsRightLeftIcon, QueueListIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
-import { FUNDIDO_ENTRADA_S, esperarDestape, fundir, esCancionLobby, LOBBY_LENTO_S, LOBBY_LENTO_EVENT } from '../lib/musicaLobby.js'
+import { FUNDIDO_ENTRADA_S, esperarDestape, fundir, esCancionLobby, LOBBY_LENTO_FALTA_S, LOBBY_LENTO_EVENT } from '../lib/musicaLobby.js'
 import { EVENTO_SILENCIO, sitioEnSilencio } from '../lib/silencioSitio.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import SlimeSlugDOM from './SlimeSlugDOM.jsx'
@@ -141,8 +141,14 @@ export default function MusicPlayer({
   esLobbyRef.current = esCancionLobby(current)
   const respaldoRef = useRef(false)
   respaldoRef.current = !!current && fallbackSetRef.current.has(current.src)
-  // Segundos de la canción del lobby a media velocidad (skin Poltergeist).
-  const lobbyLentoRef = useRef({ s: 0, avisado: false })
+  // Segundos de la canción del lobby oídos a media velocidad (skin Poltergeist).
+  const lobbyLentoRef = useRef({ oidos: null, n: 0, avisado: false })
+  useEffect(() => {
+    if (!import.meta.env.DEV) return undefined
+    const lento = lobbyLentoRef.current
+    window.__lobbyLento = lento
+    return () => { if (window.__lobbyLento === lento) delete window.__lobbyLento }
+  }, [])
 
   // Pista elegida en la lista. La lista se cierra para que se vea el plato.
   function selectTrack(trackIdx) {
@@ -955,16 +961,23 @@ export default function MusicPlayer({
       // Pasamos rate signado directo; updateSpeed ya no necesita flag reversed.
       // Frenando o arrancando va por el camino del scratch: el rate es el motor.
       updateSpeed(rateSigned, false, secondsPlayed, isDraggingRef.current || (!!srcRef.current && motor < 1))
-      // Solo cuenta sonando de verdad a 0.5 (con el worklet o con el <audio> de
-      // respaldo, no mientras carga), con el plato a sus RPM, sin la mano encima
-      // y sin la bocina callando la música.
+      // Se marca cada segundo de la canción del lobby que suena de verdad a 0.5
+      // (con el worklet o con el <audio> de respaldo, no mientras carga), sin
+      // la mano encima y sin la bocina callando la música. Si cambia la
+      // duración (otra canción a medio cargar) se empieza de nuevo.
       const lento = lobbyLentoRef.current
-      if (!lento.avisado && isPlaying && motor >= 1 && (srcRef.current || respaldoRef.current) && !isDraggingRef.current
-        && slowBpmRef.current && esLobbyRef.current && !sitioEnSilencio()) {
-        lento.s += dtS
-        if (lento.s >= LOBBY_LENTO_S) {
-          lento.avisado = true
-          try { window.dispatchEvent(new CustomEvent(LOBBY_LENTO_EVENT)) } catch { }
+      if (!lento.avisado && isPlaying && motor > 0 && duration > 0 && (srcRef.current || respaldoRef.current)
+        && !isDraggingRef.current && slowBpmRef.current && esLobbyRef.current && !sitioEnSilencio()) {
+        const total = Math.floor(duration)
+        if (!lento.oidos || lento.oidos.length !== total) { lento.oidos = new Uint8Array(total); lento.n = 0 }
+        const seg = Math.floor(secondsPlayed)
+        if (seg >= 0 && seg < total && !lento.oidos[seg]) {
+          lento.oidos[seg] = 1
+          lento.n += 1
+          if (lento.n >= total - LOBBY_LENTO_FALTA_S) {
+            lento.avisado = true
+            try { window.dispatchEvent(new CustomEvent(LOBBY_LENTO_EVENT)) } catch { }
+          }
         }
       }
       // Ya frenó: ahora sí se para. Con la mano encima espera a que la suelte.

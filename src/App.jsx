@@ -920,8 +920,8 @@ function SiteApp() {
     return () => window.removeEventListener('character-disassembled-by-bolt', onDisassembled)
   }, [unlockSkin])
 
-  // POLTERGEIST: escuchar la canción del lobby a media velocidad con el ½× del
-  // reproductor. MusicPlayer avisa cuando juntó LOBBY_LENTO_S segundos así.
+  // POLTERGEIST: escuchar completa la canción del lobby a media velocidad con
+  // el ½× del reproductor. MusicPlayer avisa cuando la oyó entera así.
   useEffect(() => {
     const onLento = () => unlockSkin('skin_poltergeist')
     window.addEventListener(LOBBY_LENTO_EVENT, onLento)
