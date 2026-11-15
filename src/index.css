@@ -6135,7 +6135,7 @@ div:has(> #privy-dialog-backdrop) {
 }
 
 /* Arrastrando no se abre nada: la pastilla se esconde y queda la mano. */
-.qh-tira.is-arrastrando .qh-pastilla {
+.qh-tira.is-arrastrando ~ .qh-pastilla {
   opacity: 0;
   scale: 0.6;
 }

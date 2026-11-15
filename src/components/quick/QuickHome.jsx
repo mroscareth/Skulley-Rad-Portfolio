@@ -515,8 +515,11 @@ export default function QuickHome({ lang, onAbrirPieza, onIdioma, onCarrito, onC
             </button>
           )))}
         </div>
-        <span ref={pastillaRef} className="qh-pastilla shop-btn shop-btn--primary" aria-hidden="true" />
       </div>
+      {/* Fuera de la tira y justo después de ella: la tira recorta (overflow:
+          clip) y mordía la pastilla con el cursor cerca de su orilla de abajo.
+          Las dos empiezan en la esquina de .qh-root, así que mide igual. */}
+      <span ref={pastillaRef} className="qh-pastilla shop-btn shop-btn--primary" aria-hidden="true" />
 
       {/* El busto de Skulley, detrás del título. El canvas no recibe el
           puntero (pasa por encima de la tira); se gira desde .qh-agarre, que
