@@ -759,7 +759,9 @@ function vieneDelSitio(array $body): bool {
 // seguridad, el visor de enlaces de Facebook), no gente. ip-api marca casi
 // todos con `hosting`; esta lista es el respaldo y la que marcó los registros
 // viejos (scripts/analytics-marcar.php).
-const ISP_DE_DATACENTER = '/google llc|google cloud|amazon|aws|microsoft|azure|digitalocean|contabo|hostinger|datacamp|hostroyale|palo alto|cisco iot|ovh|hetzner|linode|vultr|m247|leaseweb|oracle|alibaba|tencent|facebook|scaleway|choopa|colocrossing|psychz|quadranet|zscaler/i';
+// (Funciones y no constantes: un `const` de archivo solo existe cuando la
+// ejecución llega a su línea, y el switch de arriba corre antes.)
+function ispDeDatacenter(): string { return '/google llc|google cloud|amazon|aws|microsoft|azure|digitalocean|contabo|hostinger|datacamp|hostroyale|palo alto|cisco iot|ovh|hetzner|linode|vultr|m247|leaseweb|oracle|alibaba|tencent|facebook|scaleway|choopa|colocrossing|psychz|quadranet|zscaler/i'; }
 
 /**
  * Por qué una visita no cuenta como persona, o '' si cuenta.
@@ -770,17 +772,17 @@ const ISP_DE_DATACENTER = '/google llc|google cloud|amazon|aws|microsoft|azure|d
 // Relevos de privacidad que usa gente de verdad: iCloud Private Relay (sale
 // por Akamai, Cloudflare o Fastly) y la VPN gratis de Cloudflare (WARP). ip-api
 // los marca como hosting, pero detrás hay un iPhone con una persona.
-const RELAY_DE_PRIVACIDAD = '/private relay|icloud|warp|akamai|cloudflare|fastly/i';
+function relayDePrivacidad(): string { return '/private relay|icloud|warp|akamai|cloudflare|fastly/i'; }
 
 function motivoDeExclusion(string $ua, array $geo): string {
     if ($ua === '' || preg_match('/bot|crawl|spider|slurp|mediapartners|headless|lighthouse|pagespeed|ptst|inspectiontool|facebookexternalhit|preview|uptime|python|curl|wget|httpclient|go-http|java\//i', $ua)) {
         return 'bot';
     }
     $red = ($geo['isp'] ?? '') . ' ' . ($geo['org'] ?? '');
-    if (preg_match(RELAY_DE_PRIVACIDAD, $red)) {
+    if (preg_match(relayDePrivacidad(), $red)) {
         return '';
     }
-    if (!empty($geo['hosting']) || preg_match(ISP_DE_DATACENTER, $red)) {
+    if (!empty($geo['hosting']) || preg_match(ispDeDatacenter(), $red)) {
         return 'datacenter';
     }
     return '';
