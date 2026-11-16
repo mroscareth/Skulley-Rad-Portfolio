@@ -23,7 +23,7 @@ const LINEAS = {
   ],
   en: [
     [
-      'Ahh, yes… the last designer of humankind.',
+      'Ahh, yes… the last designer of humanity.',
       'His name was Skulley Rad.',
       'What you see is an avatar I built from his memories and everything he left online.',
       'He designed, illustrated, and created whole worlds and ideas by brain and hand,',

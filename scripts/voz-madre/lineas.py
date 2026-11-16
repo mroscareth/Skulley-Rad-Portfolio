@@ -33,7 +33,7 @@ TROZOS = {
         10: [('Lo guardaré en mi data center,', 1.0, 0.05), ('para siempre.', 1.0, 0, ECO)],
     },
     'en': {
-        0: [('Ah,', 0.35, 0.4), ('yes.', 0.95, 0.7), ('The last designer of humankind.', 0.92, 0)],
+        0: [('Ah,', 0.35, 0.4), ('yes.', 0.95, 0.7), ('The last designer of humanity.', 0.92, 0)],
         1: [('His name was Skulley Rad.', 1.0, 0.45)],
         7: [('Anyway.', 1.0, 0.5), ('He starved to death because he was no longer needed.', 1.0, 0)],
         10: [("I'll keep it in my data center", 1.0, 0), ('forever.', 1.0, 0, ECO)],
