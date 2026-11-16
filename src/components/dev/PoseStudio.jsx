@@ -135,7 +135,7 @@ function Rig({ apiRef, onReady, setOrbitEnabled, rotateTarget }) {
       const mats = Array.isArray(o.material) ? o.material : [o.material]
       const out = mats.map((m) => {
         const mm = m.clone()
-        try { applyToonBanding(mm, { steps: 2, minBand: 0.04, bandIndirect: true }) } catch { }
+        try { applyToonBanding(mm, { steps: 2, minBand: 0.04, bandIndirect: true, especularDuro: true }) } catch { }
         return mm
       })
       o.material = Array.isArray(o.material) ? out : out[0]

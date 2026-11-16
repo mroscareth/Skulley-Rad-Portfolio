@@ -121,7 +121,7 @@ function PosterModel({ modelRef }) {
           // La skin activa (shader) en cuerpo y pelo, antes del banding.
           prepareSkinMaterial(mm)
           const withRim = /^(head|hair)$/i.test(mm.name || '')
-          applyToonBanding(mm, { steps: 2, minBand: 0.04, bandIndirect: true, ...(withRim ? RIM_LIGHT : {}) })
+          applyToonBanding(mm, { steps: 2, minBand: 0.04, bandIndirect: true, especularDuro: true, ...(withRim ? RIM_LIGHT : {}) })
         } catch { }
         return mm
       })

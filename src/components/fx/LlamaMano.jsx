@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { getSkinForcedColors, SKIN_LINE_COLOR_EVENT } from '../../lib/skinShaders.js'
 import { getCharacterColors, CHARACTER_COLOR_EVENT } from '../../lib/characterColors.js'
+import { uniformsLlama } from '../../lib/toonBanding.js'
 
 // La llama de la mano de Skulley, con todas las skins (Oscar, 2026-11-15: la
 // esfera verde era provisional mientras se hacía este shader). Referencia de
@@ -45,10 +46,21 @@ import { getCharacterColors, CHARACTER_COLOR_EVENT } from '../../lib/characterCo
 // Va pegada a `Egg_EnergyBall` (la busca en `raiz`) y mide en radios de la
 // esfera: crece con ella (la carga de la E la infla) y se encoge con ella (la historia
 // la esconde). La esfera se oculta mientras arde, y su contorno de tinta. Si
-// cambia el modelo (la skin dorada trae el suyo) la busca otra vez. Sin luces y
-// siempre montada: sin esfera visible se queda en count = 0, que igual compila
-// su programa en el warm-up. `cuerpoPropio`: el modo wallpaper la deja como
-// parte del cuerpo y le pide su propia máscara.
+// cambia el modelo (la skin dorada trae el suyo) la busca otra vez. Siempre
+// montada: sin esfera visible se queda en count = 0, que igual compila su
+// programa en el warm-up. `cuerpoPropio`: el modo wallpaper la deja como parte
+// del cuerpo y le pide su propia máscara.
+//
+// Alumbra a Skulley (Oscar, 2026-11-15: "que produzca algo de luz sin ser
+// exagerada"): lo cercano que mira a la llama se tiñe de su banda clara, en dos
+// bandas duras, desde el banding de sus materiales (`uniformsLlama` en
+// toonBanding.js; este componente les enlaza su posición, color y fuerza). Una
+// pointLight real no servía: el banding aplana lo que cae en la banda iluminada
+// y el verde no rebota en el rojo del cuerpo ni en el azul del piso, así que
+// no se veía, y costaba una luz más en cada material. Va con el fuego: en la
+// mano, con la bola más reciente mientras vuela y un destello corto donde
+// explota. Se mide en el radio de la esfera en reposo, así se ve igual en el
+// juego, el retrato y el rig.
 
 // Lugares en el campo para bocanadas (mano y bola usan el mismo shader).
 const MAX = 64
@@ -101,6 +113,16 @@ const CUADRO_MANO = [120, 120, 0, 0]
 const CUADRO_BOLA = [120, 120, 0, 0]
 // Lo más que el ruido mueve lo que se lee del campo: w ∈ ±0.5 por (0.3 + 1.2·h).
 const DEFORMA = 0.75
+// La luz, relativa a la llama de la mano en reposo: cuánto parpadea, cuánto
+// crece con la carga (tope del tamaño relativo), cuánto alumbra la bola en vuelo
+// respecto a la mano y el destello al explotar (veces la bola y segundos).
+const LUZ = { parpadeo: 0.16, tope: 1.8, bola: 1.1, destello: 1.8, destelloDura: 0.3 }
+// El derrame sobre el propio Skulley (toonBanding): cuánto toma el color de la
+// llama en la banda fuerte (0..1; la débil toma 0.4 de eso), hasta dónde llega
+// (en radios de la esfera en reposo; crece con la llama) y el umbral de la
+// banda fuerte (la débil va a 0.45 de él). Cada cuánto (s) se vuelven a enlazar sus materiales, por si una
+// skin los cambió.
+const DERRAME = { fuerza: 0.78, alcance: 4.2, umbral: 0.45, enlace: 0.5 }
 
 function hash1(n) { const x = Math.sin(n * 127.1) * 43758.5453; return x - Math.floor(x) }
 function ruido1(x) {
@@ -443,6 +465,12 @@ export default function LlamaMano({ raiz, disparoRef = null }) {
     contorno: null,
     oculta: false,
     radio: 1,
+    escalaReposo: 1,
+    luzPos: new THREE.Vector3(),
+    luzI: 0,
+    luzColor: new THREE.Color(),
+    luzParams: new THREE.Vector3(0, 1, DERRAME.umbral),
+    enlace: 0,
     Rultimo: 0,
     t: 0,
     previo: new THREE.Vector3(),
@@ -743,6 +771,9 @@ export default function LlamaMano({ raiz, disparoRef = null }) {
       st.raiz = raiz
       st.orbe = raiz.getObjectByName?.('Egg_EnergyBall') || null
       st.contorno = st.orbe?.parent?.getObjectByName?.('Egg_EnergyBall_outline') || null
+      // Su tamaño en reposo, para medir la luz: la carga la infla y la
+      // historia la encoge (como guardan su escala Player y el rig).
+      if (st.orbe) st.escalaReposo = Math.abs(st.orbe.scale.x) || 1
       if (st.orbe?.geometry) {
         if (!st.orbe.geometry.boundingSphere) st.orbe.geometry.computeBoundingSphere()
         st.radio = st.orbe.geometry.boundingSphere?.radius || 1
@@ -764,6 +795,8 @@ export default function LlamaMano({ raiz, disparoRef = null }) {
       muestraEsfera(st, true)
       llama.count = 0
       brasas.count = 0
+      st.luzI = 0
+      st.luzParams.x = 0
       for (const c of casillas) {
         if (c.refB.current) c.refB.current.count = 0
         if (c.refE.current) c.refE.current.count = 0
@@ -1074,6 +1107,51 @@ export default function LlamaMano({ raiz, disparoRef = null }) {
     }
     brasas.count = nb
     brasas.instanceMatrix.needsUpdate = true
+
+    // La luz se queda con el fuego que más alumbra: la mano (con lo que ha
+    // renacido), una bola en vuelo o el destello de la que acaba de explotar.
+    // `nivel` es 1 con la llama de la mano en reposo.
+    const Rrep = R * (st.escalaReposo / Math.max(1e-6, Math.abs(orbe.scale.x)))
+    let nivel = Math.min(R / Rrep, LUZ.tope) * renace
+    st.luzPos.copy(st.P)
+    for (const cas of casillas) {
+      const b = cas.bola
+      if (!b.activa) continue
+      const deBola = LUZ.bola * Math.min(b.U / Rrep, LUZ.tope)
+      let nb = 0
+      if (b.fase === 'vuela') nb = deBola
+      else if (b.t < LUZ.destelloDura) nb = deBola * LUZ.destello * (1 - b.t / LUZ.destelloDura) ** 2
+      if (nb > nivel) {
+        nivel = nb
+        st.luzPos.copy(b.centro)
+      }
+    }
+    nivel *= 1 + LUZ.parpadeo * ((ruido1(st.t * 7.3) - 0.5) * 1.4 + (ruido1(st.t * 19.1 + 31) - 0.5) * 0.6)
+    // En desarrollo, `window.__llamaLuz` la multiplica (0 la apaga) para compararla.
+    if (import.meta.env.DEV && typeof window.__llamaLuz === 'number') nivel *= window.__llamaLuz
+    // Suavizada lo justo para que no brinque de un cuadro a otro.
+    st.luzI += (nivel - st.luzI) * (1 - Math.exp(-25 * dt))
+    // La banda clara y no el color puro: más clara se lee como luz.
+    st.luzColor.copy(colores.uClaro.value)
+    st.luzParams.set(
+      DERRAME.fuerza * Math.min(1, st.luzI),
+      Rrep * DERRAME.alcance * Math.sqrt(Math.max(0, st.luzI)),
+      DERRAME.umbral,
+    )
+    st.enlace -= dt
+    if (st.enlace <= 0 && st.raiz) {
+      st.enlace = DERRAME.enlace
+      st.raiz.traverse((o) => {
+        if (!o.isMesh || !o.material) return
+        for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+          const u = uniformsLlama(m)
+          if (!u || u.uLlamaPos.value === st.luzPos) continue
+          u.uLlamaPos.value = st.luzPos
+          u.uLlamaColor.value = st.luzColor
+          u.uLlamaParams.value = st.luzParams
+        }
+      })
+    }
   })
 
   return (

@@ -276,7 +276,7 @@ export default function Player({
                 // Ink runtime por fwidth desactivado (revelaba los triángulos de
                 // la malla low-poly). Las líneas estilo planetono/Hi-Fi Rush son
                 // inverted-hull (geometría) por silueta + bordes de pieza.
-                applyToonBanding(mm, { steps: 2, minBand: 0.04, bandIndirect: true })
+                applyToonBanding(mm, { steps: 2, minBand: 0.04, bandIndirect: true, especularDuro: true })
               }
             } catch { }
             return mm
@@ -1127,7 +1127,7 @@ export default function Player({
             applyCharacterSkinShader(out)
           }
         } catch { }
-        try { if ('metalness' in out) applyToonBanding(out, { steps: 2, minBand: 0.04, bandIndirect: true }) } catch { }
+        try { if ('metalness' in out) applyToonBanding(out, { steps: 2, minBand: 0.04, bandIndirect: true, especularDuro: true }) } catch { }
         try { out.needsUpdate = true } catch { }
         return out
       }

@@ -32,6 +32,27 @@ import * as THREE from 'three'
 // Con Skulley aislado sube, y la banda más oscura deja de caer a negro.
 export const toonPisoGlobal = { value: 0 }
 
+// La luz de la llama de la mano (LlamaMano, Oscar 2026-11-15): una pointLight
+// real no se veía en Skulley, porque el banding aplana lo que cae en la banda
+// iluminada y una luz verde no rebota en un cuerpo rojo. Así que cada material
+// con banding trae su "derrame": donde la cara mira a la llama y está cerca, se
+// tiñe de su color en bandas duras. Cada material tiene sus uniforms y
+// LlamaMano le enlaza los suyos (`uniformsLlama`) a los de su personaje.
+const LLAMA_UNIFORMS = new WeakMap()
+
+// Brillo duro (`especularDuro`, Oscar 2026-11-15: con un color casi negro "se
+// ven los brillos 3D"): el especular del GLB (roughness 0.65) y el reflejo del
+// HDRI pasaban suaves, sin banda, y con un albedo oscuro el difuso casi no
+// existe, así que ese brillo suave era todo lo que se veía (y el DotScreen lo
+// volvía puntos). Ahora es una mancha plana donde el brillo pasa el umbral.
+// Umbral y nivel van relativos a la luz que llega (el sombreado sin albedo),
+// así la mancha mide lo mismo con las luces del juego, del retrato o del rig.
+export const toonBrillo = { umbral: { value: 0.036 }, nivel: { value: 0.14 } }
+if (import.meta.env?.DEV && typeof window !== 'undefined') window.__toonBrillo = toonBrillo
+export function uniformsLlama(material) {
+  return LLAMA_UNIFORMS.get(material) || null
+}
+
 export function applyToonBanding(material, {
   steps = 3, specularSteps = 0, minBand = 0, bandIndirect = true,
   rimStrength = 0, rimColor = [1, 1, 1], rimThreshold = 0.6, rimWidth = 0.3, rimDirection = null,
@@ -40,6 +61,7 @@ export function applyToonBanding(material, {
   // → NO entinta el banding de sombras. inkStrength 0 = off.
   inkStrength = 0, inkThreshold = 0.08, inkSoft = 0.12, inkColor = [0, 0, 0],
   inkRefDist = 30,
+  especularDuro = false,
 } = {}) {
   if (!material || !material.isMaterial) return material
   if (material.userData && material.userData.__toonBanded) return material
@@ -49,9 +71,19 @@ export function applyToonBanding(material, {
     ? new THREE.Vector3(rimDirection[0], rimDirection[1], rimDirection[2]).normalize()
     : null
   const useInk = inkStrength > 0
+  // Posición (mundo), color y (fuerza, alcance, umbral) de la llama; fuerza 0 = apagada.
+  const llama = {
+    uLlamaPos: { value: new THREE.Vector3() },
+    uLlamaColor: { value: new THREE.Color(0, 0, 0) },
+    uLlamaParams: { value: new THREE.Vector3(0, 1, 0.5) },
+  }
+  LLAMA_UNIFORMS.set(material, llama)
   const prevOnBeforeCompile = material.onBeforeCompile
   material.onBeforeCompile = (shader, renderer) => {
     try { if (typeof prevOnBeforeCompile === 'function') prevOnBeforeCompile(shader, renderer) } catch { }
+    Object.assign(shader.uniforms, llama)
+    shader.uniforms.uToonBrilloUmbral = toonBrillo.umbral
+    shader.uniforms.uToonBrilloNivel = toonBrillo.nivel
     shader.uniforms.uToonSteps = { value: steps }
     shader.uniforms.uToonSpecularSteps = { value: specularSteps }
     shader.uniforms.uToonMinBand = { value: minBand }
@@ -71,9 +103,12 @@ export function applyToonBanding(material, {
       (useRim ? '#define TOON_RIM\n' : '') +
       (rimDir ? '#define TOON_RIM_DIRECTIONAL\n' : '') +
       (useInk ? '#define TOON_NORMAL_INK\n' : '') +
+      (especularDuro ? '#define TOON_BRILLO_DURO\n' : '') +
+      'uniform float uToonBrilloUmbral;\nuniform float uToonBrilloNivel;\n' +
       'uniform float uToonSteps;\nuniform float uToonSpecularSteps;\nuniform float uToonMinBand;\nuniform float uToonPisoGlobal;\n' +
       'uniform float uToonRimStrength;\nuniform vec3 uToonRimColor;\nuniform float uToonRimThreshold;\nuniform float uToonRimWidth;\nuniform vec3 uToonRimDir;\n' +
-      'uniform float uToonInkStrength;\nuniform float uToonInkThreshold;\nuniform float uToonInkSoft;\nuniform vec3 uToonInkColor;\nuniform float uToonInkRefDist;\n' + shader.fragmentShader
+      'uniform float uToonInkStrength;\nuniform float uToonInkThreshold;\nuniform float uToonInkSoft;\nuniform vec3 uToonInkColor;\nuniform float uToonInkRefDist;\n' +
+      'uniform vec3 uLlamaPos;\nuniform vec3 uLlamaColor;\nuniform vec3 uLlamaParams;\n' + shader.fragmentShader
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <lights_fragment_end>',
       `#include <lights_fragment_end>
@@ -125,6 +160,29 @@ export function applyToonBanding(material, {
           #endif
           reflectedLight.directDiffuse += _rim * uToonRimColor * uToonRimStrength;
         #endif
+        // El derrame de la llama de la mano: cerca y de cara a ella, la
+        // superficie toma su color (no se suma: verde sobre rojo da café). Dos
+        // bandas duras como el resto del toon; el color va un poco arriba del
+        // brillo de lo que tiñe, para que se lea como luz y no como pintura
+        // (Oscar: "aumentaría un poco el brillo").
+        if (uLlamaParams.x > 0.0) {
+          vec3 _llL = (viewMatrix * vec4(uLlamaPos, 1.0)).xyz - geometryPosition;
+          float _llD = length(_llL);
+          float _llX = clamp(_llD / max(uLlamaParams.y, 1e-4), 0.0, 1.0);
+          float _llT = (1.0 - _llX * _llX);
+          _llT *= _llT * smoothstep(0.0, 0.35, dot(geometryNormal, _llL / max(_llD, 1e-5)));
+          float _llA = _llT > uLlamaParams.z ? 1.0 : (_llT > uLlamaParams.z * 0.45 ? 0.4 : 0.0);
+          if (_llA > 0.0) {
+            vec3 _llBase = reflectedLight.directDiffuse + reflectedLight.indirectDiffuse;
+            // Al brillo del canal más fuerte y no a la luminancia: el rojo del
+            // cuerpo tiene poca luminancia y el verde salía apagado, y mezclado
+            // daba naranja. Con piso, para que sobre un color casi negro
+            // también se lea como luz.
+            float _llVal = max(max(_llBase.r, _llBase.g), _llBase.b);
+            vec3 _llTinte = uLlamaColor * max(_llVal * 1.25, 0.22);
+            reflectedLight.directDiffuse += (_llTinte - _llBase) * (_llA * uLlamaParams.x);
+          }
+        }
         #ifdef TOON_NORMAL_INK
           // Ink interna: la derivada de pantalla de la normal es grande donde la
           // normal cambia rápido (costillas/nariz/pliegues del normal-map y
@@ -150,6 +208,19 @@ export function applyToonBanding(material, {
             reflectedLight.directSpecular *= _specQ / _specLum;
           }
         }
+        #ifdef TOON_BRILLO_DURO
+        {
+          // Brillo duro: mancha plana donde el brillo, medido contra la luz
+          // que llega, pasa el umbral; el reflejo del HDRI se va (era el
+          // brillo gris de las orillas).
+          float _brLum = dot(reflectedLight.directSpecular, vec3(0.2126, 0.7152, 0.0722));
+          float _brLuz = max(_toonShade, 1e-3);
+          float _brMancha = smoothstep(uToonBrilloUmbral * 0.92, uToonBrilloUmbral * 1.08, _brLum / _brLuz);
+          vec3 _brTono = _brLum > 1e-6 ? reflectedLight.directSpecular / _brLum : vec3(1.0);
+          reflectedLight.directSpecular = _brTono * (_brMancha * uToonBrilloNivel * _brLuz);
+          reflectedLight.indirectSpecular = vec3(0.0);
+        }
+        #endif
       }`
     )
   }
@@ -160,7 +231,8 @@ export function applyToonBanding(material, {
     : null
   material.customProgramCacheKey = () =>
     (prevKey ? prevKey() : '') + '|toonBand_' + steps + '_' + specularSteps + '_' + minBand +
-    '_' + (bandIndirect ? 1 : 0) + '_' + (useRim ? 1 : 0) + (rimDir ? 'd' : '') + '_' + (useInk ? 1 : 0) + '_' + inkRefDist
+    '_' + (bandIndirect ? 1 : 0) + '_' + (useRim ? 1 : 0) + (rimDir ? 'd' : '') + '_' + (useInk ? 1 : 0) + '_' + inkRefDist +
+    (especularDuro ? '_brillo' : '')
 
   material.needsUpdate = true
   if (!material.userData) material.userData = {}

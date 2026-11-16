@@ -186,7 +186,7 @@ function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
                 if (materialTakesSkin(mm)) {
                   try { applyCharacterSkinShader(mm) } catch { }
                 }
-                applyToonBanding(mm, { steps: 2, minBand: 0.04, bandIndirect: true })
+                applyToonBanding(mm, { steps: 2, minBand: 0.04, bandIndirect: true, especularDuro: true })
               }
             } catch { }
             return mm
