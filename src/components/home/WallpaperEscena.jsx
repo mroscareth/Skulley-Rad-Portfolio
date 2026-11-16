@@ -54,6 +54,12 @@ const CUERPO_Y = 1.5
 const ORTO_S = 0.6
 // Desde qué parte de la onda empieza a aplanarse (y, al salir, hasta cuál).
 const ORTO_DESDE = 0.5
+// La onda de TramaEffect (si cambia allá, cambia aquí): hasta dónde llega en
+// altos de pantalla y el ancho de su banda.
+const TRAMA = { llega: 1.95, banda: 0.34 }
+// Skulley para saber qué le queda enfrente: una caja de su radio y su alto
+// alrededor de los pies, y lo más grande que se considera tapadera.
+const SILUETA = { radio: 0.9, alto: 3.4, tope: 6 }
 // Fondo de la ortográfica: con los 2000 de la cámara la profundidad lineal pierde
 // precisión y las piezas que casi se tocan pelearían.
 const ORTO_FONDO = 100
@@ -161,7 +167,7 @@ export default function WallpaperEscena({ playerRef, portals }) {
     try { fbo.dispose(); fboRunas.dispose(); fboParticulas.dispose(); blanco.dispose(); particulas.dispose(); foto.current?.dispose() } catch { }
   }, [fbo, fboRunas, fboParticulas, blanco, particulas])
 
-  const r = useRef({ t: 0, espera: 0, centra: 0, orto: 0, ocultos: [], luces: [], bg: null, fog: null, apagados: [], captura: null, v: new THREE.Vector3(), eje: new THREE.Vector3(), tam: new THREE.Vector2() })
+  const r = useRef({ t: 0, espera: 0, centra: 0, orto: 0, ocultos: [], tapados: new Set(), luces: [], bg: null, fog: null, apagados: [], captura: null, v: new THREE.Vector3(), eje: new THREE.Vector3(), tam: new THREE.Vector2(), esfera: new THREE.Sphere(), w: new THREE.Vector3() })
   // Solo para armar la matriz: nunca dibuja.
   const orto = useMemo(() => new THREE.OrthographicCamera(), [])
   useEffect(() => () => { if (r.current.orto > 0) camera.updateProjectionMatrix() }, [camera])
@@ -292,8 +298,70 @@ export default function WallpaperEscena({ playerRef, portals }) {
     est.plano = null
   }
 
+  // Lo que queda enfrente de Skulley y le tapa algo se esconde mientras la onda lo
+  // cubre entero (Oscar: al cerrar Customize una esfera verde se veía "pintada"
+  // en su pie). Cubierto no se ve, pero la trama deja a la vista la silueta de
+  // Skulley y lo de enfrente se asomaba por ella; al destaparlo regresa. Va por
+  // malla y con la misma onda de TramaEffect (radio, aplanado y banda).
+  const regresaTapados = () => {
+    const s = r.current
+    for (const o of s.tapados) o.visible = true
+    s.tapados.clear()
+  }
+  const tapaEnfrente = (p, W, H) => {
+    const s = r.current
+    const t = est.onda
+    const onda = est.cubre ? 100 : TRAMA.llega * Math.sqrt(W / H / 1.78) * Math.pow(t, 1.5)
+    const cubre = onda - TRAMA.banda
+    const aplana = 2.7 - 1.35 * Math.min(1, t * 2)
+    const aspecto = W / H
+    // Skulley: una caja de su alto alrededor de sus pies, en pantalla (uv) y a qué
+    // distancia de la cámara está su centro.
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
+    for (let i = 0; i < 8; i += 1) {
+      s.w.set(
+        p.position.x + (i & 1 ? 1 : -1) * SILUETA.radio,
+        p.position.y + (i & 2 ? SILUETA.alto : 0),
+        p.position.z + (i & 4 ? 1 : -1) * SILUETA.radio,
+      ).project(camera)
+      x0 = Math.min(x0, s.w.x * 0.5 + 0.5); x1 = Math.max(x1, s.w.x * 0.5 + 0.5)
+      y0 = Math.min(y0, s.w.y * 0.5 + 0.5); y1 = Math.max(y1, s.w.y * 0.5 + 0.5)
+    }
+    const dSkulley = s.w.set(p.position.x, p.position.y + CUERPO_Y, p.position.z).distanceTo(camera.position)
+    const yo = raizDe(p)
+    scene.traverse((o) => {
+      if (!(o.isMesh || o.isSprite) || o.isInstancedMesh || o.isSkinnedMesh) return
+      if (!o.visible && !s.tapados.has(o)) return
+      if (raizDe(o) === yo || o === est.sombra) return
+      const g = o.geometry
+      if (!g) return
+      if (!g.boundingSphere) g.computeBoundingSphere()
+      const e = s.esfera.copy(g.boundingSphere).applyMatrix4(o.matrixWorld)
+      // Lo enorme (el piso) no tapa a Skulley; lo de atrás tampoco.
+      if (e.radius > SILUETA.tope || e.center.distanceTo(camera.position) - e.radius > dSkulley) {
+        if (s.tapados.delete(o)) o.visible = true
+        return
+      }
+      const c = s.w.copy(e.center).project(camera)
+      if (c.z < -1 || c.z > 1) return
+      const cx = c.x * 0.5 + 0.5
+      const cy = c.y * 0.5 + 0.5
+      const borde = s.w.copy(e.center).addScaledVector(s.eje.setFromMatrixColumn(camera.matrixWorld, 0), e.radius).project(camera)
+      const ru = Math.abs(borde.x * 0.5 + 0.5 - cx)
+      const rv = ru * aspecto
+      const enfrente = cx + ru > x0 && cx - ru < x1 && cy + rv > y0 && cy - rv < y1
+      const dx = (cx - est.pies[0]) * aspecto
+      const dy = (cy - est.pies[1]) * aplana
+      const cubierta = Math.hypot(dx, dy) + rv * Math.max(1, aplana) < cubre
+      if (enfrente && cubierta) {
+        if (o.visible) { o.visible = false; s.tapados.add(o) }
+      } else if (s.tapados.delete(o)) o.visible = true
+    })
+  }
+
   const termina = () => {
     const s = r.current
+    regresaTapados()
     regresaMundo()
     s.t = 0
     s.espera = 0
@@ -451,6 +519,10 @@ export default function WallpaperEscena({ playerRef, portals }) {
     origen.project(camera)
     est.pies = [origen.x * 0.5 + 0.5, origen.y * 0.5 + 0.5]
     if (est.viaje?.alto) proyectaCorte(est.viaje)
+    // Con la onda en camino (entrando o saliendo); en 'lista' el mundo ya se fue
+    // completo y lo escondido se queda así hasta que la onda regrese.
+    if (!est.viaje && (est.fase === 'entra' || est.fase === 'sale')) tapaEnfrente(p, W, H)
+    else if (est.fase !== 'lista' && s.tapados.size) regresaTapados()
 
     // La captura: un cuadro a 4K, con la vista recortada al marco.
     const c = est.captura
