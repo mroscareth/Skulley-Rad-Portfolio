@@ -1604,7 +1604,7 @@ function SiteApp() {
     }
       ; (async () => {
         try {
-          const [{ useGLTF }, three, { extendGLTFLoaderKTX2 }, { URL_LENTES, URL_CORRER }] = await Promise.all([
+          const [{ useGLTF }, three, { extendGLTFLoaderKTX2 }, { URL_LENTES, URL_BOXERS, URL_CORRER }] = await Promise.all([
             import('@react-three/drei'),
             import('three'),
             import('./lib/ktx2Setup.js'),
@@ -1637,6 +1637,7 @@ function SiteApp() {
             useGLTF.preload(`${import.meta.env.BASE_URL}character.glb`, true, true, extendGLTFLoaderKTX2)
             // Los lentes y el correr los pide el Player al montarse: que bajen con el personaje
             useGLTF.preload(URL_LENTES, true)
+            useGLTF.preload(URL_BOXERS, true)
             useGLTF.preload(URL_CORRER, true)
           } finally {
             mgr.itemStart = prevItemStart

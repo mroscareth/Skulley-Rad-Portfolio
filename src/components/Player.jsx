@@ -29,7 +29,9 @@ import {
   LASER_ARM_YAW, laserReachFor,
 } from '../lib/laserPose.js'
 import { applyCharacterColorsToScene, getCharacterColors, CHARACTER_COLOR_EVENT, EYES_ORB_ONLY } from '../lib/characterColors.js'
-import { URL_LENTES, URL_CORRER, ponerLentes, getAccesorios, ACCESORIOS_EVENT } from '../lib/accesorios.js'
+import { URL_LENTES, URL_BOXERS, URL_CORRER, ponerLentes, ponerBoxers, getAccesorios, ACCESORIOS_EVENT } from '../lib/accesorios.js'
+import { telaDe } from '../lib/telaProp.js'
+import { crearApartaManos } from '../lib/apartaManos.js'
 
 // Clip de correr: ciclo de 20 cuadros en su lugar. Se mezcla con el walk
 // mientras se corre con Shift.
@@ -163,6 +165,7 @@ export default function Player({
   )
   // Lentes y carrera, hechos en Character/SkulleyRad.blend (mismo esqueleto).
   const lentesGltf = useGLTF(URL_LENTES, true)
+  const boxersGltf = useGLTF(URL_BOXERS, true)
   const correrGltf = useGLTF(URL_CORRER, true)
   // Detect GPU compressed-texture support once per renderer
   useEffect(() => { detectKTX2Support(gl) }, [gl])
@@ -179,8 +182,20 @@ export default function Player({
   const scene = useMemo(() => {
     const s = SkeletonUtils.clone(originalScene)
     try { ponerLentes(s, lentesGltf) } catch { }
+    try {
+      ponerBoxers(s, boxersGltf)
+      // la tela se arma aquí, en reposo y con la carga, y no al prenderla a media partida
+      const b = s.userData.__boxers?.[0]
+      if (b) telaDe(b)
+    } catch (e) { if (import.meta.env.DEV) console.warn('[boxers]', e) }
+    // Con los bóxers, las manos se abren para no atravesarlos (se mide en reposo).
+    try {
+      s.updateMatrixWorld(true)
+      const raizInv = new THREE.Matrix4().copy(s.matrixWorld).invert()
+      s.userData.apartaManos = crearApartaManos(s, (b) => new THREE.Matrix4().multiplyMatrices(raizInv, b.matrixWorld))
+    } catch { }
     return s
-  }, [originalScene, lentesGltf])
+  }, [originalScene, lentesGltf, boxersGltf])
 
   // CRITICAL: Clone animation clips per scene swap. Three.js AnimationClips cache
   // PropertyBinding objects that reference specific skeleton nodes. When the scene
@@ -972,6 +987,24 @@ export default function Player({
     for (let i = 0; i < pr.mallas.length; i++) {
       const m = pr.mallas[i]
       m.visible = libre && !!estado[m.userData.accesorio]
+    }
+  }
+  // La tela de los props (los bóxers) corre después del mixer y de las poses
+  // (patada, láser), cuando los huesos ya están donde se van a dibujar.
+  const pasoTela = (dt) => {
+    const mallas = propsRef.current.mallas
+    let conBoxers = false
+    for (let i = 0; i < mallas.length; i++) if (mallas[i].userData.accesorio === 'boxers' && mallas[i].visible) conBoxers = true
+    try { scene?.userData.apartaManos?.aplicar(dt, conBoxers) } catch (e) { if (import.meta.env.DEV) console.warn('[manos]', e) }
+    for (let i = 0; i < mallas.length; i++) {
+      const m = mallas[i]
+      if (!m.userData.tela) continue
+      const tela = telaDe(m)
+      if (!tela) continue
+      try {
+        if (m.visible) tela.paso(dt)
+        else tela.desactivar()
+      } catch (e) { if (import.meta.env.DEV) console.warn('[tela]', e) }
     }
   }
 
@@ -6156,6 +6189,8 @@ export default function Player({
     // Deshace el offset de la patada del frame anterior ANTES de que el mixer
     // escriba: si el mixer no corre este frame (animAccum 0), esto es lo único
     // que evita que el offset se acumule y congele la pierna en una pose rara.
+    // Al revés de como se aplicaron: las manos van encima del láser y la patada.
+    scene?.userData.apartaManos?.restaurar()
     applyLaserPoseRef.current?.restore?.()
     applyKickPoseRef.current?.restore?.()
 
@@ -6175,6 +6210,7 @@ export default function Player({
     // el mixer los reescribe cada frame y los offsets NUNCA acumulan.
     applyKickPoseRef.current?.apply?.(dtRaw)
     applyLaserPoseRef.current?.apply?.(dtRaw, pressed)
+    pasoTela(dtRaw)
 
     // Calculate adaptive speed multiplier for the NEXT frame
     // If we consistently use many steps, it means FPS is low

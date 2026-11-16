@@ -4,15 +4,18 @@
 // Lo que arma las mallas vive en accesorios.js.
 
 export const URL_LENTES = `${import.meta.env.BASE_URL}props/lentes.glb`
+export const URL_BOXERS = `${import.meta.env.BASE_URL}props/boxers.glb`
 // Clips nuevos del mismo .blend (scripts/skulley-anim/exportar_animaciones.py)
 export const URL_CORRER = `${import.meta.env.BASE_URL}animaciones/correr.glb`
 
 export const ACCESORIOS = [
   { id: 'lentes', es: 'Lentes', en: 'Sunglasses' },
+  { id: 'boxers', es: 'Bóxers', en: 'Boxers' },
 ]
 export const ACCESORIOS_EVENT = 'accesorios-cambiaron'
 const LLAVE = 'skulley_accesorios'
-const PRENDIDOS_DE_INICIO = { lentes: true }
+// Los bóxers son broma: se descubren, no salen puestos
+const PRENDIDOS_DE_INICIO = { lentes: true, boxers: false }
 
 export function getAccesorios() {
   try {

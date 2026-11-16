@@ -13,7 +13,7 @@ import PortraitGlobo from './PortraitGlobo.jsx'
 import { applyToonBanding } from '../lib/toonBanding.js'
 import { compileAsyncSafe } from '../lib/compileAsyncSafe.js'
 import { applyCharacterColorsToScene, getCharacterColors, CHARACTER_COLOR_EVENT, EYES_ORB_ONLY } from '../lib/characterColors.js'
-import { URL_LENTES, ponerLentes, mostrarAccesorios, getAccesorios, ACCESORIOS_EVENT } from '../lib/accesorios.js'
+import { URL_LENTES, URL_BOXERS, ponerLentes, ponerBoxers, mostrarAccesorios, getAccesorios, ACCESORIOS_EVENT } from '../lib/accesorios.js'
 import { applyCharacterSkinShader, materialTakesSkin, skinLineColor, SKIN_LINE_COLOR_EVENT, getSkinForcedColors } from '../lib/skinShaders.js'
 import CharacterNormalPass from './fx/CharacterNormalPass.jsx'
 import EdgeInkEffect from './fx/EdgeInkEffect.jsx'
@@ -101,6 +101,7 @@ function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
     true, true, extendGLTFLoaderKTX2,
   )
   const lentesGltf = useGLTF(URL_LENTES, true)
+  const boxersGltf = useGLTF(URL_BOXERS, true)
   // Detect GPU compressed-texture support once per renderer
   useEffect(() => { detectKTX2Support(gl) }, [gl])
   // Load gold model WITHOUT KTX2 (re-exported with standard JPEG textures)
@@ -152,8 +153,9 @@ function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
     } catch { }
 
     try { ponerLentes(clone, lentesGltf) } catch { }
+    try { ponerBoxers(clone, boxersGltf) } catch { }
     return clone
-  }, [activeScene, lentesGltf])
+  }, [activeScene, lentesGltf, boxersGltf])
 
   // Los props que se prenden y apagan en Customize
   useEffect(() => {

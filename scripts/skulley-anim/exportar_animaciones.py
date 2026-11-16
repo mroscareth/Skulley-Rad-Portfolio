@@ -16,6 +16,11 @@ el .blend: su malla no es la del sitio (las 33 piezas Egg_*/Skull0xx).
 Antes de exportar una animación nueva, revisa que su acción tenga llave en
 ctl_ajustes["rig"] (1 = controles; las de idle y walk viejas tienen 0 porque
 son horneadas). Lo más fácil: duplicar la acción Plantilla_rig.
+
+Los props (lentes, bóxers) también salen de aquí: exportar_prop("Boxers").
+Los huesos prop_* (prop_cadera.l/.r, que giran la mitad que el muslo para la
+tela de los bóxers) deforman para que el prop los use, pero no van en los
+clips: el personaje del sitio no los tiene.
 """
 import bpy
 import json
@@ -44,7 +49,10 @@ def exportar(accion, archivo, carpeta=SALIDA, armature=ARMATURE):
                  cuadro=bpy.context.scene.frame_current)
     os.makedirs(carpeta, exist_ok=True)
     ruta = os.path.join(carpeta, archivo + ".glb")
+    props = [b for b in arm.data.bones if b.name.startswith("prop_") and b.use_deform]
     try:
+        for b in props:
+            b.use_deform = False
         # Solo la acción pedida: sin el NLA (idle y walk viven en pistas NLA)
         ad.use_nla = False
         ad.action = act
@@ -71,6 +79,8 @@ def exportar(accion, archivo, carpeta=SALIDA, armature=ARMATURE):
             export_yup=True, export_apply=False,
         )
     finally:
+        for b in props:
+            b.use_deform = True
         ad.action = antes["action"]
         if antes["slot"] is not None:
             try:
@@ -102,6 +112,67 @@ def aligerar(ruta):
 
 def exportar_todas():
     return [aligerar(exportar(a, f)) for a, f in ANIMACIONES.items()]
+
+
+# --- Props -----------------------------------------------------------------
+# Salen en la pose de reposo, en las coordenadas del personaje. Los lentes van
+# sin piel (el sitio los pega a la cabeza); los bóxers con la suya (pelvis,
+# prop_cadera y muslos), y el sitio les pone la física de tela.
+PROPS = {
+    "Lentes": dict(archivo="lentes", piel=False),
+    "Boxers": dict(archivo="boxers", piel=True),
+}
+SALIDA_PROPS = os.path.join(REPO, "public", "props")
+
+
+def exportar_prop(nombre, carpeta=SALIDA_PROPS, armature=ARMATURE):
+    """Exporta un prop a <carpeta>/<archivo>.glb, con Draco, y regresa la ruta."""
+    cfg = PROPS[nombre]
+    arm = bpy.data.objects[armature]
+    ob = bpy.data.objects[nombre]
+    vl = bpy.context.view_layer
+    os.makedirs(carpeta, exist_ok=True)
+    crudo = os.path.join(carpeta, cfg["archivo"] + "_raw.glb")
+    ruta = os.path.join(carpeta, cfg["archivo"] + ".glb")
+    bisel = ob.modifiers.get("Bisel")
+    antes = dict(pose=arm.data.pose_position, oculto=arm.hide_get(), seg=bisel.segments if bisel else None,
+                 activo=vl.objects.active, seleccion=[o for o in vl.objects if o.select_get()])
+    try:
+        arm.data.pose_position = "REST"
+        arm.hide_set(False)
+        if bisel:
+            bisel.segments = 3
+        vl.update()
+        for o in vl.objects:
+            o.select_set(False)
+        ob.select_set(True)
+        if cfg["piel"]:
+            arm.select_set(True)
+        vl.objects.active = ob
+        bpy.ops.export_scene.gltf(
+            filepath=crudo, export_format="GLB", use_selection=True, export_apply=True,
+            export_animations=False, export_skins=cfg["piel"], export_def_bones=cfg["piel"],
+            export_morph=False, export_materials="EXPORT", export_yup=True,
+            export_cameras=False, export_lights=False, export_extras=False,
+            export_texcoords=cfg["piel"], export_normals=True, export_tangents=False,
+            export_vertex_color="NONE",
+        )
+    finally:
+        arm.data.pose_position = antes["pose"]
+        arm.hide_set(antes["oculto"])
+        if bisel:
+            bisel.segments = antes["seg"]
+        for o in vl.objects:
+            o.select_set(o in antes["seleccion"])
+        vl.objects.active = antes["activo"]
+    import subprocess
+    npx = "npx.cmd" if os.name == "nt" else "npx"
+    r = subprocess.run([npx, "--no-install", "gltf-transform", "draco", crudo, ruta], cwd=REPO, capture_output=True, text=True)
+    if r.returncode != 0 or not os.path.exists(ruta):
+        print("no se pudo comprimir", crudo, r.stderr[-400:])
+        return crudo
+    os.remove(crudo)
+    return ruta
 
 
 # --- Comprobación contra el GLB del sitio -------------------------------------
