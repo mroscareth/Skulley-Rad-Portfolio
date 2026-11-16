@@ -376,6 +376,58 @@ La carga cambia mucho de una corrida a otra (la de después salió menor que la 
 
 Comprobado que no cambia nada a la vista, en la misma página: con el precompilado apagado (`sessionStorage.__sinPrecompila = 1`, solo en desarrollo), el cuadro congelado antes y después de correrlo a mano (`__precompilaDesarme.correr()`), con la llama escondida porque va con su propio reloj. **0 pixeles distintos** en la primera pantalla y en la historia a los 30.5 s (blanco y negro, foco prendido, antes del golpe), con 0 de ruido entre capturas iguales. Lo único que compilar le cambia a un material es su objeto de uniforms (three le da uno nuevo con cada variante): los uniforms del toon son constantes y los de las skins se actualizan en todos los juegos vivos (`liveUniforms`).
 
+## 2026-11-15 (noche) · Skulley tardaba en salir en el teléfono
+
+Oscar: en la primera pantalla del teléfono el personaje "se tarda años en cargarse". Medido en producción, primera visita en un teléfono simulado con 4G y CPU 4× más lenta (un Android de gama media): **10 s** desde que se pide la página hasta que se dibuja Skulley.
+
+### Cómo se midió
+
+Chrome sin ventana con puppeteer-core (el Chrome del sistema), un perfil nuevo por corrida (sin caché de HTTP ni de shaders: primera visita de verdad), 390 × 844 a densidad 3 con agente de Android y touch, y la red y la CPU frenadas por CDP (`Network.emulateNetworkConditions`, `Emulation.setCPUThrottlingRate`). Dibuja con la Iris Xe, como el navegador integrado. La meta es el primer `drawElements` con más de 20 000 índices en un canvas grande (el cráneo) y el cuadro que lo presenta. Antes del bundle se envuelven `linkProgram` (cuántos programas y cuándo), `getProgramParameter(ACTIVE_UNIFORMS)` (es lo que espera a la GPU en el primer uso de un programa), `fetch`, `Worker` y `getContext`; los long animation frames dan los cuadros largos y el perfil de CPU de CDP (`Profiler`, sobre un build sin minificar) dice qué hay en cada uno. Google Analytics corre como en una visita real, pero sus envíos y el beacon propio van bloqueados (`Network.setBlockedURLs`); en producción, además, `?notrack=1`.
+
+Tres condiciones: sin freno; 4G (10 Mbps, 100 ms) con CPU normal, que se parece a un iPhone o a un Android bueno; y 4G con CPU 4×. En local se sirvió cada build con brotli, como Hostinger, alternando corrida por corrida la base y la nueva: la laptop la comparten otras sesiones y a 4× el ruido entre corridas llega a 2 s.
+
+### En qué se iba
+
+| Causa | Cuánto (Iris Xe) |
+|---|---|
+| El shader de cuerpo y pelo (`Head`) traía los 8 modos de skin en un solo programa, aunque la skin sea la base: 93 KB de fragment shader con Worley, ruido y destellos. Se compilaba dos veces antes de ver a Skulley: con skinning y sin skinning (las piezas del desarme) | **662 ms cada uno** (en serie; los demás programas, 7–120 ms) |
+| Cascada de `lazy()`: index → MobileApp → su home → el rig. Cada chunk se pedía hasta que el anterior bajaba y se montaba | el rig llegaba a 1.2 s sin freno y a 2.5 s con 4G |
+| El Draco se pedía hasta que el canvas ya había montado y compilado su primer cuadro, aunque el GLB llevaba segundos descargado | con 4G y CPU 4×, a los **5.7 s** (el GLB acabó a los 3.4) |
+| React suspendía el `lazy` del rig aunque su módulo ya estuviera (se entera en un `.then`) y el reintento caía cuando el hilo se desocupaba | hasta 1.6 s después |
+| El primer cuadro compilaba uno tras otro lo que no estaba en la ráfaga paralela: el material de normales de la tinta, el del prepaso, el del composer | 50 + 93 + 164 ms |
+| Lo que solo usa la historia, en el primer cuadro de Skulley: el numerito (`crearNumerito`) y las piezas del desarme | ~45 ms de CPU + 2 programas |
+| Google Analytics corría antes que React (con 4G y CPU 4×) y, si tardaba, en medio de la decodificación del modelo | ~0.5 s del hilo |
+| El `AudioContext` de los clics (`preloadSfx`) al montar y el contexto WebGL de prueba del `<head>` | 77 y 153 ms |
+
+Lo que no se pudo quitar: el GLB pesa 1.6 MB por la red y son 1.39 MB de geometría Draco (147 mil vértices); lo duplicado (32 copias de las matrices de los huesos, el JSON) ya lo aplana el brotli. Bajarlo es cambiar el modelo. Con CPU 4× además pesan el parseo de ~2 MB de JS (el chunk de entrada trae toda la App de escritorio), el primer layout de la página con sus fuentes (~0.8 s, se fuerza en `GlitchName` y `useTitulosAjustados`) y dos pasadas de CPU por los 147 mil vértices con skinning (caja y esfera para ordenar, ~0.3 s).
+
+### Qué se cambió
+
+| Archivo | Cambio |
+|---|---|
+| `src/lib/skinShaders.js`, `src/lib/characterSkin.js` | Variante ligera: `applyCharacterSkinShader(m, { ligera: true })`, la que usa el rig por `prepareSkinMaterial`. Con la skin base no inyecta nada: `Head` pasa de 662 a 100 ms. Con la base el bloque no hacía nada (`uSkinMode` 0, emisión 0), y se comprobó: **0 pixeles distintos** entre las dos variantes en la primera pantalla (954 053 pixeles con contenido, ruido 0). Pasar de la base a una skin recompila (`ligeros`, con `WeakRef`); `conVarianteDeSkin` compila la otra variante sin cambiar la que se ve. Player y el retrato siguen con la completa. |
+| `src/components/mobile/SkulleyFallRig.jsx` | `PrecompilaDesarme` en dos fases: en el commit que monta a Skulley, la escena entera y, con las mallas de él, los materiales de la tinta, la sombra y el prepaso (salen juntos y la GPU los compila en paralelo); las piezas del desarme `ESPERA_TRAS_SKULLEY` (20) cuadros después, o en el acto si la historia ya arrancó, y su primer uso hasta que `isReady`. Al abrir el personalizador del teléfono (`personalizaRef.current.eligeSkin`; la historia también prende `activo`), la otra variante de la skin. `PrecompilaComposer`, después del `EffectComposer`, compila sus pases con `transparent` como lo deja `EffectPass.render` (entra a la llave como `opaque`). `useGLTF.preload` al cargar el chunk. El numerito se arma 20 cuadros después. Avisa `skulley-listo` al medir el modelo. |
+| `src/App.jsx`, `MobileApp.jsx`, `MobileScrollHome.jsx`, `src/lib/lazyListo.js` | En un teléfono, App pide MobileApp, la home y el rig al cargar el módulo (no en `/admin`, `/help` ni `?pose=1`; la home y el rig solo llegando a la home). `lazyListo`: un `lazy` que le da a React un thenable que responde en el acto si el módulo ya llegó. |
+| `index.html` | Preload del Draco (`as=fetch`, como lo pide drei); el GLB en `fetchpriority="low"`; en `/` y `/simple`, Google Analytics entra con `skulley-listo` (+0.8 s) o a los 12 s, en las demás rutas como siempre; sin contexto WebGL de prueba cuando ya hay una señal de equipo ligero (en un teléfono siempre). |
+| `src/hooks/useGlobalSfx.js` | `preloadSfx` en `requestIdleCallback`. |
+
+Comprobado después del cambio, en el servidor de desarrollo: la historia completa (80 s, con el rayo) compila **0 programas**; al abrir el personalizador se compilan 2 en segundo plano (`Head` completo, entero y en piezas) y escoger slime, regresar a base y pasar a void compila **0**. El preloader de escritorio y `/simple` sacan a Skulley sin errores. Para la prueba de pixeles hay que esconder la llama y fijar su tinte (`uLlamaParams`) en todos los materiales con banding, ojos incluidos: van con su propio reloj.
+
+Una prueba que falló: diferir también la escena entera (la primera fase) hizo que el primer cuadro compilara uno por uno (`linkProgram` cada 50–100 ms) y Skulley salía 0.5 s **más tarde** que sin diferir nada. Mandar todos los programas juntos es lo que deja a la GPU compilarlos en paralelo.
+
+### Resultados
+
+Primera visita, Skulley dibujado (mediana; en local, 4 corridas alternadas por condición; en producción, 3):
+
+| | Sin freno | 4G | 4G y CPU 4× |
+|---|---|---|---|
+| Local, antes | 2.58 s | 4.48 s | 8.12 s |
+| Local, después | **1.41 s** | **3.71 s** | **7.56 s** |
+| Producción, antes (`index-CKGpeZ3M`) | 3.10 s | 4.70 s | 7.87 s |
+| Producción, después (`index-Nb1h-ftk`, `4867231`) | **1.83 s** | **4.14 s** | 7.95 s |
+
+Con 4G el piso es la descarga del GLB (~2.7 s en local, ~3.4 s en producción, igual antes y después: la prioridad baja no lo atrasó). Skulley salía 1.3 s después de que acababa el modelo y ahora 0.7 s (en local, de 1.8 a 1.0 s), porque los chunks de JS llegan juntos a ~1.7 s y el canvas ya está listo cuando llega el modelo. Con CPU 4× en producción no se nota (7.87 → 7.95 s, dentro del ruido; en local 8.12 → 7.56): ahí manda el hilo principal (lo de "Lo que no se pudo quitar"). Producción tiene además ~1 s de TTFB en el HTML y el chunk de entrada en primera visita (Hostinger), que no cambia.
+
 ## Reglas
 
 1. **Un Canvas que se pausa necesita las dos cosas:** `PauseFrameloop` y la prop `frameloop` del `<Canvas>` con la misma condición. Solo una no basta.
@@ -397,6 +449,9 @@ Comprobado que no cambia nada a la vista, en la misma página: con el precompila
 17. **Montado no es compilado.** Lo oculto o fuera de cuadro no se dibuja y no se compila; `gl.compile` sí lo recorre. Lo que aparece a media escena va al precompilado (en el rig, `PrecompilaDesarme`).
 18. **Lo que se crea después se compila con una muestra:** el mismo material en una malla del mismo tipo (sin skinning, instanciada…) y una geometría con los mismos atributos y morphs, porque entran a la llave (el `color` de 4 de los ojos es otra variante). En un pase que dibuja solo un grupo, con ese grupo como `targetScene`: sus luces también entran a la llave.
 19. **Un material que solo existe para compilar vive hasta que el programa tenga otro dueño.** Al tirarlo, three tira el programa y se vuelve a compilar después.
+20. **El primer cuadro de un canvas manda todos sus programas juntos.** Un `gl.compile` en el commit que monta lo que se va a ver (escena, más lo que los pases dibujan sobre él, más los pases del composer) deja que la GPU los compile en paralelo; sin eso el primer cuadro los crea y los espera uno por uno. Lo que no se ve en ese cuadro va después, en otra ráfaga, y se estrena hasta que `isReady`.
+21. **Un shader con variantes por uniform paga todas en cada compilación.** Si una rama casi nunca se usa (las skins con la base), una variante sin ella para la primera pantalla y la completa compilada aparte antes de que se pida.
+22. **`React.lazy` suspende aunque el módulo ya haya llegado.** En lo que está en el camino a la primera pantalla, `lib/lazyListo.js`, y el módulo se pide desde antes.
 
 ## Cómo medir
 
@@ -413,6 +468,10 @@ En el navegador de Oscar (Claude in Chrome):
 5. Un listener de `pointerdown` marca el momento del clic en Entrar.
 
 Para visita repetida, el mismo script sin el nonce.
+
+### Primera visita en un teléfono simulado (puppeteer)
+
+Para el arranque, no para el ritmo: Chrome sin ventana con puppeteer-core y `executablePath` al Chrome del sistema, un `userDataDir` nuevo en cada corrida (primera visita con caché de shaders vacía), `page.emulate` a 390 × 844 × 3 con agente de Android, y por CDP la red (`Network.emulateNetworkConditions`) y la CPU (`Emulation.setCPUThrottlingRate`). `page.evaluateOnNewDocument` mete la instrumentación antes del bundle. Para no ensuciar Google Analytics: `Network.setBlockedURLs` con `*google-analytics.com*` y `*analytics.php*` (gtag.js sí carga y corre). Un servidor local para los builds tiene que mandar brotli (si no, los tamaños no se parecen a Hostinger) y no guardar archivos en memoria por ruta: tras recompilar en la misma carpeta servía el `index.html` viejo. A 4× el ruido es grande: comparar alternando corrida por corrida.
 
 ### Qué se compila y por qué
 
@@ -463,3 +522,4 @@ Por orden de lo que más se nota:
 10. **El haz del foco prendido** cuesta ~0.29 ms por dibujo (son dos) en los primeros planos de la historia: el ruido de los rayos corre en cada pixel del cono.
 11. **El horneado de las piezas del desarme** cuesta ~92 ms en el cuadro del golpe (visita repetida, Iris Xe), ya sin compilaciones: `bakeCharacterPieces` pasa los 147 mil vértices por `applyBoneTransform` en el hilo principal. Se hornea en el golpe a propósito, con la pose que se está viendo; se podría repartir o mandar a un Worker con las matrices de los huesos de ese cuadro.
 12. **El overlay de WORK dibuja cada cuadro** aunque nada se mueva, a pantalla completa. Podría dibujar solo cuando hay scroll o hover.
+13. **La primera pantalla del teléfono con CPU lenta** (medido el 2026-11-15 con 4G y CPU 4×: ~7.9 s en producción, sin cambio después de lo de esa noche). Por orden de peso: (a) el chunk de entrada trae toda la App de escritorio (~600 KB de JS sin comprimir) y en un teléfono solo se usa la rama de MobileApp: separarlo es reestructurar `App.jsx`; (b) el primer layout de la página con sus fuentes, forzado en `GlitchName` y `useTitulosAjustados` (~0.8 s a 4×); (c) dos pasadas de CPU por los 147 mil vértices con skinning en el primer cuadro: la caja del encuadre (`Box3.setFromObject`) y la esfera con que three ordena cada malla (`computeBoundingSphere`), ~0.3 s a 4×; (d) MusicModal (el SR-90) se monta cerrado desde el arranque porque guarda el audio; (e) el GLB (1.6 MB, casi todo geometría Draco) solo baja cambiando el modelo.
