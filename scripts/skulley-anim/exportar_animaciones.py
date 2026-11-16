@@ -29,7 +29,7 @@ ARMATURE = "root"
 
 # acción del .blend -> nombre del archivo en public/animaciones (sin .glb)
 ANIMACIONES = {
-    # "Saludo": "saludo",
+    "Correr": "correr",   # ciclo de 20 cuadros (0.67 s) en su lugar
 }
 
 

@@ -29,6 +29,7 @@ import ColorWell from './ColorWell.jsx'
 import SkinCarousel from './SkinCarousel.jsx'
 import { PALETAS_INFERNO, varianteInferno } from '../lib/paletaFuego.js'
 import { cambiarVarianteInferno } from '../lib/characterSkin.js'
+import { ACCESORIOS, ACCESORIOS_EVENT, getAccesorios, setAccesorio } from '../lib/accesoriosEstado.js'
 
 // Llamas rojas o azules de Inferno (Oscar, 2026-11-16): dos círculos del tamaño
 // de los de color, cada uno con su fuego (la orilla honda y el centro claro),
@@ -70,6 +71,52 @@ function SelectorFuego({ skinId, lang }) {
           )
         })}
       </div>
+    </div>
+  )
+}
+
+// Lentes (silueta Wayfarer) para el botón del prop.
+function LentesIcon({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="currentColor" aria-hidden="true">
+      <path d="M2 11.2c0-.9.7-1.5 1.6-1.6 3.9-.3 7.8-.4 11.4.5.6.2 1.4.2 2 0 3.6-.9 7.5-.8 11.4-.5.9.1 1.6.7 1.6 1.6v1.1c0 .6-.4 1-.9 1.2-.4.1-.7.5-.8.9l-1.2 4.9c-.3 1.3-1.5 2.2-2.8 2.2h-3.6c-1.4 0-2.6-1-2.9-2.3l-.6-2.8c-.1-.6-.6-1-1.2-1s-1.1.4-1.2 1l-.6 2.8c-.3 1.3-1.5 2.3-2.9 2.3H7.7c-1.3 0-2.5-.9-2.8-2.2l-1.2-4.9c-.1-.4-.4-.8-.8-.9-.5-.2-.9-.6-.9-1.2z" />
+    </svg>
+  )
+}
+
+// Props de Skulley (Oscar, 2026-11-16): cada uno se pone o se quita; el puesto
+// va en amarillo, como los chips marcados del sitio.
+function SelectorProps({ lang }) {
+  const [estado, setEstado] = useState(getAccesorios)
+  useEffect(() => {
+    const on = (e) => setEstado(e?.detail ? { ...e.detail } : getAccesorios())
+    window.addEventListener(ACCESORIOS_EVENT, on)
+    return () => window.removeEventListener(ACCESORIOS_EVENT, on)
+  }, [])
+  return (
+    <div className="flex justify-center gap-2" role="group" aria-label="Props">
+      {ACCESORIOS.map((a) => {
+        const puesto = !!estado[a.id]
+        const nombre = lang === 'es' ? a.es : a.en
+        const accion = puesto ? (lang === 'es' ? `Quitar ${a.es.toLowerCase()}` : `Remove ${a.en.toLowerCase()}`) : (lang === 'es' ? `Poner ${a.es.toLowerCase()}` : `Wear ${a.en.toLowerCase()}`)
+        return (
+          <button
+            key={a.id}
+            type="button"
+            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setEstado(setAccesorio(a.id, !puesto)) }}
+            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+            aria-pressed={puesto}
+            aria-label={accion}
+            data-tip={accion}
+            className="flex flex-col items-center gap-1"
+          >
+            <span className={`grid place-items-center w-12 h-12 md:w-14 md:h-14 rounded-full border-2 transition-all shadow-elev-sm ${puesto ? 'bg-amarillo border-amarillo text-black' : 'bg-black/35 backdrop-blur-md border-white/25 hover:border-white/60 text-white/80'}`}>
+              <LentesIcon className="w-7 h-7 md:w-8 md:h-8" />
+            </span>
+            <span className="text-[9px] md:text-[10px] opacity-80 leading-none">{nombre}</span>
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -263,6 +310,8 @@ export default function CharacterCustomizer({
             {lang === 'es' ? 'Esta skin no es personalizable.' : "This skin isn't customizable."}
           </p>
         )}
+        <h3 className="mt-6 text-[11px] font-bold uppercase tracking-widest opacity-80 mb-2 text-center">Props</h3>
+        <SelectorProps lang={lang} />
       </div>
       {/* Wallpaper 4K, al centro y abajo de Skulley: no se mueve con la skin. */}
       {!compact && onWallpaper && (

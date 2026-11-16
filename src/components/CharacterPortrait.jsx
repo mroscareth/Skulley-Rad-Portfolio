@@ -13,6 +13,7 @@ import PortraitGlobo from './PortraitGlobo.jsx'
 import { applyToonBanding } from '../lib/toonBanding.js'
 import { compileAsyncSafe } from '../lib/compileAsyncSafe.js'
 import { applyCharacterColorsToScene, getCharacterColors, CHARACTER_COLOR_EVENT, EYES_ORB_ONLY } from '../lib/characterColors.js'
+import { URL_LENTES, ponerLentes, mostrarAccesorios, getAccesorios, ACCESORIOS_EVENT } from '../lib/accesorios.js'
 import { applyCharacterSkinShader, materialTakesSkin, skinLineColor, SKIN_LINE_COLOR_EVENT, getSkinForcedColors } from '../lib/skinShaders.js'
 import CharacterNormalPass from './fx/CharacterNormalPass.jsx'
 import EdgeInkEffect from './fx/EdgeInkEffect.jsx'
@@ -93,14 +94,15 @@ function PortraitWarmRender({ active, onDone }) {
 
 function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
   const { gl } = useThree()
-  // Detect GPU compressed-texture support once per renderer
-  useEffect(() => { detectKTX2Support(gl) }, [gl])
-
-  // Always load base model (for animations)
+  // Always load base model (for animations). Los GLB antes de cualquier efecto
+  // (ver Player: si suspenden después de un useEffect, React 19 avisa en desarrollo).
   const baseGltf = useGLTF(
     `${import.meta.env.BASE_URL}character.glb`,
     true, true, extendGLTFLoaderKTX2,
   )
+  const lentesGltf = useGLTF(URL_LENTES, true)
+  // Detect GPU compressed-texture support once per renderer
+  useEffect(() => { detectKTX2Support(gl) }, [gl])
   // Load gold model WITHOUT KTX2 (re-exported with standard JPEG textures)
   // Gold ahora es shader (modo 6), no GLB aparte → siempre el modelo base.
   const activeScene = baseGltf.scene
@@ -149,8 +151,17 @@ function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
       })
     } catch { }
 
+    try { ponerLentes(clone, lentesGltf) } catch { }
     return clone
-  }, [activeScene])
+  }, [activeScene, lentesGltf])
+
+  // Los props que se prenden y apagan en Customize
+  useEffect(() => {
+    const aplicar = (e) => mostrarAccesorios(cloned, e?.detail || getAccesorios())
+    aplicar()
+    window.addEventListener(ACCESORIOS_EVENT, aplicar)
+    return () => window.removeEventListener(ACCESORIOS_EVENT, aplicar)
+  }, [cloned])
 
   // Clone animation clips per scene swap to avoid stale PropertyBinding cache (T-pose)
   const animations = useMemo(

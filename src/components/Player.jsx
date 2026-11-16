@@ -29,6 +29,18 @@ import {
   LASER_ARM_YAW, laserReachFor,
 } from '../lib/laserPose.js'
 import { applyCharacterColorsToScene, getCharacterColors, CHARACTER_COLOR_EVENT, EYES_ORB_ONLY } from '../lib/characterColors.js'
+import { URL_LENTES, URL_CORRER, ponerLentes, getAccesorios, ACCESORIOS_EVENT } from '../lib/accesorios.js'
+
+// Clip de correr: ciclo de 20 cuadros en su lugar. Se mezcla con el walk
+// mientras se corre con Shift.
+const CLIP_CORRER = 'Correr'
+// Velocidad del clip: el walk va a ~2× y patina igual (el juego avanza ~3× lo
+// que dan los pies); a 1.25× el correr guarda esa misma proporción.
+const RUN_TIMESCALE = 1.25
+// Fase del pie izquierdo al pisar: walk (cuadro 11 de 41) y correr (cuadro 1 de 21),
+// para que al cambiar de uno a otro las piernas sigan en el mismo paso.
+const FASE_PISA_WALK = 10 / 40
+const FASE_PISA_CORRER = 0
 import { applyCharacterSkinShader, materialTakesSkin, skinLineColor, SKIN_LINE_COLOR_EVENT, getSkinForcedColors, getCurrentSkinMode } from '../lib/skinShaders.js'
 import LlamaMano from './fx/LlamaMano.jsx'
 
@@ -142,14 +154,18 @@ export default function Player({
   // Load the GLB character; preloading ensures the asset is cached when
   // imported elsewhere.  The model contains two animations: idle and walk.
   const { gl } = useThree()
-  // Detect GPU compressed-texture support once per renderer
-  useEffect(() => { detectKTX2Support(gl) }, [gl])
-
   // ALWAYS load the base model for its animations (gold GLB may not embed clips)
+  // Los tres GLB se piden antes de cualquier efecto: si uno suspende después de
+  // un useEffect, React (19, desarrollo) avisa "Expected static flag was missing".
   const baseGltf = useGLTF(
     `${import.meta.env.BASE_URL}character.glb`,
     true, true, extendGLTFLoaderKTX2,
   )
+  // Lentes y carrera, hechos en Character/SkulleyRad.blend (mismo esqueleto).
+  const lentesGltf = useGLTF(URL_LENTES, true)
+  const correrGltf = useGLTF(URL_CORRER, true)
+  // Detect GPU compressed-texture support once per renderer
+  useEffect(() => { detectKTX2Support(gl) }, [gl])
 
   // Gold ya NO es un GLB aparte — es un shader (modo 6 en skinShaders.js) sobre
   // el modelo base. Siempre usamos la escena base; el shader dorado se activa por
@@ -158,15 +174,21 @@ export default function Player({
   const baseAnimations = baseGltf.animations
 
   // CRITICAL: Clone the scene so we don't pollute the cached GLB with outline meshes.
-  const scene = useMemo(() => SkeletonUtils.clone(originalScene), [originalScene])
+  // Los lentes entran aquí, antes del primer render y del warm-up, para que sus
+  // materiales, hulls y tinta se compilen con el resto del personaje.
+  const scene = useMemo(() => {
+    const s = SkeletonUtils.clone(originalScene)
+    try { ponerLentes(s, lentesGltf) } catch { }
+    return s
+  }, [originalScene, lentesGltf])
 
   // CRITICAL: Clone animation clips per scene swap. Three.js AnimationClips cache
   // PropertyBinding objects that reference specific skeleton nodes. When the scene
   // changes, stale bindings prevent animations from playing → T-pose.
   const animations = useMemo(
-    () => baseAnimations.map((clip) => clip.clone()),
+    () => [...baseAnimations, ...(correrGltf?.animations || [])].map((clip) => clip.clone()),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [baseAnimations, originalScene],
+    [baseAnimations, correrGltf, originalScene],
   )
 
   const { actions, mixer } = useAnimations(animations, scene)
@@ -875,7 +897,8 @@ export default function Player({
         if (obj.material) {
           // Hide/show outline meshes based on opacity
           if (obj.name && obj.name.endsWith('_outline')) {
-            obj.visible = opacity > 0.01
+            // Los contornos de los props los prende actualizarProps (Customize decide)
+            if (!obj.userData?.accesorio) obj.visible = opacity > 0.01
             return
           }
           // Mismo trato para el mesh de pupilas (ver flag en el clonado de
@@ -922,6 +945,34 @@ export default function Player({
         }
       })
     } catch { }
+  }
+
+  // Props (los lentes): se ven solo si están prendidos en Customize y Skulley
+  // no anda de esfera ni despiezado. Va en cada cuadro y no por opacidad: el
+  // vuelo de esfera y los fundidos tocan la opacidad desde muchos lados. En el
+  // warm-up (prewarm) no corre, así que se compilan aunque estén apagados.
+  const accesoriosRef = useRef(getAccesorios())
+  useEffect(() => {
+    const on = (e) => { accesoriosRef.current = e?.detail || getAccesorios() }
+    window.addEventListener(ACCESORIOS_EVENT, on)
+    return () => window.removeEventListener(ACCESORIOS_EVENT, on)
+  }, [])
+  const propsRef = useRef({ escena: null, mallas: [], cuadros: 0 })
+  const actualizarProps = () => {
+    const pr = propsRef.current
+    if (pr.escena !== scene || pr.cuadros++ % 30 === 0) {
+      pr.escena = scene
+      pr.mallas = []
+      try { scene?.traverse((o) => { if (o.userData?.accesorio) pr.mallas.push(o) }) } catch { }
+    }
+    if (!pr.mallas.length) return
+    const op = lastAppliedOpacityRef.current
+    const libre = !orbActiveRef.current && !showOrbRef.current && !disassembleActiveRef.current && (op < 0 || op > 0.01)
+    const estado = accesoriosRef.current
+    for (let i = 0; i < pr.mallas.length; i++) {
+      const m = pr.mallas[i]
+      m.visible = libre && !!estado[m.userData.accesorio]
+    }
   }
 
   // ----------------------------
@@ -1943,6 +1994,8 @@ export default function Player({
         // skinned meshes, not body pieces. Letting them into the detach list
         // creates ghost "stretched yellow tubes" alongside the real body.
         if (n.endsWith('_outline')) return
+        // Un prop apagado en Customize no cae (Egg_Lentes prendido sí: cae solo)
+        if (o.userData?.accesorio && !accesoriosRef.current[o.userData.accesorio]) return
         // Include Egg_* body pieces AND Skull_* cranium/face pieces — the head
         // (skull, hair, facial bones) is authored as separate Skull_* meshes,
         // not under any Egg_* tag. Without this the head vanishes.
@@ -2116,6 +2169,10 @@ export default function Player({
               // clasificador Eye_cluster pierde AMBAS señales (nombre Y color)
               // y las pupilas siempre caen al fallback standalone.
               rigidMat.name = srcMat?.name || ''
+            } else if (Array.isArray(skinnedTarget.material)) {
+              // Malla con varios materiales (los lentes: armazón, micas, remaches):
+              // la pieza conserva los tres, uno por grupo de la geometría.
+              rigidMat = skinnedTarget.material.map((m) => createRigidMaterial(m))
             } else {
               rigidMat = createRigidMaterial(srcMat)
             }
@@ -5131,6 +5188,10 @@ export default function Player({
 
   // Smooth blending between idle and walk using effective weights
   const walkWeightRef = useRef(0)
+  // Dentro de la locomoción, cuánto es correr (0 = walk, 1 = correr)
+  const runWeightRef = useRef(0)
+  const corriendoPrevRef = useRef(false)
+  const prevRunNormRef = useRef(0)
 
   // ============================================================
   // MOVEMENT AND ANIMATION CONSTANTS (CENTRALIZED)
@@ -5179,6 +5240,12 @@ export default function Player({
       walkAction.clampWhenFinished = false
       try { walkDurationRef.current = walkAction.getClip()?.duration || walkDurationRef.current } catch { }
     }
+    const runAction = actions[CLIP_CORRER]
+    if (runAction) {
+      runAction.reset().setEffectiveWeight(0).setEffectiveTimeScale(RUN_TIMESCALE).play()
+      runAction.setLoop(THREE.LoopRepeat, Infinity)
+      runAction.clampWhenFinished = false
+    }
   }, [actions, idleName, walkName])
 
   // Rising-edge detector per portal + cooldown to avoid instant re-entries
@@ -5196,6 +5263,7 @@ export default function Player({
   useFrame((state, delta) => {
     if (prewarm) return
     if (!playerRef.current) return
+    actualizarProps()
     const tmp = tmpRef.current
     const dtRaw = Math.min(Math.max(delta || 0, 0), 0.1) // 100ms cap anti-freeze/alt-tab/GC
     // Power charge system (spacebar): hold to charge, release to fire
@@ -5963,6 +6031,24 @@ export default function Player({
 
     const idleAction = actions && idleName ? actions[idleName] : null
     const walkAction = actions && walkName ? actions[walkName] : null
+    const runAction = actions ? actions[CLIP_CORRER] : null
+    // Correr: con Shift y moviéndose (cargando la patada no hay locomoción).
+    const quiereCorrer = !!runAction && !!keyboard.shift && hasInput && !planted
+    if (runAction && walkAction && quiereCorrer !== corriendoPrevRef.current) {
+      // Al cambiar entre walk y correr, el que entra arranca en el mismo paso que
+      // lleva el otro: si no, la mezcla cruza una pierna adelante con la otra.
+      try {
+        const dW = walkAction.getClip().duration
+        const dR = runAction.getClip().duration
+        const fr = (x) => ((x % 1) + 1) % 1
+        if (quiereCorrer && runWeightRef.current < 0.05) {
+          runAction.time = fr(fr(walkAction.time / dW - FASE_PISA_WALK) + FASE_PISA_CORRER) * dR
+        } else if (!quiereCorrer && runWeightRef.current > 0.95) {
+          walkAction.time = fr(fr(runAction.time / dR - FASE_PISA_CORRER) + FASE_PISA_WALK) * dW
+        }
+      } catch { }
+      corriendoPrevRef.current = quiereCorrer
+    }
 
     let steps = 0
     let animAccum = 0 // accumulate time to update mixer once per frame
@@ -6040,7 +6126,16 @@ export default function Player({
 
         const walkW = walkWeightRef.current
         const idleW = 1 - walkW
-        walkAction.setEffectiveWeight(walkW)
+        // La locomoción (walkW) se reparte entre walk y correr
+        runWeightRef.current = THREE.MathUtils.clamp(
+          THREE.MathUtils.damp(runWeightRef.current, quiereCorrer ? 1 : 0, BLEND_LAMBDA, stepDt), 0, 1)
+        const runW = runAction ? runWeightRef.current : 0
+        walkAction.setEffectiveWeight(walkW * (1 - runW))
+        if (runAction) {
+          runAction.enabled = true
+          runAction.setEffectiveWeight(walkW * runW)
+          runAction.setEffectiveTimeScale(RUN_TIMESCALE)
+        }
         idleAction.setEffectiveWeight(idleW)
 
         // Walk timeScale proportional to weight for smooth transition
@@ -6106,6 +6201,8 @@ export default function Player({
           alpha: THREE.MathUtils.clamp(simAccRef.current / FIXED_DT, 0, 1),
           hasInput,
           walkW: walkWeightRef.current,
+          runW: runWeightRef.current,
+          runT: actions?.[CLIP_CORRER]?.time,
 
           avgSteps: avgStepsRef.current,
           adaptiveSpeedMult: adaptiveSpeedMultRef.current,
@@ -6133,13 +6230,30 @@ export default function Player({
       // Footstep detection: only when there is input and walk weight is high
       try {
         const walkWeight = walkWeightRef.current
-        if (hasInput && walkWeight > 0.5) {
+        const crossed = (a, b, p) => (a <= b ? (a < p && b >= p) : (a < p || b >= p))
+        // Corriendo, los pasos salen del clip de correr (pisa en los cuadros 1 y 11 de 21)
+        if (runAction && hasInput && walkWeight > 0.5 && runWeightRef.current > 0.5) {
+          const dR = Math.max(1e-3, runAction.getClip().duration)
+          const tNorm = (runAction.time % dR) / dR
+          const hit = [0.01, 0.485].some((p) => crossed(prevRunNormRef.current, tNorm, p))
+          if (hit && footCooldownSRef.current <= 0) {
+            playFootstep(nextIsRightRef.current)
+            nextIsRightRef.current = !nextIsRightRef.current
+            footCooldownSRef.current = 0.1
+          }
+          prevRunNormRef.current = tNorm
+          const d = Math.max(1e-3, walkDurationRef.current)
+          prevWalkNormRef.current = ((walkAction?.time || 0) % d) / d
+        } else if (hasInput && walkWeight > 0.5) {
+          if (runAction) {
+            const dR = Math.max(1e-3, runAction.getClip().duration)
+            prevRunNormRef.current = (runAction.time % dR) / dR
+          }
           const d = Math.max(1e-3, walkDurationRef.current)
           const t = (walkAction?.time || 0) % d
           const tNorm = t / d
           const prev = prevWalkNormRef.current
           const beats = [0.18, 0.68]
-          const crossed = (a, b, p) => (a <= b ? (a < p && b >= p) : (a < p || b >= p))
           const hit = beats.some((p) => crossed(prev, tNorm, p))
           if (hit && footCooldownSRef.current <= 0) {
             playFootstep(nextIsRightRef.current)
@@ -6683,6 +6797,10 @@ export default function Player({
         depthMesh.receiveShadow = false
         depthMesh.renderOrder = 3
         depthMesh.userData.cuerpo = original
+        if (original.userData?.accesorio) {
+          outlineMesh.userData.accesorio = original.userData.accesorio
+          depthMesh.userData.accesorio = original.userData.accesorio
+        }
 
         // Add as sibling of the original (inherits transformations automatically)
         if (original.parent) {
