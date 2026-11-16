@@ -3685,7 +3685,7 @@ export default function Player({
     // a startDisassemble directo, igual que el effect de eggActive.
     // Compartido entre el rayo antimateria y el EMPUJÓN de Argus: mismo
     // despiece + impulso radial desde el punto de impacto + auto-reensamble.
-    // `emitEvent` distingue el aviso (skin Molten Lava vs burla de Argus) y
+    // `emitEvent` distingue el aviso (skin Inferno vs burla de Argus) y
     // `delayMs` sincroniza con el flash del rayo (el empujón va inmediato:
     // Argus ya cronometra su dispatch al momento del thrust del brazo).
     // `force` escala el impulso: 1 = rayo (explosión total), ~0.42 = empujón
@@ -3747,7 +3747,7 @@ export default function Player({
       const d = e?.detail || {}
       const sx = Number.isFinite(d.x) ? d.x : 0
       const sz = Number.isFinite(d.z) ? d.z : 0
-      // La skin Molten Lava se desbloquea SOLO con el rayo real (App.jsx).
+      // La skin Inferno se desbloquea SOLO con el rayo real (App.jsx).
       shatterFrom(sx, sz, 'character-disassembled-by-bolt', BOLT_STRIKE_DELAY_MS)
     }
     const onArgusPush = (e) => {
@@ -6828,6 +6828,8 @@ export default function Player({
         {/* La llama de la mano (todas las skins): aquí adentro para que el
             modo wallpaper la cuente con el cuerpo. */}
         <LlamaMano raiz={scene} disparoRef={laserShotRef} />
+        {/* El mohawk en llamas de la skin Inferno. */}
+        <LlamaMano raiz={scene} fuente="pelo" />
         {/* Orb sphere + inner sparkles to convey "ser de luz" */}
         <group position={[0, ORB_HEIGHT, 0]}>
           {/* Point light: always mounted to warm up the pipeline; intensity 0 when inactive */}

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { getSkinForcedColors, SKIN_LINE_COLOR_EVENT } from '../../lib/skinShaders.js'
+import { getSkinForcedColors, getCurrentSkinMode, SKIN_LINE_COLOR_EVENT } from '../../lib/skinShaders.js'
 import { getCharacterColors, CHARACTER_COLOR_EVENT } from '../../lib/characterColors.js'
 import { uniformsLlama } from '../../lib/toonBanding.js'
 
@@ -78,6 +78,35 @@ const FUEGO = {
   tam: [0.54, 0.84],
   base: 0.58,
 }
+// El mohawk en llamas de la skin Inferno (`fuente="pelo"`, Oscar, 2026-11-16): el
+// mohawk se queda, con las bandas del fuego del cuerpo, y cada pico arde: las
+// bocanadas nacen en toda la superficie del pelo (`PELO.muestras` puntos de la
+// malla al azar), pegadas al hueso de la cabeza, chicas y muchas. Lo que se probó
+// y no: reemplazar la malla por la llama (de frente y de espaldas la cresta se ve
+// de canto y quedaba como vela: "se pierde la mohawk") y solo las puntas más lejos
+// del cuello (ardían nada más los picos de en medio). Sin base: la forma la dan
+// las bocanadas. La unidad es una fracción de lo que abarca el pelo. El campo es
+// un plano de frente a la cámara, pero cada pixel se dibuja a la profundidad de
+// las bocanadas que lo pintan (`uProfundo`): en el plano, los picos de enfrente
+// tapaban toda la llama, y adelantado frente al pico más cercano, las llamas de
+// atrás salían encima de la cara (Oscar: "como si el personaje fuera transparente").
+const MODO_INFERNO = 4
+const FUEGO_PELO = {
+  porSegundo: 160,
+  vida: [0.25, 0.45],
+  hereda: 0.6,
+  aire: 3.2,
+  empuje: 22,
+  remolino: 18,
+  subida: 2.4,
+  tam: [0.5, 0.8],
+  base: 0,
+}
+const PELO = { muestras: 128, unidad: 0.16 }
+// La profundidad de una bocanada es la de su cara de enfrente: su centro más
+// esta fracción de su tamaño hacia la cámara (si no, al nacer en la superficie
+// del pelo la mitad quedaba metida en él).
+const FRENTE = 0.6
 // La bola en vuelo: su tamaño sale del de la llama al soltarla. Va recta y rápida
 // como el rayo (Oscar). La cabeza es un núcleo con bocanadas que viajan con ella
 // (heredan casi toda su velocidad y viven poco: no se riegan por el camino, que
@@ -142,6 +171,8 @@ const VERT = /* glsl */`
 uniform float uR;
 uniform vec4 uCuadro;
 varying vec2 vF;
+varying float vZc;
+varying vec4 vProy;
 void main(){
   // Coordenadas del campo en su unidad (el radio de la esfera en la mano, el de
   // la bola en vuelo): x a lo ancho, y hacia arriba de la pantalla.
@@ -153,6 +184,10 @@ void main(){
   vec4 centro = modelViewMatrix * m * vec4(0.0, 0.0, 0.0, 1.0);
   centro.xy += vF * uR;
   gl_Position = projectionMatrix * centro;
+  // Para la profundidad de cada bocanada (uProfundo): la z del cuadro en la
+  // vista y lo que la proyección hace con la z (la x y la y no la tocan).
+  vZc = centro.z;
+  vProy = vec4(projectionMatrix[2][2], projectionMatrix[3][2], projectionMatrix[2][3], projectionMatrix[3][3]);
 }
 `
 
@@ -169,7 +204,11 @@ uniform vec3 uHondo;
 uniform vec3 uMedio;
 uniform vec3 uClaro;
 uniform vec3 uCentro;
+uniform float uProfundo;
+uniform vec4 uProf[${MAX / 4}];
 varying vec2 vF;
+varying float vZc;
+varying vec4 vProy;
 
 // Ruido que evoluciona (la tercera coordenada es el tiempo): si solo se
 // desliza hacia arriba se lee como banda transportadora, predecible.
@@ -229,19 +268,33 @@ void main(){
   vec2 q = p + w * (0.3 + 1.2*h);
   // La base (la mano o la bola) y las bocanadas (xy, tamaño, calor).
   float f = uBase.z > 1e-3 ? 0.9 * bola(q, uBase.xy, uBase.z) : 0.0;
-  // Solo las vivas: JS las junta al frente y dice cuántas son.
+  // Solo las vivas: JS las junta al frente y dice cuántas son. zf: la
+  // profundidad de cada una, pesada por lo que aporta a este pixel.
+  float zf = 0.0;
   for (int i = 0; i < ${MAX}; i++) {
     if (i >= uN) break;
     vec4 b = uFuego[i];
-    f += b.w * bola(q, b.xy, b.z);
+    float c = b.w * bola(q, b.xy, b.z);
+    f += c;
+    zf += c * uProf[i >> 2][i & 3];
   }
   // Las gotas, cada una por su lado.
   vec2 qg = p + w * 0.35;
   float g = 0.0;
-  for (int i = 0; i < ${GOTAS}; i++) g = max(g, bola(qg, uGotas[i].xy, max(uGotas[i].z, 1e-3)) * step(1e-3, uGotas[i].z));
+  float zg = 0.0;
+  for (int i = 0; i < ${GOTAS}; i++) {
+    float gi = bola(qg, uGotas[i].xy, max(uGotas[i].z, 1e-3)) * step(1e-3, uGotas[i].z);
+    if (gi > g) { g = gi; zg = uGotas[i].w; }
+  }
   // Una gota sola llega a 1: se lee en las bandas como una bocanada.
   float k = max(f, g * ${BANDAS.claro.toFixed(2)});
   if (k < ${BANDAS.halo.toFixed(2)}) discard;
+  // El mohawk: cada pixel a la profundidad de lo que lo pinta, así el cráneo y
+  // los picos de enfrente tapan las llamas de atrás. Las demás, en su plano.
+  if (uProfundo > 0.5) {
+    float zv = vZc + (g * ${BANDAS.claro.toFixed(2)} > f ? zg : zf / max(f, 1e-5));
+    gl_FragDepth = clamp(0.5 * (vProy.x * zv + vProy.y) / (vProy.z * zv + vProy.w) + 0.5, 0.0, 1.0);
+  } else gl_FragDepth = gl_FragCoord.z;
   vec3 col = k > ${BANDAS.centro.toFixed(2)} ? uCentro
            : (k > ${BANDAS.claro.toFixed(2)} ? uClaro
            : (k > ${BANDAS.medio.toFixed(2)} ? uMedio : uHondo));
@@ -356,6 +409,8 @@ function uniformsCampo(colores) {
     uGotas: { value: Array.from({ length: GOTAS }, () => new THREE.Vector4()) },
     uGrupo: { value: Array.from({ length: GRUPOS }, () => new THREE.Vector4()) },
     uGrupoPeso: { value: new Array(GRUPOS).fill(0) },
+    uProfundo: { value: 0 },
+    uProf: { value: Array.from({ length: MAX / 4 }, () => new THREE.Vector4()) },
     ...colores,
   }
 }
@@ -400,7 +455,9 @@ const uniformsEstela = (colores) => ({
   ...colores,
 })
 
-export default function LlamaMano({ raiz, disparoRef = null }) {
+export default function LlamaMano({ raiz, disparoRef = null, fuente = 'mano' }) {
+  const esPelo = fuente === 'pelo'
+  const cfg = esPelo ? FUEGO_PELO : FUEGO
   const llamaRef = useRef(null)
   const brasasRef = useRef(null)
   const geo = useMemo(() => new THREE.PlaneGeometry(1, 1), [])
@@ -410,12 +467,25 @@ export default function LlamaMano({ raiz, disparoRef = null }) {
     uClaro: { value: new THREE.Color() },
     uCentro: { value: new THREE.Color() },
   }), [])
-  const uMano = useMemo(() => uniformsCampo(colores), [colores])
+  const uMano = useMemo(() => {
+    const u = uniformsCampo(colores)
+    u.uProfundo.value = esPelo ? 1 : 0
+    return u
+  }, [colores, esPelo])
 
-  // La paleta sale del color del orbe (el de la skin si lo fuerza).
+  // La paleta sale del color del orbe (el de la skin si lo fuerza). Inferno
+  // trae las cuatro bandas de su cuerpo (`fuego`), para que todo sea el mismo fuego.
   useEffect(() => {
     const blanco = new THREE.Color(1, 1, 1)
     const pinta = () => {
+      const paleta = getSkinForcedColors()?.fuego
+      if (paleta?.length === 4) {
+        colores.uHondo.value.set(paleta[0])
+        colores.uMedio.value.set(paleta[1])
+        colores.uClaro.value.set(paleta[2])
+        colores.uCentro.value.set(paleta[3])
+        return
+      }
       const hex = getSkinForcedColors()?.orb || getCharacterColors().orb || '#00ff00'
       const base = new THREE.Color(hex)
       colores.uMedio.value.copy(base)
@@ -467,8 +537,11 @@ export default function LlamaMano({ raiz, disparoRef = null }) {
   const s = useRef({
     raiz: null,
     orbe: null,
-    contorno: null,
+    ocultos: [],
     oculta: false,
+    hueso: null,
+    puntos: [],
+    centroLocal: new THREE.Vector3(),
     radio: 1,
     escalaReposo: 1,
     luzPos: new THREE.Vector3(),
@@ -493,6 +566,7 @@ export default function LlamaMano({ raiz, disparoRef = null }) {
     tmp: new THREE.Vector3(),
     der: new THREE.Vector3(),
     arr: new THREE.Vector3(),
+    atras: new THREE.Vector3(),
     vista: new THREE.Matrix4(),
     perspectiva: true,
     vc: new THREE.Vector3(),
@@ -560,7 +634,8 @@ export default function LlamaMano({ raiz, disparoRef = null }) {
     llama.onBeforeRender = (renderer, scene, camera) => {
       const st = s.current
       if (!st.orbe) return
-      st.orbe.getWorldPosition(centro)
+      if (st.hueso) centro.copy(st.centroLocal).applyMatrix4(st.hueso.matrixWorld)
+      else st.orbe.getWorldPosition(centro)
       llama.matrixWorld.makeTranslation(centro.x - st.P.x, centro.y - st.P.y, centro.z - st.P.z)
       if (llama.count > 0 && camera && !fuegoAcuadro(camera)) {
         llama.count = 0
@@ -582,7 +657,7 @@ export default function LlamaMano({ raiz, disparoRef = null }) {
   // `__llama` es la de Player y `__llamas` todas (retrato, preloader, teléfono).
   useEffect(() => {
     if (!import.meta.env.DEV) return undefined
-    const yo = { casillas, s, llama: llamaRef, brasas: brasasRef, mano: uMano }
+    const yo = { fuente, casillas, s, llama: llamaRef, brasas: brasasRef, mano: uMano }
     const todas = (window.__llamas ||= new Set())
     todas.add(yo)
     if (disparoRef) window.__llama = yo
@@ -590,13 +665,61 @@ export default function LlamaMano({ raiz, disparoRef = null }) {
       todas.delete(yo)
       if (window.__llama === yo) delete window.__llama
     }
-  }, [casillas, disparoRef, uMano])
+  }, [casillas, disparoRef, uMano, fuente])
 
+  // Lo que la llama reemplaza (la esfera de la mano o el pelo) y sus contornos.
   const muestraEsfera = (st, si) => {
     if (st.oculta === !si) return
     st.oculta = !si
-    if (st.orbe) st.orbe.visible = si
-    if (st.contorno) st.contorno.visible = si
+    for (const o of st.ocultos) o.visible = si
+  }
+
+  // El pelo: su malla (material Hair), el hueso que la mueve (las piezas son
+  // rígidas: todo va con el de más peso) y PELO.muestras puntos suyos al azar, en
+  // el espacio de ese hueso. Con los datos del armado (boneInverse × bindMatrix ×
+  // el atributo crudo, lo mismo que hace la GPU) y no con la pose de este cuadro:
+  // así salen iguales siempre. Ojo: getVertexPosition de una malla con piel ya
+  // devuelve el vértice posado, y aplicarle los huesos otra vez lo mandaba 1.6
+  // arriba de la cabeza.
+  const preparaPelo = (st, raizPelo) => {
+    st.orbe = null
+    st.hueso = null
+    st.puntos = []
+    st.ocultos = []
+    let pelo = null
+    raizPelo.traverse((o) => {
+      if (!pelo && o.isSkinnedMesh && o.skeleton && /^Hair$/i.test(o.material?.name || '')) pelo = o
+    })
+    if (!pelo) return
+    const geoPelo = pelo.geometry
+    const indices = geoPelo.attributes.skinIndex
+    const pesos = geoPelo.attributes.skinWeight
+    const huesoDe = (k) => {
+      let mejor = 0
+      for (let c = 1; c < 4; c += 1) if (pesos.getComponent(k, c) > pesos.getComponent(k, mejor)) mejor = c
+      return indices.getComponent(k, mejor)
+    }
+    const b = huesoDe(0)
+    const hueso = pelo.skeleton.bones[b]
+    const inversa = pelo.skeleton.boneInverses[b]
+    if (!hueso || !inversa) return
+    const n = geoPelo.attributes.position.count
+    const v = new THREE.Vector3()
+    for (let i = 0; i < PELO.muestras * 3 && st.puntos.length < PELO.muestras; i += 1) {
+      const k = Math.floor(Math.random() * n)
+      if (huesoDe(k) !== b) continue
+      v.fromBufferAttribute(geoPelo.attributes.position, k)
+      st.puntos.push(v.clone().applyMatrix4(pelo.bindMatrix).applyMatrix4(inversa))
+    }
+    if (!st.puntos.length) return
+    st.centroLocal.set(0, 0, 0)
+    for (const p of st.puntos) st.centroLocal.add(p)
+    st.centroLocal.divideScalar(st.puntos.length)
+    let mide = 0
+    for (const p of st.puntos) mide = Math.max(mide, p.distanceTo(st.centroLocal))
+    st.radio = mide * PELO.unidad
+    st.orbe = pelo
+    st.hueso = hueso
   }
 
   // Avanza una partícula: el aire frena su velocidad (también lo heredado),
@@ -630,15 +753,20 @@ export default function LlamaMano({ raiz, disparoRef = null }) {
   // `centro` y en `unidad`. Lo joven pesa más.
   // Las vivas van juntas al frente y `uN` dice cuántas son: el shader no
   // recorre las vacías (con varias explosiones a la vez trababa los cuadros).
+  // También la profundidad de cada una (para el mohawk, uProfundo): la de su
+  // cara de enfrente, relativa al cuadro, en la vista.
   const escribe = (st, lista, uCampo, centro, unidad) => {
     const uFuego = uCampo.uFuego.value
+    const prof = uCampo.uProf.value
     let n = 0
     for (let i = 0; i < MAX; i += 1) {
       const b = lista[i]
       if (!b.vivo) continue
       const k = b.edad / b.vida
       const pr = proyecta(st, b.p, centro, unidad)
-      uFuego[n].set(pr.x, pr.y, (tamano(b, k) / unidad) * pr.z, 1.25 - 0.65 * k)
+      const tam = tamano(b, k)
+      uFuego[n].set(pr.x, pr.y, (tam / unidad) * pr.z, 1.25 - 0.65 * k)
+      prof[n >> 2].setComponent(n & 3, st.vp.z - st.vc.z + tam * FRENTE)
       n += 1
     }
     uCampo.uN.value = n
@@ -774,23 +902,32 @@ export default function LlamaMano({ raiz, disparoRef = null }) {
     if (raiz && (raiz !== st.raiz || !st.orbe || !st.orbe.parent)) {
       muestraEsfera(st, true)
       st.raiz = raiz
-      st.orbe = raiz.getObjectByName?.('Egg_EnergyBall') || null
-      st.contorno = st.orbe?.parent?.getObjectByName?.('Egg_EnergyBall_outline') || null
-      // Su tamaño en reposo, para medir la luz: la carga la infla y la
-      // historia la encoge (como guardan su escala Player y el rig).
-      if (st.orbe) st.escalaReposo = Math.abs(st.orbe.scale.x) || 1
-      if (st.orbe?.geometry) {
-        if (!st.orbe.geometry.boundingSphere) st.orbe.geometry.computeBoundingSphere()
-        st.radio = st.orbe.geometry.boundingSphere?.radius || 1
+      if (esPelo) preparaPelo(st, raiz)
+      else {
+        st.orbe = raiz.getObjectByName?.('Egg_EnergyBall') || null
+        st.ocultos = [st.orbe, st.orbe?.parent?.getObjectByName?.('Egg_EnergyBall_outline')].filter(Boolean)
+        // Su tamaño en reposo, para medir la luz: la carga la infla y la
+        // historia la encoge (como guardan su escala Player y el rig).
+        if (st.orbe) st.escalaReposo = Math.abs(st.orbe.scale.x) || 1
+        if (st.orbe?.geometry) {
+          if (!st.orbe.geometry.boundingSphere) st.orbe.geometry.computeBoundingSphere()
+          st.radio = st.orbe.geometry.boundingSphere?.radius || 1
+        }
       }
     }
     const orbe = st.orbe
-    let activa = !!orbe && visibleSusPadres(orbe)
+    let activa = !!orbe && visibleSusPadres(orbe) && (!esPelo || getCurrentSkinMode() === MODO_INFERNO)
     let R = 0
     if (activa) {
-      orbe.updateWorldMatrix(true, false)
-      orbe.getWorldPosition(st.P)
-      orbe.getWorldScale(st.S)
+      if (esPelo) {
+        st.hueso.updateWorldMatrix(true, false)
+        st.P.copy(st.centroLocal).applyMatrix4(st.hueso.matrixWorld)
+        st.hueso.getWorldScale(st.S)
+      } else {
+        orbe.updateWorldMatrix(true, false)
+        orbe.getWorldPosition(st.P)
+        orbe.getWorldScale(st.S)
+      }
       R = st.S.x * st.radio
       if (!(R > 1e-4)) activa = false
     }
@@ -833,6 +970,7 @@ export default function LlamaMano({ raiz, disparoRef = null }) {
     // Ejes de la pantalla en el mundo y la vista de la cámara.
     st.der.setFromMatrixColumn(camera.matrixWorld, 0).normalize()
     st.arr.setFromMatrixColumn(camera.matrixWorld, 1).normalize()
+    st.atras.setFromMatrixColumn(camera.matrixWorld, 2).normalize()
     st.vista.copy(camera.matrixWorld).invert()
     st.perspectiva = !camera.isOrthographicCamera
 
@@ -902,31 +1040,38 @@ export default function LlamaMano({ raiz, disparoRef = null }) {
     else st.renace = Math.min(1, st.renace + dt / RENACE.dura)
     const renace = st.renace
 
-    // Bocanadas de la mano: nacen con buena parte de su velocidad.
-    st.fuegoAcc += dt * FUEGO.porSegundo * renace
+    // Bocanadas: nacen con buena parte de su velocidad, en la mano o en un
+    // punto del pelo.
+    st.fuegoAcc += dt * cfg.porSegundo * renace
     while (st.fuegoAcc >= 1) {
       st.fuegoAcc -= 1
       const f = libre(st.fuego)
       if (!f) { st.fuegoAcc = 0; break }
       f.vivo = true
       f.edad = Math.random() * dt
-      f.vida = azar(FUEGO.vida[0], FUEGO.vida[1])
-      f.r = R * azar(FUEGO.tam[0], FUEGO.tam[1]) * (0.35 + 0.65 * renace)
+      f.vida = azar(cfg.vida[0], cfg.vida[1])
+      f.r = R * azar(cfg.tam[0], cfg.tam[1]) * (0.35 + 0.65 * renace)
       f.semilla = Math.random() * 1000
       f.unidad = R
-      f.empuje = FUEGO.empuje
-      f.aire = FUEGO.aire
-      f.remolino = FUEGO.remolino
-      f.p.copy(st.P)
-        .addScaledVector(st.der, R * (Math.random() - 0.5) * 0.5)
-        .addScaledVector(st.arr, R * Math.random() * 0.3)
-      f.v.copy(st.arr).multiplyScalar(R * FUEGO.subida * azar(0.7, 1.3))
+      f.empuje = cfg.empuje
+      f.aire = cfg.aire
+      f.remolino = cfg.remolino
+      if (esPelo) {
+        f.p.copy(st.puntos[Math.floor(Math.random() * st.puntos.length)])
+          .applyMatrix4(st.hueso.matrixWorld)
+          .addScaledVector(st.der, R * (Math.random() - 0.5) * 0.4)
+      } else {
+        f.p.copy(st.P)
+          .addScaledVector(st.der, R * (Math.random() - 0.5) * 0.5)
+          .addScaledVector(st.arr, R * Math.random() * 0.3)
+      }
+      f.v.copy(st.arr).multiplyScalar(R * cfg.subida * azar(0.7, 1.3))
         .addScaledVector(st.der, R * (Math.random() - 0.5) * 1.2)
-        .addScaledVector(st.vel, FUEGO.hereda)
+        .addScaledVector(st.vel, cfg.hereda)
     }
     avanza(st, st.fuego, dt)
     escribe(st, st.fuego, uMano, st.P, R)
-    uMano.uBase.value.set(0, 0.12, FUEGO.base * renace)
+    uMano.uBase.value.set(0, 0.12, cfg.base * renace)
     let alto = -1e9
     let masAlta = null
     for (const f of st.fuego) {
@@ -1068,7 +1213,7 @@ export default function LlamaMano({ raiz, disparoRef = null }) {
       st.tmp.copy(g.p).sub(st.P).divideScalar(R)
       // Pop al nacer y se va encogiendo.
       const e = Math.min(1, k / 0.1) * (1 - k * k)
-      u.set(st.tmp.dot(st.der), st.tmp.dot(st.arr), g.r * e, 0)
+      u.set(st.tmp.dot(st.der), st.tmp.dot(st.arr), g.r * e, (st.tmp.dot(st.atras) + g.r * e * FRENTE) * R)
     }
     ajustaCuadro(uMano, CUADRO_MANO)
 
@@ -1115,7 +1260,10 @@ export default function LlamaMano({ raiz, disparoRef = null }) {
 
     // La luz se queda con el fuego que más alumbra: la mano (con lo que ha
     // renacido), una bola en vuelo o el destello de la que acaba de explotar.
-    // `nivel` es 1 con la llama de la mano en reposo.
+    // `nivel` es 1 con la llama de la mano en reposo. La del pelo no alumbra: se
+    // pelearía con la de la mano los mismos materiales, y con Inferno el cuerpo
+    // ya es fuego.
+    if (esPelo) return
     const Rrep = R * (st.escalaReposo / Math.max(1e-6, Math.abs(orbe.scale.x)))
     let nivel = Math.min(R / Rrep, LUZ.tope) * renace
     st.luzPos.copy(st.P)

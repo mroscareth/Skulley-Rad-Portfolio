@@ -27,6 +27,52 @@ import {
 import SkinChip from './SkinChip.jsx'
 import ColorWell from './ColorWell.jsx'
 import SkinCarousel from './SkinCarousel.jsx'
+import { PALETAS_INFERNO, varianteInferno } from '../lib/paletaFuego.js'
+import { cambiarVarianteInferno } from '../lib/characterSkin.js'
+
+// Llamas rojas o azules de Inferno (Oscar, 2026-11-16): dos círculos del tamaño
+// de los de color, cada uno con su fuego (la orilla honda y el centro claro),
+// con el nombre abajo. El que está puesto lleva el borde blanco.
+function SelectorFuego({ skinId, lang }) {
+  const [variante, setVariante] = useState(varianteInferno)
+  const opciones = [
+    { id: 'rojo', label: lang === 'es' ? 'Rojas' : 'Red' },
+    { id: 'azul', label: lang === 'es' ? 'Azules' : 'Blue' },
+  ]
+  const escoge = (id) => {
+    if (id === variante) return
+    try { playSfx('click', { volume: 1.0 }) } catch { }
+    setVariante(id)
+    cambiarVarianteInferno(id, skinId)
+  }
+  return (
+    <div className="flex flex-col items-center gap-1.5" role="group" aria-label={lang === 'es' ? 'Color de las llamas' : 'Flame color'}>
+      <div className="flex gap-2">
+        {opciones.map((o) => {
+          const p = PALETAS_INFERNO[o.id]
+          const puesto = o.id === variante
+          return (
+            <button
+              key={o.id}
+              type="button"
+              onClick={() => escoge(o.id)}
+              onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+              aria-pressed={puesto}
+              className="flex flex-col items-center gap-1"
+            >
+              <span
+                className={`block w-12 h-12 md:w-14 md:h-14 rounded-full border-2 transition-all shadow-elev-sm ${puesto ? 'border-white' : 'border-white/25 hover:border-white/60'}`}
+                style={{ background: `radial-gradient(circle at 50% 42%, ${p[3]} 0%, ${p[2]} 30%, ${p[1]} 58%, ${p[0]} 100%)` }}
+                aria-hidden="true"
+              />
+              <span className="text-[9px] md:text-[10px] opacity-80 leading-none">{o.label}</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 // La columna de colores va a la derecha y Skulley a la izquierda: el selector
 // se abre hacia el hueco que queda entre los dos, no encima de los otros colores.
@@ -180,6 +226,7 @@ export default function CharacterCustomizer({
           <>
             <h3 className="text-[11px] font-bold uppercase tracking-widest opacity-80 mb-2 text-center">{lang === 'es' ? 'Color' : 'Color'}</h3>
             <div className="flex flex-col items-center gap-3">
+              {activeSkin?.variantesFuego && <SelectorFuego skinId={activeSkinId} lang={lang} />}
               {visibleRows.map((row) => (
                 <ColorWell key={row.key} label={row.label} value={colors[row.key]} onChange={(v) => update(row.key, v)} lados={LADOS_COLUMNA} />
               ))}

@@ -2186,6 +2186,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
       <primitive object={cloned} ref={liveRef} />
       <PrecompilaDesarme modelo={cloned} personalizaRef={personalizaRef} escenaRef={escenaRef} />
       <LlamaMano raiz={cloned} />
+      <LlamaMano raiz={cloned} fuente="pelo" />
       <group ref={piecesRef} />
       {escenaRef && <VientoTornado personalizaRef={personalizaRef} bakedRef={bakedRef} fitRef={fit} />}
       {/* La esfera que le tumba la cabeza en el numerito. Se dibuja siempre

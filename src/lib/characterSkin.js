@@ -7,7 +7,9 @@ import {
   getSkinForcedColors,
   getCurrentSkinMode,
   SKIN_LINE_COLOR_EVENT,
+  ponPaletaInferno,
 } from './skinShaders.js'
+import { paletaInferno, guardarVarianteInferno } from './paletaFuego.js'
 import { applyCharacterColorsToScene, getCharacterColors, CHARACTER_COLOR_EVENT, EYES_ORB_ONLY } from './characterColors.js'
 
 // La skin activa en cualquier render del personaje, no solo en el juego y el
@@ -32,9 +34,23 @@ export function readActiveSkinId() {
 export function activateSkinShader(id) {
   const skin = getSkin(id)
   const line = skin?.lineColor || [0, 0, 0]
-  const forced = skin?.forcedColors || null
+  let forced = skin?.forcedColors || null
+  // Inferno: llamas rojas o azules (las del navegador). El orbe toma la banda
+  // media, así la bola de fuego y su explosión salen del mismo color.
+  if (skin?.variantesFuego) {
+    const paleta = paletaInferno()
+    ponPaletaInferno(paleta)
+    forced = { ...forced, orb: paleta[1], fuego: paleta }
+  }
   if (skin?.type === 'shader') setActiveSkinShader(skin.shaderMode || 0, skin.amount ?? 1, line, forced)
   else setActiveSkinShader(0, 1, line, forced)
+}
+
+// Cambia las llamas de Inferno y, si es la skin puesta, la vuelve a encender
+// con la paleta nueva (cuerpo, mohawk, mano y bola: es escribir uniforms).
+export function cambiarVarianteInferno(variante, idActiva) {
+  guardarVarianteInferno(variante)
+  if (getSkin(idActiva)?.variantesFuego) activateSkinShader(idActiva)
 }
 
 // El teléfono escoge skin sin useSkinSystem (no hay logros que la desbloqueen

@@ -305,6 +305,7 @@ function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
     <group position={[0, -1.45, 0]}>
       <primitive ref={modelRef} object={cloned} scale={1.65} />
       <LlamaMano raiz={cloned} />
+      <LlamaMano raiz={cloned} fuente="pelo" />
     </group>
   )
 }

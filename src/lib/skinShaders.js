@@ -14,6 +14,27 @@
 // dos canvas (escena + retrato) con un solo reloj. Solo corre cuando hay un skin
 // shader activo (currentMode > 0).
 
+import { paletaInferno, linealDeHex } from './paletaFuego.js'
+
+// Las bandas del fuego de Inferno (paletaFuego.js), en lineal: un solo juego de
+// uniforms compartido por todos los materiales, así cambiar de llamas rojas a
+// azules es escribir doce números, sin recompilar.
+const FUEGO_UNIFORMS = {
+  uFuegoHondo: { value: [0, 0, 0] },
+  uFuegoMedio: { value: [0, 0, 0] },
+  uFuegoClaro: { value: [0, 0, 0] },
+  uFuegoCentro: { value: [0, 0, 0] },
+}
+export function ponPaletaInferno(paleta) {
+  const llaves = ['uFuegoHondo', 'uFuegoMedio', 'uFuegoClaro', 'uFuegoCentro']
+  paleta.forEach((hex, i) => {
+    const v = linealDeHex(hex)
+    const u = FUEGO_UNIFORMS[llaves[i]].value
+    u[0] = v[0]; u[1] = v[1]; u[2] = v[2]
+  })
+}
+ponPaletaInferno(paletaInferno())
+
 // Declaraciones + helpers (van antes de main en el fragment).
 const GLSL_FRAG_HEAD = `
 varying vec3 vSkinObjPos;
@@ -25,25 +46,15 @@ uniform float uInPortrait; // 1 = retrato, 0 = escena (compensación de bloom/AC
 uniform float uIsHair;     // 1 = material "Hair" (slime usa paleta morada en el pelo)
 vec3 skinIriPal(float t){ return 0.5 + 0.5*cos(6.28318*(t + vec3(0.0, 0.33, 0.67))); }
 float skinHash31(vec3 p){ p = fract(p*0.3183099 + vec3(0.1,0.2,0.3)); p *= 17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
-// Lava de roca agrietada (referencia molten-lava): celdas Voronoi de roca con
-// grietas incandescentes en los BORDES de celda. skinWorley devuelve F1/F2; la
-// grieta vive donde F2-F1 ≈ 0 (frontera entre placas) → red de ríos poligonales.
 vec3 skinHash33(vec3 p){
   p = fract(p * vec3(0.1031, 0.1030, 0.0973));
   p += dot(p, p.yxz + 33.33);
   return fract((p.xxy + p.yxx) * p.zyx);
 }
-vec2 skinWorley(vec3 p){
-  vec3 ip = floor(p); vec3 fp = fract(p);
-  float f1 = 9.9; float f2 = 9.9;
-  for (int x = -1; x <= 1; x++) for (int y = -1; y <= 1; y++) for (int z = -1; z <= 1; z++){
-    vec3 g = vec3(float(x), float(y), float(z));
-    vec3 r = g + skinHash33(ip + g) - fp;
-    float d = dot(r, r);
-    if (d < f1) { f2 = f1; f1 = d; } else if (d < f2) { f2 = d; }
-  }
-  return vec2(sqrt(f1), sqrt(f2));
-}
+uniform vec3 uFuegoHondo;
+uniform vec3 uFuegoMedio;
+uniform vec3 uFuegoClaro;
+uniform vec3 uFuegoCentro;
 // Value noise 3D trilinear (mottling orgánico del gel slime).
 float skinVN(vec3 p){
   vec3 i = floor(p); vec3 f = fract(p); f = f*f*(3.0-2.0*f);
@@ -53,30 +64,8 @@ float skinVN(vec3 p){
   float h = skinHash31(i+vec3(0.,1.,1.)), k = skinHash31(i+vec3(1.,1.,1.));
   return mix(mix(mix(a,b,f.x), mix(c,d,f.x), f.y), mix(mix(e,g,f.x), mix(h,k,f.x), f.y), f.z);
 }
-// Glow procedural (lava/slime): color block → emissive block (1 sola eval).
+// Glow procedural (inferno/slime/poltergeist): color block → emissive block.
 vec3 _skinEmissive = vec3(0.0);
-void skinLava(vec3 p, float t, out vec3 albedo, out vec3 glow){
-  vec3 q = p*1.6 + vec3(0.0, -t*0.28, t*0.05); // celdas más grandes → menos cracks
-  vec2 w = skinWorley(q);
-  float edgeD = w.y - w.x;                          // ~0 en los bordes de celda (grietas)
-  float lava = 1.0 - smoothstep(0.0, 0.26, edgeD);  // río de lava (con halo)
-  float core = 1.0 - smoothstep(0.0, 0.09, edgeD);  // núcleo más caliente
-  float pulse = 0.85 + 0.15*sin(t*4.0 + w.x*14.0);
-  // NARANJA dominante: rojo oscuro (borde) → rojo-naranja → naranja brillante.
-  // El amarillo queda solo en el corazón absoluto (pow alto) → no domina.
-  vec3 edge = vec3(0.55, 0.02, 0.0);
-  vec3 mid  = vec3(1.0, 0.22, 0.0);
-  vec3 coreC = vec3(1.0, 0.50, 0.05);
-  vec3 hot = mix(edge, mid, smoothstep(0.0, 0.5, lava));
-  hot = mix(hot, coreC, core);
-  hot += vec3(0.0, 0.28, 0.04) * pow(core, 4.0);    // toque de amarillo solo en lo más caliente
-  hot *= pulse;
-  // Corteza: carbón casi negro con embers rojos dispersos.
-  float ember = step(0.93, fract(w.x * 27.0 + 0.5)) * (0.5 + 0.5*sin(t*3.0 + w.x*40.0));
-  vec3 crust = vec3(0.035, 0.012, 0.008) + vec3(0.22, 0.03, 0.0) * ember;
-  albedo = mix(crust, hot, lava);
-  glow = hot * lava * (0.4 + 0.6*core);             // glow más fuerte en el núcleo
-}
 // Sparkle de 4 picos AFILADOS sobre un plano 2D (se usa en triplanar para el oro
 // → estrellas limpias en cualquier orientación de la malla, sin deformarse).
 // Una por celda, sparsas, con centro jittered cerca del centro de celda (la
@@ -124,12 +113,29 @@ if (uSkinMode > 0.5) {
     _skinCol = vec3(0.015,0.0,0.04) + _star*_twk*vec3(0.7,0.85,1.0);
     _skinCol += skinIriPal(_fres*1.2 + uSkinTime*0.02)*0.12*_fres;
   } else if (uSkinMode < 4.5) {
-    // LAVA — corteza con grietas incandescentes. Guardamos el glow en el global
-    // para sumarlo al emissive sin re-evaluar Worley.
-    vec3 _lavaAlb; vec3 _lavaGlow;
-    skinLava(_p, uSkinTime, _lavaAlb, _lavaGlow);
-    _skinCol = _lavaAlb;
-    _skinEmissive = _lavaGlow;
+    // INFERNO — Skulley hecho del fuego de la mano (Oscar, 2026-11-16; reemplazó a
+    // la lava de roca, que con su textura "realista" chocaba con el toon): las
+    // mismas cuatro bandas duras de la llama, sin texturas. La densidad es lo que
+    // da de frente (el centro de cada pieza arde más y la orilla es la banda
+    // honda, como la orilla de la llama), movida por un ruido que sube por el
+    // cuerpo ya posado (vSkinCharPos, el mismo espacio en las 27 piezas: por pieza
+    // se cortaría en las uniones) y que además evoluciona, para que se lea como
+    // lenguas y no como banda transportadora. Todo va a la emisión: al fuego no lo
+    // alumbra nadie, y la tinta y el contorno le dan la forma.
+    vec3 _vV = isOrthographic ? vec3(0.0, 0.0, 1.0) : _sV;
+    float _ndv = max(dot(_sN, _vV), 0.0);
+    vec3 _q = vSkinCharPos * 0.02;
+    float _t = uSkinTime;
+    float _n = skinVN(vec3(_q.x*1.2, _q.y*0.9 - _t*1.4, _q.z*1.2 + _t*0.35)) * 0.6
+             + skinVN(vec3(_q.x*2.6 + 4.1, _q.y*2.0 - _t*2.9, _q.z*2.6)) * 0.3
+             + skinVN(vec3(_q.x*5.2, _q.y*4.4 - _t*5.5, _q.z*5.2 + 1.7)) * 0.1;
+    float _k = _ndv * 1.1 + (_n - 0.5) * 1.4;
+    // El mohawk, como carbón al rojo (honda con vetas medias): las llamas que
+    // salen de sus picos son del mismo fuego y, del mismo brillo, se perdían en él.
+    if (uIsHair > 0.5) _k -= 0.5;
+    vec3 _fuego = _k > 1.32 ? uFuegoCentro : (_k > 1.0 ? uFuegoClaro : (_k > 0.58 ? uFuegoMedio : uFuegoHondo));
+    _skinCol = _fuego * 0.15;
+    _skinEmissive = _fuego * 0.8;
   } else if (uSkinMode < 5.5) {
     // GREEN SLIME — gel verde translúcido glossy. Fresnel: centro blanco-hueso
     // (se ve "a través" del gel), bordes verde saturado + rim neón. Mottling
@@ -320,8 +326,8 @@ export const SKIN_LINE_COLOR_EVENT = 'character-skin-line-color'
 let skinForcedColors = null
 export function getSkinForcedColors() { return skinForcedColors }
 
-// Modo del shader de skin activo (0 ninguno, 1 oil, 2 hologram, 3 void, 4 lava,
-// 5 slime, 6 gold, 7 pixel, 8 poltergeist). Lo lee LavaDrips para emitir gotas solo con la lava.
+// Modo del shader de skin activo (0 ninguno, 1 oil, 2 hologram, 3 void, 4 inferno,
+// 5 slime, 6 gold, 7 pixel, 8 poltergeist). Lo lee LlamaMano para el mohawk en llamas.
 export function getCurrentSkinMode() { return currentMode }
 
 function tick() {
@@ -344,7 +350,7 @@ function ensureTicker() {
 }
 
 // Activa un skin shader globalmente (todos los materiales del personaje).
-// mode: 0 = ninguno (base), 1 oil, 2 hologram, 3 void, 4 lava, 5 slime, 6 gold, 7 pixel, 8 poltergeist.
+// mode: 0 = ninguno (base), 1 oil, 2 hologram, 3 void, 4 inferno, 5 slime, 6 gold, 7 pixel, 8 poltergeist.
 // lineColor: color del outline + ink lines (void = blanco, resto = negro).
 // forcedColors: { eyes, orb } forzados por la skin (void) o null.
 export function setActiveSkinShader(mode = 0, amount = 1, lineColor = [0, 0, 0], forcedColors = null) {
@@ -397,6 +403,7 @@ export function applyCharacterSkinShader(material, { ligera = false } = {}) {
     // más en escena para que su rim florezca, igual que en el retrato).
     shader.uniforms.uInPortrait = { value: (material.userData && material.userData.__portraitMaterial) ? 1.0 : 0.0 }
     shader.uniforms.uIsHair = { value: (material.name && /^Hair$/i.test(material.name)) ? 1.0 : 0.0 }
+    Object.assign(shader.uniforms, FUEGO_UNIFORMS)
     // Vertex: varying de posición local (rest pose) y la del cuerpo ya posado.
     // `position` va normalizada por pieza (GLB cuantizado), pero las 27 mallas
     // cuelgan de la raíz con la misma escala, así que después del skinning
@@ -423,7 +430,7 @@ export function applyCharacterSkinShader(material, { ligera = false } = {}) {
       '#include <color_fragment>',
       '#include <color_fragment>\n' + GLSL_FRAG_BLOCK
     )
-    // Metalness por skin: lava MATE (roughness 1, sin reflejo dorado del HDRI),
+    // Metalness por skin: inferno MATE (roughness 1, sin reflejo dorado del HDRI),
     // slime GLOSSY/mojado (roughness baja → highlight húmedo). Ambos metalness 0.
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <metalnessmap_fragment>',
@@ -439,16 +446,16 @@ export function applyCharacterSkinShader(material, { ligera = false } = {}) {
           // la roughness deja que el difuso/banding domine y las bandas vuelvan.
           roughnessFactor = (uInPortrait > 0.5) ? 0.22 : 0.55;
         } else {
-          roughnessFactor = (uSkinMode > 4.5) ? 0.18 : 1.0; // slime glossy / lava mate
+          roughnessFactor = (uSkinMode > 4.5) ? 0.18 : 1.0; // slime glossy / inferno mate
         }
       }`
     )
-    // Emissive: lava/slime suman su glow a totalEmissiveRadiance → grietas / rim
-    // brillan (bloom las recoge). Otros modos dejan _skinEmissive en 0.
+    // Emissive: inferno/slime/poltergeist suman su glow a totalEmissiveRadiance
+    // (bloom lo recoge). Otros modos dejan _skinEmissive en 0.
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <emissivemap_fragment>',
       `#include <emissivemap_fragment>
-      totalEmissiveRadiance += _skinEmissive * (uSkinMode > 4.5 ? 0.85 : 1.4);`
+      totalEmissiveRadiance += _skinEmissive * (uSkinMode > 4.5 ? 0.85 : 1.0);`
     )
     liveUniforms.add(shader.uniforms)
     material.userData.__skinUniforms = shader.uniforms

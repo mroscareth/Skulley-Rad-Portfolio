@@ -513,7 +513,7 @@ export default function ZoidianNPC({
   // ── Burlas cuando algo despieza a Skulley ──
   // Dos caminos con línea propia:
   // · 'character-disassembled-by-bolt' — el rayo de la esfera corrupta (lo
-  //   emite Player en el shatter exacto, mismo evento de la skin Molten Lava).
+  //   emite Player en el shatter exacto, mismo evento de la skin Inferno).
   // · 'bolt-strike' — la activación del easter egg (Player lo emite al caer
   //   el rayo; el despiece llega ~230ms después).
   // Argus espera un beat (que el flash y las piezas registren) y remata.

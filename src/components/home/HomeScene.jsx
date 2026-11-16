@@ -6,7 +6,6 @@ import WallpaperEscena, { CARA_Y } from './WallpaperEscena.jsx'
 import { registrarCabeza } from '../../lib/cabezaEnPantalla.js'
 import { toonPisoGlobal } from '../../lib/toonBanding.js'
 import { wallpaperEstado } from '../../lib/wallpaperEscritorio.js'
-import LavaDrips from '../fx/LavaDrips.jsx'
 import PortalCrystal from '../fx/PortalCrystal.jsx'
 import PortalHitArea from '../fx/PortalHitArea.jsx'
 import * as THREE from 'three'
@@ -892,9 +891,6 @@ export default function HomeScene({
           }}
           outlineEnabled={true}
         />
-        {/* Gotas de lava — emiten solo cuando la skin "Molten Lava" está activa
-            (LavaDrips lee el modo de skin global). En mundo, desde el personaje. */}
-        {!bootLoading && <LavaDrips playerRef={playerRef} />}
         {/* Normal-render exclusivo del personaje → EdgeInk (PostFX) entinta sus
             creases sin tocar el resto de la escena. Corre en TODOS los dispositivos
             (incl. mobile/iPad/Tesla). NO atar a degradedMode: ese flag arranca en

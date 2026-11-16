@@ -10,6 +10,8 @@
 //   - source 'gold_skin': flag del perfil (score ≥ 5000).
 //   - achievementKey: logro/quest (sistema de achievements). Ver CHARACTER.md.
 
+import { PALETA_INFERNO } from './paletaFuego.js'
+
 export const SKINS = [
   {
     id: 'base',
@@ -117,14 +119,21 @@ export const SKINS = [
     },
   },
   {
+    // INFERNO (antes Molten Lava; Oscar, 2026-11-16). El id y la llave del logro se
+    // quedan: quien la tenía puesta o ganada no la pierde. Cuerpo de fuego en bandas
+    // (skinShaders modo 4) y el mohawk en llamas (LlamaMano fuente="pelo"); la llama
+    // de la mano y la del pelo toman la paleta del cuerpo (`fuego`). Llamas rojas o
+    // azules (`variantesFuego`: characterSkin.js pone la paleta que se escogió).
     id: 'lava',
     type: 'shader',
     shaderMode: 4,
     amount: 1.0,
     achievementKey: 'skin_lava',
-    // Emite gotas de lava (LavaDrips) mientras está activa.
-    swatch: 'linear-gradient(135deg, #2a0a00 0%, #ff3b00 42%, #ffd000 68%, #2a0a00 100%)',
-    label: { en: 'Molten Lava', es: 'Lava Fundida' },
+    forcedColors: { orb: PALETA_INFERNO[1], fuego: PALETA_INFERNO },
+    variantesFuego: true,
+    editableColors: ['eyes'],
+    swatch: `radial-gradient(circle at 50% 42%, ${PALETA_INFERNO[3]} 0%, ${PALETA_INFERNO[2]} 30%, ${PALETA_INFERNO[1]} 58%, ${PALETA_INFERNO[0]} 100%)`,
+    label: { en: 'Inferno', es: 'Inferno' },
     hint: {
       en: 'Unlocked through a M.A.D.R.E. quest.',
       es: 'Se desbloquea completando una quest de M.A.D.R.E.',

@@ -138,12 +138,12 @@ export const ACHIEVEMENTS = [
   {
     key: 'skin_lava',
     source: 'achievement',
-    icon: '🌋',
+    icon: '🔥',
     live: true,
-    title: { en: 'Molten Lava Skin', es: 'Skin Lava Fundida' },
+    title: { en: 'Inferno Skin', es: 'Skin Inferno' },
     description: {
-      en: 'Unlocked the animated molten-lava skin (it drips lava!).',
-      es: 'Desbloqueaste la skin animada de lava fundida (¡gotea lava!).',
+      en: 'The lightning set you on fire: Skulley made of flames, mohawk included.',
+      es: 'El rayo te prendió fuego: Skulley hecho de llamas, con todo y mohawk.',
     },
     hint: {
       en: 'Stand by a portal and let the corrupted orb\'s lightning bolt blow your character apart.',

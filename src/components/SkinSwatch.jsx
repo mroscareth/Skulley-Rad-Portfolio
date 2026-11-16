@@ -1,7 +1,8 @@
 import { useRef, useEffect } from 'react'
+import { paletaInferno, srgbDeHex } from '../lib/paletaFuego.js'
 
 // Preview ANIMADO del shader de cada skin en el selector (mini-canvas con
-// un puerto 2D del look: oil/hologram/void/lava/slime/gold/pixel).
+// un puerto 2D del look: oil/hologram/void/inferno/slime/gold/pixel/poltergeist).
 //
 // Arquitectura (post-incidente "Too many active WebGL contexts", que tumbaba
 // el canvas principal en prod): UN SOLO contexto WebGL compartido a nivel de
@@ -43,18 +44,13 @@ precision highp float;
 varying vec2 vUv;
 uniform float uTime;
 uniform int uMode;
+uniform vec3 uPal[4]; // las bandas de Inferno, de la variante escogida
 vec3 iriPal(float t){ return 0.5 + 0.5*cos(6.28318*(t + vec3(0.0,0.33,0.67))); }
 float hash31(vec3 p){ p = fract(p*0.3183099 + vec3(0.1,0.2,0.3)); p *= 17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
 float vnoise(vec3 p){ vec3 i=floor(p); vec3 f=fract(p); f=f*f*(3.0-2.0*f);
   float a=hash31(i+vec3(0.,0.,0.)),b=hash31(i+vec3(1.,0.,0.)),c=hash31(i+vec3(0.,1.,0.)),d=hash31(i+vec3(1.,1.,0.));
   float e=hash31(i+vec3(0.,0.,1.)),g=hash31(i+vec3(1.,0.,1.)),h=hash31(i+vec3(0.,1.,1.)),k=hash31(i+vec3(1.,1.,1.));
   return mix(mix(mix(a,b,f.x),mix(c,d,f.x),f.y),mix(mix(e,g,f.x),mix(h,k,f.x),f.y),f.z); }
-vec3 hash33(vec3 p){ p=fract(p*vec3(0.1031,0.1030,0.0973)); p+=dot(p,p.yxz+33.33); return fract((p.xxy+p.yxx)*p.zyx); }
-vec2 worley(vec3 p){ vec3 ip=floor(p); vec3 fp=fract(p); float f1=9.9; float f2=9.9;
-  for(int x=-1;x<=1;x++) for(int y=-1;y<=1;y++) for(int z=-1;z<=1;z++){
-    vec3 g=vec3(float(x),float(y),float(z)); vec3 r=g+hash33(ip+g)-fp; float dd=dot(r,r);
-    if(dd<f1){ f2=f1; f1=dd; } else if(dd<f2){ f2=dd; } }
-  return vec2(sqrt(f1), sqrt(f2)); }
 void main(){
   vec2 uv = vUv * 2.0 - 1.0;
   float r = length(uv);
@@ -75,13 +71,13 @@ void main(){
     col = vec3(0.015,0.0,0.04) + star*tw*vec3(0.7,0.85,1.0);
     col += iriPal(fres*1.2 + t*0.02)*0.12*fres;
   } else if (uMode == 4) {
-    vec2 w = worley(vec3(uv*1.8, t*0.1));
-    float ed = w.y - w.x;
-    float lava = 1.0 - smoothstep(0.0, 0.28, ed);
-    float core = 1.0 - smoothstep(0.0, 0.10, ed);
-    vec3 hot = mix(vec3(0.55,0.02,0.0), vec3(1.0,0.22,0.0), smoothstep(0.0,0.5,lava));
-    hot = mix(hot, vec3(1.0,0.5,0.05), core);
-    col = mix(vec3(0.035,0.012,0.008), hot, lava);
+    // INFERNO — las bandas del fuego (mismo lenguaje que skinShaders modo 4): el
+    // centro del disco arde más y un ruido que sube las vuelve lenguas.
+    float n = vnoise(vec3(uv.x*2.4, uv.y*1.8 - t*1.4, t*0.35))*0.6
+            + vnoise(vec3(uv.x*5.0 + 4.1, uv.y*4.0 - t*2.9, 1.3))*0.3
+            + vnoise(vec3(uv*10.0 - vec2(0.0, t*5.5), 2.7))*0.1;
+    float k = (1.0 - fres)*1.1 + (n - 0.5)*1.4;
+    col = k > 1.32 ? uPal[3] : (k > 1.0 ? uPal[2] : (k > 0.58 ? uPal[1] : uPal[0]));
   } else if (uMode == 5) {
     float mott = vnoise(vec3(uv*4.0, t*0.4));
     vec3 green = vec3(0.05,0.82,0.03);
@@ -174,8 +170,9 @@ function createShared() {
   gl.enableVertexAttribArray(aPos); gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0)
   const uTime = gl.getUniformLocation(prog, 'uTime')
   const uMode = gl.getUniformLocation(prog, 'uMode')
+  const uPal = gl.getUniformLocation(prog, 'uPal')
   gl.viewport(0, 0, GL_SIZE, GL_SIZE)
-  return { canvas, gl, prog, uTime, uMode }
+  return { canvas, gl, prog, uTime, uMode, uPal }
 }
 
 // Devuelve el singleton, recreándolo (con throttle) si el contexto se perdió.
@@ -206,6 +203,7 @@ function drawSharedInto(ctx2d, w, h, mode, t) {
     s.gl.useProgram(s.prog)
     s.gl.uniform1f(s.uTime, t)
     s.gl.uniform1i(s.uMode, mode)
+    if (mode === 4 && s.uPal) s.gl.uniform3fv(s.uPal, paletaInferno().flatMap(srgbDeHex))
     s.gl.drawArrays(s.gl.TRIANGLES, 0, 3)
     ctx2d.clearRect(0, 0, w, h)
     ctx2d.drawImage(s.canvas, 0, 0, w, h)

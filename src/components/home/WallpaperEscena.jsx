@@ -40,10 +40,11 @@ const VIAJE_ZOOM_S = 0.95
 // El centro de su cuerpo, para que no se salga del cuadro al acercarse.
 const CUERPO_Y = 1.5
 // En Customize la cámara es ortográfica (pedido de Oscar: primero en el marco del
-// wallpaper, desde el 2026-11-15 en todo Customize). Se aplana en la segunda mitad
-// de la onda, cuando del mundo solo quedan las orillas, y termina justo cuando la
-// trama cubre todo (Oscar: aplanándose ya en 'lista' se veía el cambio adentro);
-// antes de eso el piso perdería el horizonte y se cortaría a ORTO_FONDO. El viaje
+// wallpaper, desde el 2026-11-15 en todo Customize). Entrando ya es ortográfica
+// desde el clic (Oscar, 2026-11-16: "cuando entro a customize ya debe de verse la
+// ortográfica"): aplanándose en 'lista', y luego en la segunda mitad de la onda, se
+// veía a Skulley cambiar de forma. Con la cámara del juego tan inclinada el piso no
+// llega a ORTO_FONDO. Saliendo se quita en la segunda mitad de la onda. El viaje
 // a una sección sigue en perspectiva. No se cambia de cámara:
 // eso rearmaría el composer y recompilaría sus pases. A la misma cámara se le pone
 // una proyección ortográfica que, a la distancia del centro de su cuerpo, mide lo
@@ -52,7 +53,7 @@ const CUERPO_Y = 1.5
 // enfrente y lo de atrás. El sombreado no cambia (three sigue viendo una cámara de
 // perspectiva en el mismo lugar, así que el fresnel sale igual que antes).
 const ORTO_S = 0.6
-// Desde qué parte de la onda empieza a aplanarse (y, al salir, hasta cuál).
+// Saliendo, en qué parte de la onda termina de quitarse la ortográfica.
 const ORTO_DESDE = 0.5
 // La onda de TramaEffect (si cambia allá, cambia aquí): hasta dónde llega en
 // altos de pantalla y el ancho de su banda.
@@ -486,13 +487,12 @@ export default function WallpaperEscena({ playerRef, portals }) {
       scene.fog?.color?.set(est.color)
     }
     s.centra = est.enMarco ? (quieto ? 1 : Math.min(1, s.centra + dt / CENTRA_S)) : Math.max(0, s.centra - dt / CENTRA_S)
-    // La ortográfica va con la onda: entra en su segunda mitad y ya está puesta
-    // cuando la trama termina de cubrir (Oscar: ya adentro se veía el cambio); al
-    // salir se quita igual mientras la onda regresa. Yendo a una sección se
-    // quita en ORTO_S.
+    // La ortográfica: entrando, desde el clic (Oscar: no debe verse el cambio); al
+    // salir se quita en la segunda mitad de la onda mientras regresa. Yendo a una
+    // sección se quita en ORTO_S.
     if (est.viaje) s.orto = quieto ? 0 : Math.max(0, s.orto - dt / ORTO_S)
-    else if (est.fase === 'lista') s.orto = 1
-    else if (est.fase === 'entra' || est.fase === 'sale') s.orto = Math.min(1, Math.max(0, (s.t - ORTO_DESDE) / (1 - ORTO_DESDE)))
+    else if (est.fase === 'lista' || est.fase === 'entra') s.orto = 1
+    else if (est.fase === 'sale') s.orto = Math.min(1, Math.max(0, (s.t - ORTO_DESDE) / (1 - ORTO_DESDE)))
     else s.orto = 0
 
     if (est.plano) aplicaPlano(W, H)
