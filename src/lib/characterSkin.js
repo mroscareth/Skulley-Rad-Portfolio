@@ -46,11 +46,13 @@ export function chooseSkin(id) {
 
 // Para los canvas sin bloom (preloader, teléfono): se marcan como el retrato
 // para que el shader no compense el bloom de la escena. Va ANTES del banding,
-// como en Player y el retrato. Solo Head/Hair llevan skin.
+// como en Player y el retrato. Solo Head/Hair llevan skin. Con la variante
+// ligera: con la skin base el programa sale sin el bloque de las skins (es la
+// primera pantalla del teléfono y del preloader, donde cada ms cuenta).
 export function prepareSkinMaterial(material) {
   if (!materialTakesSkin(material)) return material
   material.userData = { ...(material.userData || {}), __portraitMaterial: true }
-  try { applyCharacterSkinShader(material) } catch { }
+  try { applyCharacterSkinShader(material, { ligera: true }) } catch { }
   return material
 }
 

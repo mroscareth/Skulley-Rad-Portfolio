@@ -1,6 +1,7 @@
 import { isPhoneExperience, usePhoneExperience } from './lib/mobileExperience.js'
 import { VERSION_RAPIDA, PUERTA_DE_LLEGADA, RUTA_COMPLETA, puertaDeRuta, salirDeRapida, entrarARapida } from './lib/versionRapida.js'
 import { cambiarDeVersion, cortinaDeLlegada, volverAlInicio } from './lib/cambioDeVersion.js'
+import { lazyListo } from './lib/lazyListo.js'
 import React, { useRef, useState, useMemo, useCallback, Suspense, lazy, useEffect } from 'react'
 // three / @react-three/* live inside HomeCanvas (lazy-loaded below).
 // `three` itself is dynamic-imported via src/lib/sceneCapture.js at transition time.
@@ -74,7 +75,24 @@ import SectionSwitch from './components/SectionSwitch.jsx'
 // El árbol de teléfonos va lazy a propósito: arrastra el Canvas del cartel (y
 // con él three), y el presupuesto del chunk de entrada no lo aguanta
 // (scripts/check-entry-budget.mjs).
-const MobileApp = lazy(() => import('./components/mobile/MobileApp.jsx'))
+//
+// En un teléfono los tres chunks hasta Skulley (MobileApp, su home y el rig, con
+// three) se piden juntos desde que corre este módulo, como el warm-up de
+// HomeCanvas. Cada lazy() esperaba a que el anterior se descargara y se
+// montara: una cascada de tres viajes que en un teléfono medio con 4G retrasaba
+// el rig ~0.9 s (rendimiento.md, 2026-11-15). La home y el rig solo si se llega
+// a la home: entrando directo a una sección no se usan todavía. /admin, /help y
+// ?pose=1 son de cualquier aparato y no montan MobileApp (ver SiteApp).
+const rutaAparte = typeof window !== 'undefined' && (/^\/(admin|help\/?$|ayuda\/?$)/.test(window.location.pathname)
+  || new URLSearchParams(window.location.search).get('pose') === '1')
+const MobileApp = lazyListo(() => import('./components/mobile/MobileApp.jsx'))
+if (isPhoneExperience() && !rutaAparte) {
+  MobileApp.precargar()
+  if ((() => { try { return pathToSection(window.location.pathname) === 'home' } catch { return false } })()) {
+    import('./components/mobile/MobileScrollHome.jsx').catch(() => { })
+    import('./components/mobile/SkulleyFallRig.jsx').catch(() => { })
+  }
+}
 // El preloader de escritorio (Oscar lo aprobó el 2026-11-11). Lazy: trae el
 // rig del teléfono.
 const DesktopScrollPreloader = lazy(() => import('./components/DesktopScrollPreloader.jsx'))

@@ -8,11 +8,10 @@ import { BlendFunction } from 'postprocessing'
 import { extendGLTFLoaderKTX2, detectKTX2Support } from '../../lib/ktx2Setup.js'
 import { applyToonBanding } from '../../lib/toonBanding.js'
 import { prepareSkinMaterial, useSkinColors, activateSkinShader, readActiveSkinId } from '../../lib/characterSkin.js'
-import { skinLineColor } from '../../lib/skinShaders.js'
+import { skinLineColor, conVarianteDeSkin, getCurrentSkinMode } from '../../lib/skinShaders.js'
 import { posterNormalTexture } from '../../lib/toonInkBuffer.js'
 import { pngDeCanvas } from '../../lib/wallpaperPng.js'
 import { bakeCharacterPieces, muestraDePiezas } from '../../lib/characterPieces.js'
-import { compileAsyncSafe } from '../../lib/compileAsyncSafe.js'
 import { playSfx } from '../../lib/sfx.js'
 import { playEyePoke, playEyePop, playEyeRespawn } from '../../lib/eyePokeSound.js'
 import { playOrbBounce } from '../../lib/homeSounds.js'
@@ -957,6 +956,18 @@ function PicarOjos({ modelo, rigRef, escenaRef, fitRef, activoAhora }) {
   return null
 }
 
+// El modelo se lee desde que llega este chunk, no hasta que el canvas monta: el
+// JSON, el Draco (sus archivos van precargados en index.html) y la escena salen
+// mientras React arma la página y el canvas compila su primer cuadro. Antes el
+// Draco se pedía hasta después de ese cuadro (en un teléfono medio, 3 s después
+// de que el modelo ya había bajado; rendimiento.md, 2026-11-15). Mismo caché que
+// el useGLTF de abajo y que el Player de escritorio.
+const MODELO_URL = `${import.meta.env.BASE_URL}character.glb`
+useGLTF.preload(MODELO_URL, true, true, extendGLTFLoaderKTX2)
+// Cuadros con Skulley en pantalla antes de preparar lo que solo usa la historia
+// (el numerito y PrecompilaDesarme): primero que salga él.
+const ESPERA_TRAS_SKULLEY = 20
+
 function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaRef, escenaRef, miraCursor = false, picarEnInicio = false, cabezaEnPantalla = false }) {
   const { gl, size, scene: escena } = useThree()
   const liveRef = useRef(null)     // el personaje entero, con su idle
@@ -978,12 +989,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
 
   useEffect(() => { detectKTX2Support(gl) }, [gl])
 
-  const { scene, animations } = useGLTF(
-    `${import.meta.env.BASE_URL}character.glb`,
-    true,
-    true,
-    extendGLTFLoaderKTX2,
-  )
+  const { scene, animations } = useGLTF(MODELO_URL, true, true, extendGLTFLoaderKTX2)
 
   const cloned = useMemo(() => {
     const clone = SkeletonUtils.clone(scene)
@@ -1122,6 +1128,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
   // después del mixer (useAnimations se registró antes) y antes de que se
   // dibuje.
   const numeritoRef = useRef(null)
+  const numeritoEsperaRef = useRef(0)
   const inspeccionandoRef = useRef(false)
   const inspeccionInicioRef = useRef(null)
   const orbeRef = useRef(null)
@@ -1158,6 +1165,12 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     }
     if (numeritoRef.current === null) {
       if (!actions || !idleRef.current || !orbeRef.current) return
+      // Unos cuadros después de que Skulley salió y no en su primer cuadro: armarlo
+      // cuesta ~45 ms (~180 en un teléfono medio) y retrasaba su llegada
+      // (rendimiento.md, 2026-11-15). Si la historia ya lo pide, en el acto.
+      const loPide = escenaRef.current.cabeza != null || escenaRef.current.inspeccion != null
+        || (import.meta.env.DEV && window.__numeritoT != null)
+      if (!loPide && ++numeritoEsperaRef.current < ESPERA_TRAS_SKULLEY) return
       numeritoRef.current = crearNumerito(cloned, {
         idle: idleRef.current,
         camina: actions['root|root|Walking'] || null,
@@ -2171,7 +2184,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
   return (
     <group ref={rigRef}>
       <primitive object={cloned} ref={liveRef} />
-      <PrecompilaDesarme modelo={cloned} />
+      <PrecompilaDesarme modelo={cloned} personalizaRef={personalizaRef} escenaRef={escenaRef} />
       <LlamaMano raiz={cloned} />
       <group ref={piecesRef} />
       {escenaRef && <VientoTornado personalizaRef={personalizaRef} bakedRef={bakedRef} fitRef={fit} />}
@@ -3947,59 +3960,181 @@ function PrepasoProfundidad({ composerRef, rootRef, fitRef }) {
 // three tira un programa en cuanto ningún material lo usa, y hasta el golpe solo
 // lo usan estos. Al final cada programa nuevo hace aquí su primer uso (leer
 // uniforms y atributos espera a la GPU) y no en el cuadro del golpe.
-// Corre en el mismo commit que monta a Skulley, antes de su primer cuadro, para
-// que el proceso de la GPU compile todo de una vez: dos cuadros después era un
-// tirón aparte (en primera visita, 360 ms en la Iris Xe). En un efecto de layout
-// el ref de la raíz todavía no está puesto, pero el grafo ya está armado: la raíz
-// es el ancestro del modelo que cuelga de la escena. Una vez por modelo (la
-// dorada es otro).
-function PrecompilaDesarme({ modelo }) {
+// Va en dos fases (rendimiento.md, 2026-11-15): la escena, en el mismo commit
+// que monta a Skulley, para que los programas de su primer cuadro se compilen
+// juntos y en paralelo; las piezas, `ESPERA_TRAS_SKULLEY` cuadros después de
+// que él sale (antes se sumaban a lo que había que compilar para verlo), o en
+// el acto si la historia ya arrancó. Antes del primer uso de cada programa
+// nuevo se espera a que la GPU lo termine (`isReady`): estrenarlo antes lo
+// esperaba en el hilo (así salía el tirón de 360 ms de una versión anterior).
+// La raíz es el ancestro del modelo que cuelga de la escena. Una vez por
+// modelo (la dorada es otro).
+//
+// La otra variante del shader de skins (skinShaders.js, `ligeros`): con la skin
+// base, cuerpo y pelo se compilan sin el bloque de las skins, que es lo que hace
+// salir rápido a Skulley. Al abrir el personalizador se compila la variante que
+// no se está usando, de cuerpo entero y en piezas, en segundo plano: así escoger
+// otra skin no compila de golpe y el golpe del rayo tampoco. El primer uso de
+// cada programa espera a que la GPU lo termine (`isReady`), para no bloquear.
+function PrecompilaDesarme({ modelo, personalizaRef, escenaRef }) {
   const { gl, scene, camera } = useThree()
   const mats = useMemo(() => [
     new THREE.MeshNormalMaterial(),
     new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }),
   ], [])
-  useEffect(() => () => { mats.forEach((m) => m.dispose()) }, [mats])
-  useLayoutEffect(() => {
-    if (!modelo) return undefined
-    let vivo = true
-    const correr = async () => {
-      const t0 = performance.now()
-      const antes = new Set(gl.info.programs)
-      let raiz = modelo
-      while (raiz.parent && raiz.parent !== scene) raiz = raiz.parent
-      const piezas = muestraDePiezas(modelo)
-      const grupo = new THREE.Group()
-      for (const p of piezas) grupo.add(p)
-      const rt = new THREE.WebGLRenderTarget(1, 1)
-      const esperas = [
-        compileAsyncSafe(gl, scene, camera, 8000, rt),
-        compileAsyncSafe(gl, grupo, camera, 8000, rt, scene),
-      ]
-      for (const mat of mats) {
-        for (const p of piezas) p.material = mat
-        esperas.push(compileAsyncSafe(gl, grupo, camera, 8000, rt, raiz))
-      }
+  // El prepaso de profundidad (lib/prepasoProfundidad.js) dibuja a Skulley con
+  // un MeshBasicMaterial de su lado (DoubleSide); colorWrite y polygonOffset no
+  // entran a la llave del programa.
+  const prepaso = useMemo(() => new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }), [])
+  useEffect(() => () => { mats.forEach((m) => m.dispose()); prepaso.dispose() }, [mats, prepaso])
+  const vivoRef = useRef(true)
+  useEffect(() => () => { vivoRef.current = false }, [])
+  const raizDe = (m) => {
+    let raiz = m
+    while (raiz.parent && raiz.parent !== scene) raiz = raiz.parent
+    return raiz
+  }
+  const muestras = (m) => {
+    const grupo = new THREE.Group()
+    for (const p of muestraDePiezas(m)) grupo.add(p)
+    return grupo
+  }
+  // gl.compile (síncrono) con un render target puesto: la escena pasa por el
+  // composer y los pases dibujan en el suyo. Devuelve los programas nuevos.
+  const compilarConRT = (compilar) => {
+    const antes = new Set(gl.info.programs)
+    const rt = new THREE.WebGLRenderTarget(1, 1)
+    const prev = gl.getRenderTarget()
+    gl.setRenderTarget(rt)
+    try { compilar() } catch { } finally {
+      gl.setRenderTarget(prev)
       rt.dispose()
-      const nuevos = gl.info.programs.filter((p) => !antes.has(p))
-      await Promise.all(esperas)
-      if (!vivo) return
+    }
+    return gl.info.programs.filter((p) => !antes.has(p))
+  }
+  // El primer uso de cada programa (leer uniforms y atributos) espera a que la
+  // GPU lo termine: se hace hasta que `isReady` dice que ya.
+  const estrenar = (nuevos, alFinal) => {
+    const tope = performance.now() + 10000
+    const revisar = () => {
+      if (!vivoRef.current) return
+      if (nuevos.some((p) => !p.isReady()) && performance.now() < tope) { setTimeout(revisar, 30); return }
       for (const p of nuevos) {
         try { p.getUniforms(); p.getAttributes() } catch { }
       }
-      if (import.meta.env.DEV) {
-        Object.assign(window.__precompilaDesarme, { programas: nuevos.map((p) => p.name || p.cacheKey.split(',')[0]), ms: Math.round(performance.now() - t0) })
+      alFinal?.(nuevos)
+    }
+    revisar()
+  }
+  // 1. En el mismo commit que monta a Skulley: la escena entera (también lo
+  // oculto), así todos los programas de su primer cuadro salen juntos hacia la
+  // GPU y se compilan en paralelo; sin esto el primer cuadro los compilaba uno
+  // tras otro, esperando cada uno (medido: 1.3 s contra 1.9 s sin freno). En un
+  // efecto de layout el ref de la raíz todavía no está puesto, pero el grafo ya
+  // está armado.
+  const escenaPreRef = useRef([])
+  const sinPrecompila = () => {
+    if (!import.meta.env.DEV) return false
+    try { return Boolean(sessionStorage.getItem('__sinPrecompila')) } catch { return false }
+  }
+  // También lo que los pases dibujan sobre Skulley entero: la tinta (normales),
+  // la sombra (blanco plano) y el prepaso, con las luces de la raíz (ninguna);
+  // si no, el primer cuadro compilaba cada uno en serie, después de la ráfaga.
+  useLayoutEffect(() => {
+    if (!modelo || sinPrecompila()) return
+    const raiz = raizDe(modelo)
+    const mallas = []
+    modelo.traverse((o) => { if (o.isMesh) mallas.push([o, o.material]) })
+    escenaPreRef.current = compilarConRT(() => {
+      gl.compile(scene, camera)
+      for (const mat of [...mats, prepaso]) {
+        for (const [o] of mallas) o.material = mat
+        try { gl.compile(modelo, camera, raiz) } finally {
+          for (const [o, m] of mallas) o.material = m
+        }
       }
-    }
-    // En desarrollo, con `sessionStorage.__sinPrecompila = 1` no corre solo
-    // (para medir sin él) y se corre a mano: `__precompilaDesarme.correr()`.
-    if (import.meta.env.DEV) {
-      window.__precompilaDesarme = { correr }
-      try { if (sessionStorage.getItem('__sinPrecompila')) return () => { vivo = false } } catch { }
-    }
+    })
+  }, [modelo, mats, prepaso, gl, scene, camera])
+  // 2. Las piezas del desarme, cuando Skulley ya salió.
+  const correr = () => {
+    if (!modelo) return
+    const t0 = performance.now()
+    const raiz = raizDe(modelo)
+    const grupo = muestras(modelo)
+    const nuevos = compilarConRT(() => {
+      gl.compile(grupo, camera, scene)
+      for (const mat of mats) {
+        grupo.traverse((o) => { if (o.isMesh) o.material = mat })
+        gl.compile(grupo, camera, raiz)
+      }
+    })
+    estrenar([...escenaPreRef.current, ...nuevos], (todos) => {
+      escenaPreRef.current = []
+      if (import.meta.env.DEV) {
+        Object.assign(window.__precompilaDesarme, { programas: todos.map((p) => p.name || p.cacheKey.split(',')[0]), ms: Math.round(performance.now() - t0) })
+      }
+    })
+  }
+  // En desarrollo, con `sessionStorage.__sinPrecompila = 1` no corre solo
+  // (para medir sin él) y se corre a mano: `__precompilaDesarme.correr()`.
+  if (import.meta.env.DEV) window.__precompilaDesarme = { correr }
+  const listoRef = useRef(null)
+  const esperaRef = useRef(0)
+  useFrame(() => {
+    if (!modelo || listoRef.current === modelo) return
+    if (!escenaRef?.current?.enHistoria && ++esperaRef.current < ESPERA_TRAS_SKULLEY) return
+    listoRef.current = modelo
+    esperaRef.current = 0
+    if (sinPrecompila()) return
     correr()
-    return () => { vivo = false }
-  }, [modelo, mats, gl, scene, camera])
+  })
+  const otraVarianteRef = useRef(null)
+  useFrame(() => {
+    if (!modelo || otraVarianteRef.current === modelo || listoRef.current !== modelo || !personalizaRef?.current?.eligeSkin) return
+    otraVarianteRef.current = modelo
+    const raiz = raizDe(modelo)
+    const grupo = muestras(modelo)
+    const nuevos = compilarConRT(() => {
+      conVarianteDeSkin(getCurrentSkinMode() === 0, () => {
+        gl.compile(raiz, camera, scene)
+        gl.compile(grupo, camera, scene)
+      })
+    })
+    estrenar(nuevos, (todos) => {
+      if (import.meta.env.DEV) window.__otraVarianteSkin = { programas: todos.map((p) => p.name || p.cacheKey.split(',')[0]) }
+    })
+  })
+  return null
+}
+
+// Los pases del composer no están en la escena: gl.compile no los ve y el primer
+// cuadro compilaba el suyo (tinta, película y puntos en un solo EffectPass)
+// después de todo lo demás, en serie (~160 ms esperando en la Iris Xe;
+// rendimiento.md, 2026-11-15). Va después del EffectComposer en el árbol: su
+// efecto de layout corre después del que arma los pases (`initialize` ya armó
+// el shader), en el mismo commit. Cada pase con su destino: el último a la
+// pantalla y los demás a un render target, que cambian la llave del programa.
+function PrecompilaComposer({ composerRef }) {
+  const { gl, camera } = useThree()
+  useLayoutEffect(() => {
+    const composer = composerRef.current
+    if (!composer?.passes?.length) return
+    const rt = new THREE.WebGLRenderTarget(1, 1)
+    const prev = gl.getRenderTarget()
+    try {
+      for (const pase of composer.passes) {
+        if (!pase.scene || !pase.fullscreenMaterial) continue
+        // Lo mismo que hace EffectPass.render antes de dibujar: entra a la llave
+        // (`opaque`).
+        if ('alpha' in pase) pase.fullscreenMaterial.transparent = Boolean(pase.renderToScreen && pase.alpha)
+        gl.setRenderTarget(pase.renderToScreen ? null : rt)
+        gl.compile(pase.scene, pase.camera || camera)
+      }
+    } catch { } finally {
+      gl.setRenderTarget(prev)
+      rt.dispose()
+    }
+  }, [composerRef, gl, camera])
   return null
 }
 
@@ -4052,6 +4187,8 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike, perso
   const onMedido = useCallback((f) => {
     setMedida((m) => (m && m.piso === f.piso && m.alto === f.alto ? m : { piso: f.piso, alto: f.alto }))
     try { onListoRef.current?.() } catch { }
+    // Skulley ya está en pantalla: index.html carga Google Analytics con esto.
+    try { window.dispatchEvent(new Event('skulley-listo')) } catch { }
   }, [])
 
   return (
@@ -4157,6 +4294,7 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike, perso
             opacity={DOTS.opacity}
           />
         </EffectComposer>
+        <PrecompilaComposer composerRef={composerRef} />
       </Canvas>
     </div>
   )

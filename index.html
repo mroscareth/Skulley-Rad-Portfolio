@@ -437,10 +437,28 @@
         window.gtag = function () { };
         return;
       }
-      var s = document.createElement('script');
-      s.async = true;
-      s.src = 'https://www.googletagmanager.com/gtag/js?id=G-HG30WLMV35';
-      document.head.appendChild(s);
+      // En / y /simple, donde lo primero que sale es Skulley (el rig), el
+      // script entra cuando él ya se ve (`skulley-listo`) o a los 12 s: en un
+      // teléfono medio gtag.js ocupaba ~0.5 s del hilo antes de que arrancara
+      // el sitio y, más tarde, en medio de la decodificación del modelo
+      // (rendimiento.md, 2026-11-15). Las demás rutas, de inmediato, como
+      // siempre. Lo de abajo ya queda en la cola con la hora de llegada.
+      var cargado = false;
+      var cargar = function () {
+        if (cargado) return;
+        cargado = true;
+        var s = document.createElement('script');
+        s.async = true;
+        s.src = 'https://www.googletagmanager.com/gtag/js?id=G-HG30WLMV35';
+        document.head.appendChild(s);
+      };
+      var ruta = location.pathname.replace(/\/+$/, '');
+      if (ruta === '' || ruta === '/simple') {
+        window.addEventListener('skulley-listo', function () { setTimeout(cargar, 800); }, { once: true });
+        setTimeout(cargar, 12000);
+      } else {
+        cargar();
+      }
       window.dataLayer = window.dataLayer || [];
       window.gtag = function () { dataLayer.push(arguments); };
       gtag('js', new Date());
@@ -454,7 +472,14 @@
   <link rel="preconnect" href="https://picsum.photos" crossorigin />
 
   <!-- Preload assets 3D críticos -->
-  <link rel="preload" as="fetch" href="/character.glb" crossorigin="anonymous" />
+  <!-- Prioridad baja: son 1.6 MB y se repartían el ancho de banda con el JS que
+       tiene que llegar antes (React, three, el rig). El modelo acaba a la misma
+       hora (los bytes son los mismos); el JS, mucho antes. -->
+  <link rel="preload" as="fetch" href="/character.glb" crossorigin="anonymous" fetchpriority="low" />
+  <!-- El decodificador Draco de character.glb (drei lo pide con fetch, de ahí el
+       as=fetch). Sin esto se pedía hasta después de leer el modelo, en serie. -->
+  <link rel="preload" as="fetch" href="/three/draco/gltf/draco_wasm_wrapper.js" crossorigin="anonymous" />
+  <link rel="preload" as="fetch" href="/three/draco/gltf/draco_decoder.wasm" crossorigin="anonymous" />
   <!-- HDR condicional: mismo heurístico que isMobilePerf en App.jsx (que lee
        window.__isMobilePerf de aquí para que nunca diverjan). Evita bajar
        light.hdr (1.7MB) en dispositivos que usarán light-mobile.hdr (516K). -->
@@ -470,6 +495,10 @@
         var lowMemory = navigator.deviceMemory && navigator.deviceMemory <= 4;
         var lowThreads = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4;
         var highDPR = window.devicePixelRatio && window.devicePixelRatio > 2;
+        // Con cualquiera de estas ya es modo ligero: el contexto WebGL de prueba
+        // de abajo (~150 ms bloqueando el parseo en primera visita) sobra. En un
+        // teléfono siempre pasa así.
+        var yaLigero = Boolean(isMobileUA || coarse || saveData || lowMemory || lowThreads || highDPR);
         // GPU en DOS categorías. Antes era una sola lista y `intel` bastaba
         // por sí solo para degradar el sitio entero — pero eso incluye a las
         // Iris Xe y a las Arc dedicadas, y `apple gpu` incluye a TODOS los
@@ -478,7 +507,7 @@
         // sin bloom/DOF/godrays, HDRI chico) sin que nadie se diera cuenta.
         var isWeakGPU = false;      // software o GPU de teléfono → degrada solo
         var isIntegratedGPU = false; // integrada de escritorio → necesita apoyo
-        try {
+        if (!yaLigero) try {
           var canvas = document.createElement('canvas');
           var gl = canvas.getContext('webgl') || canvas.getContext('webgl2');
           if (gl) {

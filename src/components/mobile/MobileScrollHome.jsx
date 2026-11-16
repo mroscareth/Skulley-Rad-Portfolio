@@ -18,6 +18,7 @@ import SubtituloMadre from '../SubtituloMadre.jsx'
 import BarraHistoria from '../BarraHistoria.jsx'
 import { fotoDeHistoria } from '../../lib/fotoHistoria.js'
 import { OSCURO, TOMAS_TELEFONO } from '../../lib/historiaMadre.js'
+import { lazyListo } from '../../lib/lazyListo.js'
 
 // La home de teléfono: un scroll donde Skulley se desarma.
 //
@@ -36,7 +37,10 @@ import { OSCURO, TOMAS_TELEFONO } from '../../lib/historiaMadre.js'
 // rayo pega al terminar ese beat — el personaje se rompe cuando aparece la
 // persona. Después, una pantalla por sección con su texto corto y su botón.
 
-const SkulleyFallRig = React.lazy(() => import('./SkulleyFallRig.jsx'))
+// Se pide al cargar este módulo y, si ya llegó al montar, no suspende
+// (lib/lazyListo.js): el canvas entra en el mismo commit que la página.
+const SkulleyFallRig = lazyListo(() => import('./SkulleyFallRig.jsx'))
+SkulleyFallRig.precargar()
 
 // "Conocer la historia": alto de cada barra de cine, en fracción de la
 // pantalla (= --dsp-barra de .msh-root). Más alta que en escritorio: en un
@@ -535,6 +539,9 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
   useEffect(() => () => onHistoriaRef.current?.(false), [])
   useEffect(() => {
     personalizaRef.current.activo = personalizando
+    // Solo el personalizador escoge skin (la historia también usa `activo`): el
+    // rig compila con esto la otra variante del shader (PrecompilaDesarme).
+    personalizaRef.current.eligeSkin = personalizando
     personalizaRef.current.sinHome = personalizando || regresando
     const el = scrollerRef.current
     if (personalizando) {

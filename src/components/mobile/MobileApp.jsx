@@ -23,10 +23,13 @@ import useGlobalSfx from '../../hooks/useGlobalSfx.js'
 import { preloadSfx, setSfxEnabled, unlockSfx } from '../../lib/sfx.js'
 import SectionSwitch from '../SectionSwitch.jsx'
 import { VERSION_RAPIDA } from '../../lib/versionRapida.js'
+import { lazyListo } from '../../lib/lazyListo.js'
 // El cartel va lazy: trae el Canvas y con él three. Así el título y los
 // capítulos pintan primero y el personaje entra cuando llega — en un teléfono
 // esa diferencia es el arranque completo.
-const MobileScrollHome = lazy(() => import('./MobileScrollHome.jsx'))
+const MobileScrollHome = lazyListo(() => import('./MobileScrollHome.jsx'))
+// Sin suspender si ya llegó (App lo pide desde que carga en la home).
+try { if (pathToSection(window.location.pathname) === 'home') MobileScrollHome.precargar() } catch { }
 // La tienda completa del sitio, igual que en App.jsx: el panel del carrito,
 // el regreso de Stripe (?pedido=TOKEN) y Mi cuenta (de ahí se bajan los
 // digitales).

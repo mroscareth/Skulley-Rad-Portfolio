@@ -286,6 +286,21 @@ if (uSkinMode > 0.5) {
 // ── Estado de módulo ────────────────────────────────────────────────
 // Set de objetos `uniforms` de los shaders compilados (escena + retrato).
 const liveUniforms = new Set()
+// Materiales con variante ligera (`applyCharacterSkinShader(m, { ligera: true })`,
+// el rig del teléfono y del preloader): con la skin base se compilan SIN el bloque
+// de skins. Con los 8 modos adentro, el programa de Head pesaba 93 KB y tardaba
+// 662 ms en compilar en la Iris Xe (rendimiento.md, 2026-11-15), dos veces antes
+// de que Skulley saliera; sin el bloque, lo que un material normal. Con la base el
+// bloque no hace nada (`uSkinMode` 0 y emisión 0), así que se ve idéntico. Pasar
+// de la base a una skin (o al revés) los recompila; `conVarianteDeSkin` deja la
+// otra variante compilada antes (el rig lo hace al abrir el personalizador).
+// WeakRef: el rig no desecha sus materiales al desmontarse.
+const ligeros = new Set()
+const cadaLigero = (fn) => ligeros.forEach((r) => {
+  const m = r.deref()
+  if (m) fn(m)
+  else ligeros.delete(r)
+})
 let currentMode = 0
 let currentAmount = 1
 let rafId = null
@@ -333,6 +348,7 @@ function ensureTicker() {
 // lineColor: color del outline + ink lines (void = blanco, resto = negro).
 // forcedColors: { eyes, orb } forzados por la skin (void) o null.
 export function setActiveSkinShader(mode = 0, amount = 1, lineColor = [0, 0, 0], forcedColors = null) {
+  const conSkinAntes = currentMode > 0
   currentMode = mode | 0
   currentAmount = amount
   liveUniforms.forEach((u) => {
@@ -340,6 +356,7 @@ export function setActiveSkinShader(mode = 0, amount = 1, lineColor = [0, 0, 0],
     if (u.uSkinAmount) u.uSkinAmount.value = currentAmount
   })
   if (currentMode > 0) ensureTicker()
+  if ((currentMode > 0) !== conSkinAntes) cadaLigero((m) => { m.needsUpdate = true })
 
   // Stroke + ink color (mutación en sitio) y colores forzados.
   skinLineColor[0] = lineColor[0]
@@ -356,13 +373,22 @@ export function setActiveSkinShader(mode = 0, amount = 1, lineColor = [0, 0, 0],
 
 // Inyecta el shader de skins en un material (idempotente). Llamar SOLO en los
 // materiales que deben recibir skin (Head/Hair) y ANTES de applyToonBanding.
-export function applyCharacterSkinShader(material) {
+// `ligera`: con la skin base se compila sin el bloque (ver `ligeros`).
+export function applyCharacterSkinShader(material, { ligera = false } = {}) {
   if (!material || !material.isMaterial) return material
   if (material.userData && material.userData.__skinShaded) return material
 
+  // Se pregunta al armar la llave del programa y otra vez al compilarlo: three
+  // llama las dos seguidas, así que siempre coinciden.
+  const conBloque = () => {
+    if (!ligera) return true
+    const forzada = material.userData?.__skinVariante
+    return forzada ? forzada === 'lleno' : currentMode > 0
+  }
   const prev = material.onBeforeCompile
   material.onBeforeCompile = (shader, renderer) => {
     try { if (typeof prev === 'function') prev(shader, renderer) } catch { }
+    if (!conBloque()) return
     shader.uniforms.uSkinTime = { value: 0 }
     shader.uniforms.uSkinMode = { value: currentMode }
     shader.uniforms.uSkinAmount = { value: currentAmount }
@@ -432,12 +458,36 @@ export function applyCharacterSkinShader(material) {
   const prevKey = typeof material.customProgramCacheKey === 'function'
     ? material.customProgramCacheKey.bind(material)
     : null
-  material.customProgramCacheKey = () => (prevKey ? prevKey() : '') + '|skinShader'
+  material.customProgramCacheKey = () => (prevKey ? prevKey() : '') + (conBloque() ? '|skinShader' : '|skinBase')
 
   material.needsUpdate = true
   if (!material.userData) material.userData = {}
   material.userData.__skinShaded = true
+  if (ligera) ligeros.add(new WeakRef(material))
   return material
+}
+
+// Compila la variante de skins que no se está usando sin cambiar la que se ve:
+// marca los materiales ligeros con esa variante, corre `compilar` (que debe
+// llamar a `gl.compile`, síncrono) y los regresa a la suya. three guarda en cada
+// material los programas de las dos variantes, así que al cambiar de skin después
+// el programa ya existe y no se compila nada. Devuelve lo que regrese `compilar`.
+export function conVarianteDeSkin(lleno, compilar) {
+  const cambiados = []
+  cadaLigero((m) => {
+    if ((currentMode > 0) === lleno) return
+    m.userData.__skinVariante = lleno ? 'lleno' : 'base'
+    m.needsUpdate = true
+    cambiados.push(m)
+  })
+  try {
+    return compilar()
+  } finally {
+    for (const m of cambiados) {
+      delete m.userData.__skinVariante
+      m.needsUpdate = true
+    }
+  }
 }
 
 // Nombres de material del GLB que reciben skin (esqueleto/cuerpo + pelo).

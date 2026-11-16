@@ -59,8 +59,12 @@ let lastHoverTarget = null
 
 export default function useGlobalSfx() {
     useEffect(() => {
-        // Preload both clips so first interaction is instant
-        preloadSfx(['hover', 'click'])
+        // Preload both clips so first interaction is instant. En un rato libre y
+        // no al montar: crear el AudioContext costaba ~80 ms en el arranque, antes
+        // de que saliera Skulley (rendimiento.md, 2026-11-15).
+        const precarga = () => { try { preloadSfx(['hover', 'click']) } catch { } }
+        const idle = typeof window.requestIdleCallback === 'function'
+        const precargaId = idle ? window.requestIdleCallback(precarga, { timeout: 3000 }) : setTimeout(precarga, 1500)
 
         // HOVER — uses mouseover (bubbles, unlike mouseenter)
         const onHover = (e) => {
@@ -92,6 +96,8 @@ export default function useGlobalSfx() {
         document.addEventListener('click', onClick, { passive: true, capture: false })
 
         return () => {
+            if (idle) window.cancelIdleCallback(precargaId)
+            else clearTimeout(precargaId)
             document.removeEventListener('mouseover', onHover)
             document.removeEventListener('mouseout', onHoverOut)
             document.removeEventListener('click', onClick)
