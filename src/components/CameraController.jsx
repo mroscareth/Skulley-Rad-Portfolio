@@ -401,13 +401,16 @@ export default function CameraController({
       try { window.dispatchEvent(new CustomEvent('camera-grab', { detail: { state } })) } catch { }
     }
     const updateCursor = () => {
-      if (deFrenteRef.current) setCursor('')
-      else if (dragging) setCursor('grabbing')
+      // De frente la mano la pone WallpaperEscena (girar a Skulley en Customize).
+      if (deFrenteRef.current) return
+      if (dragging) setCursor('grabbing')
       else if (hovering) setCursor('grab')
       else setCursor('')
     }
 
     const onEnter = () => { hovering = true; updateCursor() }
+    // Al salir de Customize con el mouse encima, la mano regresa al moverlo.
+    const onHover = () => { if (!dragging && hovering) updateCursor() }
     const onLeave = () => { hovering = false; if (!dragging) updateCursor() }
     const onDown = (e) => {
       if (e.button !== 0) return // solo click izquierdo
@@ -468,12 +471,14 @@ export default function CameraController({
     }
 
     canvas.addEventListener('pointerenter', onEnter)
+    canvas.addEventListener('pointermove', onHover)
     canvas.addEventListener('pointerleave', onLeave)
     canvas.addEventListener('pointerdown', onDown)
     canvas.addEventListener('pointerup', onUp)
     canvas.addEventListener('pointercancel', onCancel)
     return () => {
       canvas.removeEventListener('pointerenter', onEnter)
+      canvas.removeEventListener('pointermove', onHover)
       canvas.removeEventListener('pointerleave', onLeave)
       canvas.removeEventListener('pointerdown', onDown)
       canvas.removeEventListener('pointerup', onUp)

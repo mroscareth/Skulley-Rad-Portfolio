@@ -3,7 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { characterNormalTexture } from '../../lib/toonInkBuffer.js'
 import { pngDeCanvas } from '../../lib/wallpaperPng.js'
-import { WALLPAPER_W, WALLPAPER_H, wallpaperEstado as est, entrarAislado } from '../../lib/wallpaperEscritorio.js'
+import { WALLPAPER_W, WALLPAPER_H, GIRO_POR_PX, wallpaperEstado as est, entrarAislado } from '../../lib/wallpaperEscritorio.js'
 import { crearParticulas } from '../../lib/particulasSkulley.js'
 
 // Skulley aislado en escritorio, adentro del Canvas: mueve la onda de la trama al
@@ -40,9 +40,11 @@ const VIAJE_ZOOM_S = 0.95
 // El centro de su cuerpo, para que no se salga del cuadro al acercarse.
 const CUERPO_Y = 1.5
 // En Customize la cámara es ortográfica (pedido de Oscar: primero en el marco del
-// wallpaper, desde el 2026-11-15 en todo Customize). Se aplana ya con el mundo
-// fuera (fase 'lista'): a media onda el piso perdería el horizonte y se cortaría
-// a ORTO_FONDO. El viaje a una sección sigue en perspectiva. No se cambia de cámara:
+// wallpaper, desde el 2026-11-15 en todo Customize). Se aplana en la segunda mitad
+// de la onda, cuando del mundo solo quedan las orillas, y termina justo cuando la
+// trama cubre todo (Oscar: aplanándose ya en 'lista' se veía el cambio adentro);
+// antes de eso el piso perdería el horizonte y se cortaría a ORTO_FONDO. El viaje
+// a una sección sigue en perspectiva. No se cambia de cámara:
 // eso rearmaría el composer y recompilaría sus pases. A la misma cámara se le pone
 // una proyección ortográfica que, a la distancia del centro de su cuerpo, mide lo
 // mismo que la de perspectiva, con el mismo zoom y el mismo corrimiento. Entrando y
@@ -50,6 +52,8 @@ const CUERPO_Y = 1.5
 // enfrente y lo de atrás. El sombreado no cambia (three sigue viendo una cámara de
 // perspectiva en el mismo lugar, así que el fresnel sale igual que antes).
 const ORTO_S = 0.6
+// Desde qué parte de la onda empieza a aplanarse (y, al salir, hasta cuál).
+const ORTO_DESDE = 0.5
 // Fondo de la ortográfica: con los 2000 de la cámara la profundidad lineal pierde
 // precisión y las piezas que casi se tocan pelearían.
 const ORTO_FONDO = 100
@@ -76,6 +80,57 @@ function traeConservado(o) {
 
 export default function WallpaperEscena({ playerRef, portals }) {
   const { gl, camera, scene, size } = useThree()
+
+  // En Customize se gira a Skulley arrastrando de lado sobre el canvas (Oscar:
+  // "permitir rotar a Skulley en customize"), como en el marco del wallpaper,
+  // que tiene su propio arrastre. Con la mano de agarrar del cursor del sitio;
+  // al salir, el giro regresa solo (fase `sale`).
+  useEffect(() => {
+    const canvas = gl.domElement
+    let arrastre = null
+    let mano = ''
+    const puede = () => est.fase === 'lista' && !est.enMarco && !est.viaje
+    const ponMano = (s) => {
+      if (s === mano) return
+      mano = s
+      try { window.dispatchEvent(new CustomEvent('camera-grab', { detail: { state: s } })) } catch { }
+    }
+    const baja = (e) => {
+      if (e.button !== 0 || !puede()) return
+      arrastre = { id: e.pointerId, x: e.clientX }
+      try { canvas.setPointerCapture(e.pointerId) } catch { }
+      ponMano('grabbing')
+    }
+    const mueve = (e) => {
+      if (!arrastre) {
+        ponMano(puede() ? 'grab' : '')
+        return
+      }
+      if (e.pointerId !== arrastre.id) return
+      est.giro += (e.clientX - arrastre.x) * GIRO_POR_PX
+      arrastre.x = e.clientX
+    }
+    const suelta = (e) => {
+      if (!arrastre || e.pointerId !== arrastre.id) return
+      arrastre = null
+      try { canvas.releasePointerCapture(e.pointerId) } catch { }
+      ponMano(puede() ? 'grab' : '')
+    }
+    const fuera = () => { if (!arrastre) ponMano('') }
+    canvas.addEventListener('pointerdown', baja)
+    canvas.addEventListener('pointermove', mueve)
+    canvas.addEventListener('pointerup', suelta)
+    canvas.addEventListener('pointercancel', suelta)
+    canvas.addEventListener('pointerleave', fuera)
+    return () => {
+      canvas.removeEventListener('pointerdown', baja)
+      canvas.removeEventListener('pointermove', mueve)
+      canvas.removeEventListener('pointerup', suelta)
+      canvas.removeEventListener('pointercancel', suelta)
+      canvas.removeEventListener('pointerleave', fuera)
+      if (mano) ponMano('')
+    }
+  }, [gl])
   const fbo = useMemo(() => new THREE.WebGLRenderTarget(2, 2, {
     minFilter: THREE.LinearFilter,
     magFilter: THREE.LinearFilter,
@@ -340,7 +395,7 @@ export default function WallpaperEscena({ playerRef, portals }) {
       }
     } else if (est.fase === 'sale') {
       if (s.ocultos.length || s.bg) regresaMundo()
-      const asentado = Math.abs(est.zoom - 1) < 0.01 && Math.abs(est.ox) + Math.abs(est.oy) < 2 && Math.abs(est.giro) < 0.01 && s.orto <= 0
+      const asentado = Math.abs(est.zoom - 1) < 0.01 && Math.abs(est.ox) + Math.abs(est.oy) < 2 && Math.abs(est.giro) < 0.01
       if (asentado) {
         est.zoom = 1
         est.ox = 0
@@ -363,8 +418,14 @@ export default function WallpaperEscena({ playerRef, portals }) {
       scene.fog?.color?.set(est.color)
     }
     s.centra = est.enMarco ? (quieto ? 1 : Math.min(1, s.centra + dt / CENTRA_S)) : Math.max(0, s.centra - dt / CENTRA_S)
-    const enOrto = est.fase === 'lista' && !est.viaje
-    s.orto = enOrto ? (quieto ? 1 : Math.min(1, s.orto + dt / ORTO_S)) : (quieto ? 0 : Math.max(0, s.orto - dt / ORTO_S))
+    // La ortográfica va con la onda: entra en su segunda mitad y ya está puesta
+    // cuando la trama termina de cubrir (Oscar: ya adentro se veía el cambio); al
+    // salir se quita igual mientras la onda regresa. Yendo a una sección se
+    // quita en ORTO_S.
+    if (est.viaje) s.orto = quieto ? 0 : Math.max(0, s.orto - dt / ORTO_S)
+    else if (est.fase === 'lista') s.orto = 1
+    else if (est.fase === 'entra' || est.fase === 'sale') s.orto = Math.min(1, Math.max(0, (s.t - ORTO_DESDE) / (1 - ORTO_DESDE)))
+    else s.orto = 0
 
     if (est.plano) aplicaPlano(W, H)
 

@@ -4,7 +4,7 @@ import { ArrowLeftIcon, ArrowPathIcon, FaceSmileIcon, HandRaisedIcon, Magnifying
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import { playSfx } from '../lib/sfx.js'
 import ColorWell from './ColorWell.jsx'
-import { WALLPAPER_H, WALLPAPER_W, WALLPAPER_W_POCA_MEMORIA, wallpaperEstado as est } from '../lib/wallpaperEscritorio.js'
+import { GIRO_POR_PX, WALLPAPER_H, WALLPAPER_W, WALLPAPER_W_POCA_MEMORIA, wallpaperEstado as est } from '../lib/wallpaperEscritorio.js'
 import { dibujarTexto, FUENTES_TEXTO } from '../lib/wallpaperTexto.js'
 import { STICKERS } from '../lib/wallpaperStickers.js'
 
@@ -26,7 +26,6 @@ const PLANOS = [
   { id: 'cuerpo', label: 'customizer.wallBody' },
   { id: 'cara', label: 'customizer.wallFace' },
 ]
-const GIRO_POR_PX = 0.0105
 const ZOOM_MAX = 5
 const RUEDA = 0.0015
 // La franja libre alrededor del marco: lo que ocupan las cápsulas con su aire.

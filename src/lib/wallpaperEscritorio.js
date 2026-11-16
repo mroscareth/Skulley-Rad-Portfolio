@@ -21,6 +21,9 @@ export function leerFondo(porDefecto = '#022dd6') {
   } catch { return porDefecto }
 }
 
+// Cuánto gira Skulley por pixel arrastrado, en el marco del wallpaper y en Customize.
+export const GIRO_POR_PX = 0.0105
+
 export const wallpaperEstado = {
   fase: 'off',
   onda: 0,
