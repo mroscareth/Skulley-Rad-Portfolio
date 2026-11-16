@@ -428,6 +428,26 @@ Primera visita, Skulley dibujado (mediana; en local, 4 corridas alternadas por c
 
 Con 4G el piso es la descarga del GLB (~2.7 s en local, ~3.4 s en producción, igual antes y después: la prioridad baja no lo atrasó). Skulley salía 1.3 s después de que acababa el modelo y ahora 0.7 s (en local, de 1.8 a 1.0 s), porque los chunks de JS llegan juntos a ~1.7 s y el canvas ya está listo cuando llega el modelo. Con CPU 4× en producción no se nota (7.87 → 7.95 s, dentro del ruido; en local 8.12 → 7.56): ahí manda el hilo principal (lo de "Lo que no se pudo quitar"). Producción tiene además ~1 s de TTFB en el HTML y el chunk de entrada en primera visita (Hostinger), que no cambia.
 
+## 2026-11-16 · La skin Inferno
+
+Inferno suma la llama del mohawk (`LlamaMano fuente="pelo"`, con sus brasas) y un shader de fuego en el cuerpo (`skinShaders.js` modo 4: tres octavas de ruido por pixel). El campo del mohawk escribe `gl_FragDepth` (cada pixel a la profundidad de sus bocanadas), y como es el mismo programa, la mano y las bolas también lo escriben (en su plano): eso apaga el descarte temprano por profundidad en esos dibujos.
+
+Medido en el Brave de Oscar (RTX 4060, 2560 × 1398), con una consulta de tiempo alrededor de cada dibujo; en el home la del cuadro completo de `ResolucionAdaptable`:
+
+| | Skin normal | Inferno |
+|---|---|---|
+| Preloader (la toma más cerrada): llama del mohawk | — | 0.19 ms |
+| Preloader: brasas del mohawk | — | 0.015 ms |
+| Preloader: cuerpo, todos los pases | 2.35 ms | 2.37 ms |
+| Preloader: llama de la mano | 0.20 ms | 0.20 ms |
+| Juego: cuadro completo de GPU | 3.4–3.5 ms | 3.2–3.3 ms |
+| Customize: llama + brasas del mohawk | — | 0.13–0.17 ms |
+| Customize: fps sin medir | 101 | 102 |
+
+Inferno agrega unos 0.2 ms en la toma más cerrada y en el juego no se distingue del ruido. El cuerpo con fuego no cuesta más que el normal (en Customize dos pasadas dieron 4.50 y 5.62 ms con Inferno contra 4.75 con la normal: los relojes de la GPU varían más que la diferencia). La llama de la mano en el preloader bajó de 0.28 ms (2026-11-15) a 0.20: escribir la profundidad no la encareció.
+
+De paso: la llama del mohawk traía 8 casillas de bola de fuego que nunca dispara, 16 dibujos vacíos por cuadro con cualquier skin (cada uno pasa por `setProgram` y sube sus uniforms); ya no se crean.
+
 ## Reglas
 
 1. **Un Canvas que se pausa necesita las dos cosas:** `PauseFrameloop` y la prop `frameloop` del `<Canvas>` con la misma condición. Solo una no basta.

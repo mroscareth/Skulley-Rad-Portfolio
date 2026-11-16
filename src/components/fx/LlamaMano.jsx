@@ -506,8 +506,9 @@ export default function LlamaMano({ raiz, disparoRef = null, fuente = 'mano' }) 
   const matMano = useMemo(() => materialCampo(uMano), [uMano])
   // Casillas de bola de fuego: cada disparo ocupa una con su cabeza, su estela y
   // su explosión, así que uno nuevo no borra al anterior (Oscar). Mismo código
-  // de shader en todas: comparten programa.
-  const casillas = useMemo(() => Array.from({ length: BOLAS }, () => {
+  // de shader en todas: comparten programa. El mohawk no dispara: sin casillas
+  // (eran 16 dibujos vacíos por cuadro con cualquier skin).
+  const casillas = useMemo(() => Array.from({ length: esPelo ? 0 : BOLAS }, () => {
     const uB = uniformsCampo(colores)
     const uE = uniformsEstela(colores)
     return {
@@ -526,7 +527,7 @@ export default function LlamaMano({ raiz, disparoRef = null, fuente = 'mano' }) 
       refB: { current: null },
       refE: { current: null },
     }
-  }), [colores])
+  }), [colores, esPelo])
   const matBrasa = useMemo(() => new THREE.ShaderMaterial({
     uniforms: { uHondo: colores.uHondo, uMedio: colores.uMedio, uClaro: colores.uClaro },
     vertexShader: VERT_BRASA,
@@ -997,7 +998,7 @@ export default function LlamaMano({ raiz, disparoRef = null, fuente = 'mano' }) 
     // que traía al soltar (la carga infló la esfera), desde la mano hacia la
     // mira, y la mano se queda sin fuego hasta que la bola explote. Ocupa una
     // casilla libre o, si no hay, la que lleva más tiempo.
-    if (disparo && disparo.id !== st.ultimoDisparo) {
+    if (disparo && disparo.id !== st.ultimoDisparo && casillas.length) {
       st.ultimoDisparo = disparo.id
       const vieja = (lista) => lista.reduce((x, y) => (y.bola.nacio < x.bola.nacio ? y : x), lista[0])
       const explotando = casillas.filter((x) => x.bola.fase === 'estalla')
