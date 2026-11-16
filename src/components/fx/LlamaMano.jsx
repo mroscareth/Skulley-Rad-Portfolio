@@ -122,9 +122,12 @@ const LUZ = { parpadeo: 0.16, tope: 1.8, bola: 1.1, destello: 1.8, destelloDura:
 // (en radios de la esfera en reposo; crece con la llama) y el umbral de la
 // banda fuerte (la débil va a 0.45 de él). Cada cuánto (s) se vuelven a enlazar sus materiales, por si una
 // skin los cambió.
-// Banda fuerte hasta ~3.2 radios y débil hasta ~3.9 (Oscar: "que se refleje un
-// poco más"; la banda fuerte es la que le gusta).
-const DERRAME = { fuerza: 0.78, alcance: 5, umbral: 0.36, enlace: 0.5 }
+// Banda fuerte hasta ~4.1 radios y débil hasta ~5: de la mano llega a medio
+// pecho, la cadera y el lado de la cabeza (Oscar: "que se refleje un poco más"
+// y luego "que abarque más de Skulley"; la banda fuerte es la que le gusta). A
+// 7.5 radios todo el torso quedaba en la banda fuerte y ya no se leía de dónde
+// venía la luz.
+const DERRAME = { fuerza: 0.78, alcance: 6.5, umbral: 0.36, enlace: 0.5 }
 
 function hash1(n) { const x = Math.sin(n * 127.1) * 43758.5453; return x - Math.floor(x) }
 function ruido1(x) {

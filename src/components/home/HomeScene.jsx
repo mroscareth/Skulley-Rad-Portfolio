@@ -348,6 +348,26 @@ function CabezaEnPantalla({ playerRef }) {
   return null
 }
 
+// En Customize la trama tapa el mundo, pero Argus, el "!", las esferas, la
+// babosa y los portales seguían recibiendo clics y hover detrás (Oscar: "el
+// entorno 3D que queda atrás es clickeable, no debería"). Mientras dura se
+// apagan los eventos de R3F (sin intersecciones no hay clic ni hover); lo que
+// Customize arrastra va por eventos del DOM, que no pasan por aquí.
+function SinClicsDelMundo({ activo }) {
+  const setEvents = useThree((s) => s.setEvents)
+  const gl = useThree((s) => s.gl)
+  useEffect(() => {
+    if (!activo) return undefined
+    setEvents({ enabled: false })
+    try {
+      gl.domElement.style.cursor = ''
+      document.body.style.cursor = ''
+    } catch { }
+    return () => setEvents({ enabled: true })
+  }, [activo, setEvents, gl])
+  return null
+}
+
 function ToonKeyLight({ playerRef, intensity = 2.4 }) {
   const keyRef = useRef(null)
   const keyTgt = useRef(null)
@@ -595,6 +615,7 @@ export default function HomeScene({
           </>
         )}
         <CabezaEnPantalla playerRef={playerRef} />
+        <SinClicsDelMundo activo={!!customizeActive} />
         {/* Fake grass: reveals in radius around the character (cheap: 1 drawcall)
             Hidden during transitions from HOME to avoid flash */}
         <FakeGrass
