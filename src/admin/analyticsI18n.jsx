@@ -40,6 +40,13 @@ const es = {
   vs_last_week: 'vs. los 7 anteriores',
   kpi_help_db: 'Una visita es una página vista: si alguien recarga la misma página antes de 5 minutos, cuenta una sola vez. Los visitantes únicos son direcciones IP distintas, así que una casa u oficina con la misma red cuenta como una.',
   kpi_help_ga4: 'Hoy y los últimos 7 días vienen de Google Analytics; el total histórico, del contador propio del sitio.',
+  // Visitas guardadas que no cuentan (columna `excluido` de analytics.php).
+  filtered_lead: 'No cuentan en estos números',
+  filtered_dueno: 'tuyas',
+  filtered_local: 'de pruebas en tu computadora',
+  filtered_bot: 'de robots',
+  filtered_datacenter: 'de servidores en la nube',
+  filtered_tail: 'Siguen guardadas y salen en el CSV.',
   online_one: 'visitante en los últimos 5 minutos',
   online_many: 'visitantes en los últimos 5 minutos',
 
@@ -53,7 +60,7 @@ const es = {
 
   // Paneles
   panel_dwell: 'Tiempo por sección',
-  help_dwell: 'El sitio mide el tiempo en tramos de hasta 30 segundos, así que el promedio es por tramo, no por visita completa. El tiempo total sí suma todo.',
+  help_dwell: 'Cuánto se queda alguien en cada sección en una visita, con la pestaña a la vista. Una pestaña olvidada abierta cuenta hasta 30 minutos.',
   panel_traffic: 'Visitas por día',
   panel_hourly: 'Visitas por hora',
   help_hourly: 'Siempre de los últimos 7 días, sin importar el periodo.',
@@ -100,8 +107,8 @@ const es = {
   unique_many: 'únicas',
   visit_one: 'visita',
   visit_many: 'visitas',
-  sample_one: 'muestra',
-  sample_many: 'muestras',
+  sample_one: 'visita',
+  sample_many: 'visitas',
 
   // Dispositivos
   device_desktop: 'Escritorio',

@@ -401,6 +401,7 @@ function AnalyticsDashboardInner() {
                     />
                 </div>
                 <p className="a-help mt-4 max-w-3xl">{fromGa4 ? t('kpi_help_ga4') : t('kpi_help_db')}</p>
+                <Filtradas filas={data?.filtradas} t={t} />
             </div>
 
             {/* ── Tabs ── */}
@@ -589,6 +590,22 @@ function OverviewTab({ data, t }) {
     )
 }
 
+// Lo que el contador guardó pero no cuenta como gente (tus visitas, pruebas en
+// local, robots, servidores en la nube), para que los números digan de dónde
+// salen. analytics.php lo manda por motivo en `filtradas`.
+const ORDEN_FILTRADAS = ['dueno', 'local', 'bot', 'datacenter']
+
+function Filtradas({ filas, t }) {
+    const porMotivo = Object.fromEntries((filas || []).map((f) => [f.motivo, parseInt(f.total) || 0]))
+    const partes = ORDEN_FILTRADAS.filter((m) => porMotivo[m] > 0).map((m) => `${fmt(porMotivo[m])} ${t(`filtered_${m}`)}`)
+    if (!partes.length) return null
+    return (
+        <p className="a-help mt-2 max-w-3xl">
+            {t('filtered_lead')}: {partes.join(', ')}. {t('filtered_tail')}
+        </p>
+    )
+}
+
 // Los registros viejos usan section1…section5; los nuevos, el nombre de la
 // sección. Sin juntarlos, cada sección salía dos veces y con 10 anillos la
 // gráfica se salía de su viewBox.
@@ -642,6 +659,8 @@ function SectionDwellChart({ sections: rawSections, t }) {
         'section3': { label: 'Tienda', color: PALETTE.magenta },
         'section4': { label: 'Contacto', color: PALETTE.yellow },
         'section5': { label: 'Memorias', color: PALETTE.orange },
+        'skulleyglyph': { label: 'SKULLEYGLYPH', color: NEUTRAL },
+        'section6': { label: 'SKULLEYGLYPH', color: NEUTRAL },
     }
     const metaFor = (section) => sectionMeta[section] || {
         label: section ? section.charAt(0).toUpperCase() + section.slice(1) : '—',

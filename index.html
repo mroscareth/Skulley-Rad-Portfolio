@@ -419,7 +419,12 @@
             ? COOKIE + '=1; path=/; max-age=63072000; samesite=lax'
             : COOKIE + '=; path=/; max-age=0; samesite=lax';
         }
-        window.__madreNoTrack = new RegExp('(^|;\\s*)' + COOKIE + '=1').test(document.cookie);
+        // Solo se cuenta en el sitio publicado. Un servidor local con la API
+        // de producción (API_PROXY de vite.config.js) mandaba sus visitas al
+        // contador real y a GA4: en noviembre de 2026 eran 127 visitas con
+        // referrer localhost en el CMS.
+        var publicado = /(^|\.)(skulleyrad\.com|mroscar\.xyz)$/.test(location.hostname);
+        window.__madreNoTrack = !publicado || new RegExp('(^|;\\s*)' + COOKIE + '=1').test(document.cookie);
       } catch (e) {
         window.__madreNoTrack = false;
       }
@@ -765,19 +770,21 @@
   <!-- Vite injects the compiled script here -->
   <script type="module" src="/src/main.jsx"></script>
 
-  <!-- M.A.D.R.E. Visitor Tracking Beacon (Section-Aware + Dwell Time) -->
+  <!-- Contador de visitas propio (api/analytics.php). Cuenta cada página: la
+       primera y cada navegación del sitio (pushState y atrás/adelante). El
+       tiempo por sección lo lleva el hook useDwellTimeTracking de React; aquí
+       vivía otro rastreo por IntersectionObserver de cuando el sitio era una
+       sola página, que contaba "/#section1" como visita y escribía el tiempo
+       por segunda vez con otros nombres. -->
   <script>
     (function () {
-      // Don't track admin pages
       if (window.location.pathname.startsWith('/admin')) return;
 
-      // Opt-out del dueño (cookie mroscar_notrack). Se resuelve arriba, en el
-      // preámbulo que también decide si GA4 carga. Cortamos acá para no gastar
-      // ni el beacon ni el temporizador de dwell; analytics.php vuelve a
-      // checarlo del lado del servidor por si un HTML cacheado se salta esto.
+      // Opt-out del dueño y servidores locales: lo resuelve el preámbulo de
+      // arriba, el mismo que decide si GA4 carga. analytics.php lo vuelve a
+      // checar por si un HTML cacheado se salta esto.
       if (window.__madreNoTrack) return;
 
-      // ── Session ID ──
       var sessionId = sessionStorage.getItem('_madre_sid');
       if (!sessionId) {
         sessionId = Math.random().toString(36).substr(2) + Date.now().toString(36);
@@ -788,13 +795,14 @@
       var conn = nav.connection || nav.mozConnection || nav.webkitConnection;
       var lastTracked = '';
       var trackUrl = '/api/analytics.php?action=track';
-      var timeUrl = '/api/analytics.php?action=track_time';
+      // El referrer de afuera vale solo para la primera página; las demás
+      // vienen del propio sitio.
+      var referrer = document.referrer || '';
 
-      // ── Build base payload (device info stays the same) ──
       function makePayload(page) {
         return {
           page: page,
-          referrer: document.referrer || '',
+          referrer: referrer,
           screen_w: screen.width,
           screen_h: screen.height,
           language: nav.language || '',
@@ -808,12 +816,12 @@
         };
       }
 
-      // ── Send tracking beacon ──
       function sendBeacon(page) {
         if (page === lastTracked) return;
         lastTracked = page;
         try {
           var body = JSON.stringify(makePayload(page));
+          referrer = '';
           if (navigator.sendBeacon) {
             navigator.sendBeacon(trackUrl, new Blob([body], { type: 'application/json' }));
           } else {
@@ -822,146 +830,30 @@
         } catch (e) { }
       }
 
-      // ── 1. Initial page view (2s delay) ──
-      setTimeout(function () {
-        sendBeacon(window.location.pathname + (window.location.hash || ''));
-      }, 2000);
-
-      // ── 2. Hash change tracking ──
-      window.addEventListener('hashchange', function () {
-        sendBeacon(window.location.pathname + window.location.hash);
-      });
-
-      // ═══════════════════════════════════════════════════
-      // SECTION DWELL TIME TRACKING
-      // ═══════════════════════════════════════════════════
-
-      var sectionTimers = {};   // { sectionId: { start: timestamp, total: ms } }
-      var visibleSections = {}; // currently visible sections
-      var timeSent = false;
-
-      function startTimer(id) {
-        if (!sectionTimers[id]) sectionTimers[id] = { start: 0, total: 0 };
-        if (!visibleSections[id]) {
-          visibleSections[id] = true;
-          sectionTimers[id].start = Date.now();
-        }
+      // La página es la ruta, sin consulta ni hash (?lang=es, ?pedido=… no
+      // son otra página). Se manda un momento después de navegar: la URL a
+      // veces se reescribe en el mismo tick (replaceState de las transiciones).
+      var pendiente = 0;
+      function contar(espera) {
+        clearTimeout(pendiente);
+        pendiente = setTimeout(function () {
+          if (window.__madreNoTrack) return;
+          sendBeacon(window.location.pathname.replace(/\/+$/, '') || '/');
+        }, espera);
       }
 
-      function stopTimer(id) {
-        if (visibleSections[id] && sectionTimers[id] && sectionTimers[id].start) {
-          sectionTimers[id].total += Date.now() - sectionTimers[id].start;
-          sectionTimers[id].start = 0;
-          delete visibleSections[id];
-        }
-      }
+      // 1. La primera página, a los 2 s (quien se va antes no cuenta).
+      contar(2000);
 
-      function stopAllTimers() {
-        for (var id in visibleSections) {
-          if (visibleSections[id] && sectionTimers[id] && sectionTimers[id].start) {
-            sectionTimers[id].total += Date.now() - sectionTimers[id].start;
-            sectionTimers[id].start = 0;
-          }
-        }
-      }
-
-      function resumeAllTimers() {
-        var now = Date.now();
-        for (var id in visibleSections) {
-          if (visibleSections[id] && sectionTimers[id]) {
-            sectionTimers[id].start = now;
-          }
-        }
-      }
-
-      // Send accumulated times to server
-      function flushTimes() {
-        var sections = [];
-        for (var id in sectionTimers) {
-          var t = sectionTimers[id];
-          var dur = t.total;
-          // Add elapsed time for currently visible sections
-          if (visibleSections[id] && t.start) {
-            dur += Date.now() - t.start;
-          }
-          if (dur > 500) { // only send > 0.5s
-            sections.push({ section: id, duration_ms: Math.round(dur) });
-          }
-        }
-        if (!sections.length) return;
-
-        var body = JSON.stringify({ session_id: sessionId, sections: sections });
-        try {
-          if (navigator.sendBeacon) {
-            navigator.sendBeacon(timeUrl, new Blob([body], { type: 'application/json' }));
-          } else {
-            fetch(timeUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body, keepalive: true }).catch(function () { });
-          }
-        } catch (e) { }
-
-        // Reset totals after sending (keep tracking running sections)
-        var now = Date.now();
-        for (var id in sectionTimers) {
-          sectionTimers[id].total = 0;
-          if (visibleSections[id]) sectionTimers[id].start = now;
-        }
-      }
-
-      // Pause timers when tab is hidden, resume when visible
-      document.addEventListener('visibilitychange', function () {
-        if (document.hidden) {
-          stopAllTimers();
-        } else {
-          resumeAllTimers();
-        }
-      });
-
-      // Flush on page unload
-      window.addEventListener('beforeunload', function () {
-        if (!timeSent) { timeSent = true; flushTimes(); }
-      });
-      window.addEventListener('pagehide', function () {
-        if (!timeSent) { timeSent = true; flushTimes(); }
-      });
-
-      // Flush every 30 seconds
-      setInterval(function () { timeSent = false; flushTimes(); }, 30000);
-
-      // ── 3. Section visibility tracking via IntersectionObserver ──
-      function setupSectionObserver() {
-        var selectors = [
-          'section[id]', '[data-section]',
-          '#home', '#work', '#about', '#contact', '#blog', '#music',
-          '#section-1', '#section-2', '#section-3', '#section-4', '#section-5'
-        ];
-        var sections = document.querySelectorAll(selectors.join(','));
-
-        if (!sections.length) {
-          setTimeout(setupSectionObserver, 3000);
-          return;
-        }
-
-        var observer = new IntersectionObserver(function (entries) {
-          entries.forEach(function (entry) {
-            var name = entry.target.dataset.section || entry.target.id || '';
-            if (!name) return;
-
-            if (entry.isIntersecting && entry.intersectionRatio >= 0.3) {
-              // Section entered viewport — start timer + send page beacon
-              sendBeacon('/#' + name);
-              startTimer(name);
-            } else if (!entry.isIntersecting) {
-              // Section left viewport — stop timer
-              stopTimer(name);
-            }
-          });
-        }, { threshold: [0, 0.3] });
-
-        sections.forEach(function (s) { observer.observe(s); });
-      }
-
-      // Start observing after React has likely rendered
-      setTimeout(setupSectionObserver, 4000);
+      // 2. Cada navegación del sitio. Antes solo se escuchaba hashchange y las
+      // rutas (/about, /work/…) nunca llegaban al contador.
+      var push = history.pushState;
+      history.pushState = function () {
+        var r = push.apply(this, arguments);
+        contar(400);
+        return r;
+      };
+      window.addEventListener('popstate', function () { contar(400); });
     })();
   </script>
 </body>

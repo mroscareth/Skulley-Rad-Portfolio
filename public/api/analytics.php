@@ -85,12 +85,19 @@ function handleTrack(): void {
         Middleware::success(['status' => 'excluded']);
     }
 
+    $body = Middleware::getJsonBody();
+
+    // Lo que no viene del sitio publicado (un servidor local con la API de
+    // producción) no se guarda.
+    if (!vieneDelSitio($body)) {
+        Middleware::success(['status' => 'excluded']);
+    }
+
     // Rate limit: 30 tracks per minute per IP
     if (!Middleware::rateLimit('analytics', 30, 60)) {
         Middleware::error('Rate limited', 429);
     }
 
-    $body = Middleware::getJsonBody();
     $ip   = getClientIp();
     $ua   = $_SERVER['HTTP_USER_AGENT'] ?? '';
 
@@ -141,6 +148,9 @@ function handleTrack(): void {
         'pixel_ratio'    => round((float)($body['pixel_ratio'] ?? 1), 2),
         'session_id'     => mb_substr($body['session_id'] ?? '', 0, 64),
         'visited_at'     => date('Y-m-d H:i:s'),
+        // Bots y datacenters se guardan marcados: el tablero no los cuenta,
+        // pero dice cuántos filtró.
+        'excluido'       => motivoDeExclusion($ua, $geo),
     ];
 
     Database::insert('visitors', $data);
@@ -156,32 +166,32 @@ function handleDashboard(): void {
 
     // Today's visitors
     $today = Database::fetchOne(
-        'SELECT COUNT(*) as total, COUNT(DISTINCT ip_address) as unique_ips FROM visitors WHERE DATE(visited_at) = CURDATE()'
+        "SELECT COUNT(*) as total, COUNT(DISTINCT ip_address) as unique_ips FROM visitors WHERE excluido = '' AND DATE(visited_at) = CURDATE()"
     );
 
     // Yesterday for comparison
     $yesterday = Database::fetchOne(
-        'SELECT COUNT(*) as total FROM visitors WHERE DATE(visited_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)'
+        "SELECT COUNT(*) as total FROM visitors WHERE excluido = '' AND DATE(visited_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)"
     );
 
     // Total all-time
     $allTime = Database::fetchOne(
-        'SELECT COUNT(*) as total, COUNT(DISTINCT ip_address) as unique_ips FROM visitors'
+        "SELECT COUNT(*) as total, COUNT(DISTINCT ip_address) as unique_ips FROM visitors WHERE excluido = ''"
     );
 
     // This week vs last week
     $thisWeek = Database::fetchOne(
-        'SELECT COUNT(*) as total FROM visitors WHERE visited_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)'
+        "SELECT COUNT(*) as total FROM visitors WHERE excluido = '' AND visited_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)"
     );
     $lastWeek = Database::fetchOne(
-        'SELECT COUNT(*) as total FROM visitors WHERE visited_at >= DATE_SUB(CURDATE(), INTERVAL 14 DAY) AND visited_at < DATE_SUB(CURDATE(), INTERVAL 7 DAY)'
+        "SELECT COUNT(*) as total FROM visitors WHERE excluido = '' AND visited_at >= DATE_SUB(CURDATE(), INTERVAL 14 DAY) AND visited_at < DATE_SUB(CURDATE(), INTERVAL 7 DAY)"
     );
 
     // Daily traffic for period
     $daily = Database::fetchAll(
         "SELECT DATE(visited_at) as date, COUNT(*) as views, COUNT(DISTINCT ip_address) as uniques
          FROM visitors
-         WHERE visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+         WHERE excluido = '' AND visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
          GROUP BY DATE(visited_at)
          ORDER BY date ASC",
         [$days]
@@ -189,19 +199,19 @@ function handleDashboard(): void {
 
     // Hourly distribution (last 7 days)
     $hourly = Database::fetchAll(
-        'SELECT HOUR(visited_at) as hour, COUNT(*) as total
+        "SELECT HOUR(visited_at) as hour, COUNT(*) as total
          FROM visitors
-         WHERE visited_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+         WHERE excluido = '' AND visited_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
          GROUP BY HOUR(visited_at)
-         ORDER BY hour ASC'
+         ORDER BY hour ASC"
     );
 
     // Browser breakdown
     $browsers = Database::fetchAll(
         "SELECT browser, COUNT(*) as total, 
-                ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM visitors WHERE visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)), 1) as pct
+                ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM visitors WHERE excluido = '' AND visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)), 1) as pct
          FROM visitors
-         WHERE visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY) AND browser != ''
+         WHERE excluido = '' AND visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY) AND browser != ''
          GROUP BY browser
          ORDER BY total DESC
          LIMIT 10",
@@ -211,9 +221,9 @@ function handleDashboard(): void {
     // OS breakdown
     $oses = Database::fetchAll(
         "SELECT os, COUNT(*) as total,
-                ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM visitors WHERE visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)), 1) as pct
+                ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM visitors WHERE excluido = '' AND visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)), 1) as pct
          FROM visitors
-         WHERE visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY) AND os != ''
+         WHERE excluido = '' AND visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY) AND os != ''
          GROUP BY os
          ORDER BY total DESC
          LIMIT 10",
@@ -223,9 +233,9 @@ function handleDashboard(): void {
     // Device types
     $devices = Database::fetchAll(
         "SELECT device_type, COUNT(*) as total,
-                ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM visitors WHERE visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)), 1) as pct
+                ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM visitors WHERE excluido = '' AND visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)), 1) as pct
          FROM visitors
-         WHERE visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY) AND device_type != ''
+         WHERE excluido = '' AND visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY) AND device_type != ''
          GROUP BY device_type
          ORDER BY total DESC",
         [$days, $days]
@@ -234,42 +244,60 @@ function handleDashboard(): void {
     // Country breakdown
     $countries = Database::fetchAll(
         "SELECT country, country_code, COUNT(*) as total,
-                ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM visitors WHERE visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY) AND country != ''), 1) as pct
+                ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM visitors WHERE excluido = '' AND visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY) AND country != ''), 1) as pct
          FROM visitors
-         WHERE visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY) AND country != ''
+         WHERE excluido = '' AND visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY) AND country != ''
          GROUP BY country, country_code
          ORDER BY total DESC
          LIMIT 20",
         [$days, $days]
     );
 
-    // Top pages
+    // Top pages. Hasta noviembre de 2026 el contador mandaba "/#section2"
+    // cuando una sección entraba a la pantalla (de cuando el sitio era una sola
+    // página): se juntan con la ruta de hoy.
     $pages = Database::fetchAll(
-        "SELECT page_url, COUNT(*) as views, COUNT(DISTINCT ip_address) as uniques
+        "SELECT CASE page_url
+                    WHEN '/#home' THEN '/'
+                    WHEN '/#section1' THEN '/work'
+                    WHEN '/#section2' THEN '/about'
+                    WHEN '/#section3' THEN '/lost-and-found-shop'
+                    WHEN '/#section4' THEN '/contact'
+                    WHEN '/#section5' THEN '/blog'
+                    WHEN '/#section6' THEN '/skulleyglyph'
+                    ELSE page_url END AS pagina,
+                COUNT(*) as views, COUNT(DISTINCT ip_address) as uniques
          FROM visitors
-         WHERE visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
-         GROUP BY page_url
+         WHERE excluido = '' AND visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+         GROUP BY pagina
          ORDER BY views DESC
          LIMIT 15",
         [$days]
     );
+    $pages = array_map(fn($p) => ['page_url' => $p['pagina'], 'views' => (int) $p['views'], 'uniques' => (int) $p['uniques']], $pages);
 
-    // Top referrers
+    // Top referrers, por sitio. Sin el propio dominio (navegar dentro del
+    // sitio no es "llegar") ni servidores locales. Antes solo quitaba
+    // mroscar.xyz, y skulleyrad.com salía como la fuente número uno.
     $referrers = Database::fetchAll(
-        "SELECT referrer, COUNT(*) as total
+        "SELECT TRIM(LEADING 'www.' FROM SUBSTRING_INDEX(SUBSTRING_INDEX(SUBSTRING_INDEX(referrer, '/', 3), '/', -1), '?', 1)) AS sitio,
+                COUNT(*) as total
          FROM visitors
-         WHERE visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY) AND referrer != '' AND referrer NOT LIKE '%mroscar%'
-         GROUP BY referrer
+         WHERE excluido = '' AND visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY) AND referrer != ''
+           AND referrer NOT REGEXP '^https?://([a-z0-9-]+[.])*(skulleyrad[.]com|mroscar[.]xyz)(/|:|$)'
+           AND referrer NOT REGEXP '^https?://(localhost|127[.]|10[.]|192[.]168[.])'
+         GROUP BY sitio
          ORDER BY total DESC
          LIMIT 10",
         [$days]
     );
+    $referrers = array_map(fn($r) => ['referrer' => $r['sitio'], 'total' => (int) $r['total']], $referrers);
 
     // Screen resolutions
     $screens = Database::fetchAll(
         "SELECT CONCAT(screen_width, 'x', screen_height) as resolution, COUNT(*) as total
          FROM visitors
-         WHERE visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY) AND screen_width > 0
+         WHERE excluido = '' AND visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY) AND screen_width > 0
          GROUP BY resolution
          ORDER BY total DESC
          LIMIT 10",
@@ -280,7 +308,7 @@ function handleDashboard(): void {
     $isps = Database::fetchAll(
         "SELECT isp, COUNT(*) as total
          FROM visitors
-         WHERE visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY) AND isp != ''
+         WHERE excluido = '' AND visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY) AND isp != ''
          GROUP BY isp
          ORDER BY total DESC
          LIMIT 10",
@@ -296,7 +324,7 @@ function handleDashboard(): void {
                 MAX(browser) as browser,
                 MAX(os) as os
          FROM visitors
-         WHERE visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+         WHERE excluido = '' AND visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
          GROUP BY ip_address
          ORDER BY visits DESC
          LIMIT 15",
@@ -305,7 +333,7 @@ function handleDashboard(): void {
 
     // Online now (last 5 minutes)
     $onlineNow = Database::fetchOne(
-        'SELECT COUNT(DISTINCT ip_address) as total FROM visitors WHERE visited_at >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)'
+        "SELECT COUNT(DISTINCT ip_address) as total FROM visitors WHERE excluido = '' AND visited_at >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)"
     );
 
     // Map points for geo visualization (lat/lon clusters)
@@ -313,24 +341,54 @@ function handleDashboard(): void {
         "SELECT ROUND(lat, 1) as lat, ROUND(lon, 1) as lon,
                 COUNT(*) as visits, MAX(country) as country, MAX(city) as city
          FROM visitors
-         WHERE lat != 0 AND lon != 0 AND visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+         WHERE excluido = '' AND lat != 0 AND lon != 0 AND visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
          GROUP BY ROUND(lat, 1), ROUND(lon, 1)
          ORDER BY visits DESC
          LIMIT 100",
         [$days]
     );
 
-    // Section dwell times (average seconds per section)
+    // Tiempo por sección, por visita. El hook de React manda lo acumulado
+    // cada 30 s, así que cada fila es un tramo: el promedio de filas daba
+    // ~30 s en todas las secciones. Se suma por sesión y sección y se
+    // promedia eso. Una pestaña olvidada abierta no pesa más de 30 min, y se
+    // dejan fuera las sesiones marcadas (bots, servidores locales, tus
+    // visitas de antes del opt-out). section1…section6 son los nombres de
+    // antes (había un segundo rastreo en index.html).
     $sectionTimes = Database::fetchAll(
-        "SELECT section,
+        "SELECT seccion AS section,
                 COUNT(*) as visits,
-                ROUND(AVG(duration_ms) / 1000, 1) as avg_seconds,
-                ROUND(MAX(duration_ms) / 1000, 1) as max_seconds,
-                ROUND(SUM(duration_ms) / 1000, 0) as total_seconds
-         FROM section_times
-         WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
-         GROUP BY section
+                ROUND(AVG(ms) / 1000, 1) as avg_seconds,
+                ROUND(MAX(ms) / 1000, 1) as max_seconds,
+                ROUND(SUM(ms) / 1000, 0) as total_seconds
+         FROM (
+             SELECT st.session_id,
+                    CASE st.section
+                        WHEN 'section1' THEN 'work'
+                        WHEN 'section2' THEN 'about'
+                        WHEN 'section3' THEN 'store'
+                        WHEN 'section4' THEN 'contact'
+                        WHEN 'section5' THEN 'blog'
+                        WHEN 'section6' THEN 'skulleyglyph'
+                        ELSE st.section END AS seccion,
+                    LEAST(SUM(st.duration_ms), 1800000) AS ms
+             FROM section_times st
+             WHERE st.created_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+               AND st.session_id NOT IN (SELECT session_id FROM visitors WHERE excluido <> '' AND session_id <> '')
+             GROUP BY st.session_id, seccion
+         ) por_visita
+         GROUP BY seccion
          ORDER BY avg_seconds DESC",
+        [$days]
+    );
+
+    // Cuántas visitas del periodo no contaron, por motivo, para decirlo en el
+    // tablero.
+    $filtradas = Database::fetchAll(
+        "SELECT excluido AS motivo, COUNT(*) as total
+         FROM visitors
+         WHERE excluido <> '' AND visited_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+         GROUP BY excluido",
         [$days]
     );
 
@@ -360,6 +418,7 @@ function handleDashboard(): void {
         'top_ips'       => $topIps,
         'map_points'    => $mapPoints,
         'section_times' => $sectionTimes,
+        'filtradas'     => $filtradas,
         'period'        => $period,
         'source'        => 'database' // Indicator
     ];
@@ -545,9 +604,10 @@ function handleVisitors(): void {
     $limit = min(100, max(10, (int)($_GET['limit'] ?? 50)));
     $offset = ($page - 1) * $limit;
 
-    $total = Database::fetchOne('SELECT COUNT(*) as total FROM visitors');
+    // Solo visitas de gente, como el resto del tablero; el CSV sí trae todo.
+    $total = Database::fetchOne("SELECT COUNT(*) as total FROM visitors WHERE excluido = ''");
     $visitors = Database::fetchAll(
-        "SELECT * FROM visitors ORDER BY visited_at DESC LIMIT ? OFFSET ?",
+        "SELECT * FROM visitors WHERE excluido = '' ORDER BY visited_at DESC LIMIT ? OFFSET ?",
         [$limit, $offset]
     );
 
@@ -568,6 +628,7 @@ function handleLive(): void {
         "SELECT ip_address, browser, os, device_type, country, country_code, city, 
                 page_url, referrer, isp, screen_width, screen_height, visited_at
          FROM visitors
+         WHERE excluido = ''
          ORDER BY visited_at DESC
          LIMIT 20"
     );
@@ -591,7 +652,7 @@ function handleExport(): void {
         'ID', 'Date', 'IP Address', 'Browser', 'OS', 'Device',
         'Country', 'City', 'Region', 'ISP', 'Latitude', 'Longitude',
         'Page', 'Referrer', 'Screen', 'Language', 'Timezone',
-        'Dark Mode', 'Touch', 'Connection', 'Color Depth', 'Pixel Ratio', 'User Agent'
+        'Dark Mode', 'Touch', 'Connection', 'Color Depth', 'Pixel Ratio', 'User Agent', 'Excluded'
     ]);
 
     // Stream in chunks to avoid memory issues on large datasets
@@ -630,6 +691,7 @@ function handleExport(): void {
                 $r['color_depth'],
                 $r['pixel_ratio'],
                 $r['user_agent'],
+                $r['excluido'] ?? '',
             ]);
         }
 
@@ -669,6 +731,59 @@ function isTrackingExcluded(): bool {
     // checkAuth() sale sin tocar la DB si no hay cookie de sesión, así que
     // esto no le cuesta una query a cada visita anónima.
     return Middleware::checkAuth() !== null;
+}
+
+/** El sitio publicado: skulleyrad.com y mroscar.xyz, con o sin www. */
+function esHostDelSitio(string $host): bool {
+    return (bool) preg_match('/(^|\.)(skulleyrad\.com|mroscar\.xyz)$/i', $host);
+}
+
+/**
+ * ¿La visita viene del sitio publicado? Un servidor local de desarrollo con
+ * la API de producción (API_PROXY de vite.config.js) mandaba sus visitas al
+ * contador real: en noviembre de 2026, 127 con referrer localhost. Su Origin
+ * dice localhost (el proxy no lo cambia) y su referrer también. index.html
+ * ya no cuenta fuera del dominio; esto es por si un HTML viejo lo hace.
+ */
+function vieneDelSitio(array $body): bool {
+    $origin = (string) ($_SERVER['HTTP_ORIGIN'] ?? '');
+    if ($origin !== '' && !esHostDelSitio((string) parse_url($origin, PHP_URL_HOST))) {
+        return false;
+    }
+    $ref = (string) ($body['referrer'] ?? '');
+    return !preg_match('~^https?://(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[::1\])~i', $ref);
+}
+
+// Proveedores de nube y hosting: lo que llega de ahí ejecutando JavaScript
+// son robots (PageSpeed y Lighthouse desde Google Cloud, escáneres de
+// seguridad, el visor de enlaces de Facebook), no gente. ip-api marca casi
+// todos con `hosting`; esta lista es el respaldo y la que marcó los registros
+// viejos (scripts/analytics-marcar.php).
+const ISP_DE_DATACENTER = '/google llc|google cloud|amazon|aws|microsoft|azure|digitalocean|contabo|hostinger|datacamp|hostroyale|palo alto|cisco iot|ovh|hetzner|linode|vultr|m247|leaseweb|oracle|alibaba|tencent|facebook|scaleway|choopa|colocrossing|psychz|quadranet|zscaler/i';
+
+/**
+ * Por qué una visita no cuenta como persona, o '' si cuenta.
+ *  - 'bot': el User-Agent lo dice (o es un Chrome sin pantalla, Lighthouse…).
+ *  - 'datacenter': la IP es de un proveedor de nube.
+ * Se guarda la visita con el motivo y el tablero la deja fuera.
+ */
+// Relevos de privacidad que usa gente de verdad: iCloud Private Relay (sale
+// por Akamai, Cloudflare o Fastly) y la VPN gratis de Cloudflare (WARP). ip-api
+// los marca como hosting, pero detrás hay un iPhone con una persona.
+const RELAY_DE_PRIVACIDAD = '/private relay|icloud|warp|akamai|cloudflare|fastly/i';
+
+function motivoDeExclusion(string $ua, array $geo): string {
+    if ($ua === '' || preg_match('/bot|crawl|spider|slurp|mediapartners|headless|lighthouse|pagespeed|ptst|inspectiontool|facebookexternalhit|preview|uptime|python|curl|wget|httpclient|go-http|java\//i', $ua)) {
+        return 'bot';
+    }
+    $red = ($geo['isp'] ?? '') . ' ' . ($geo['org'] ?? '');
+    if (preg_match(RELAY_DE_PRIVACIDAD, $red)) {
+        return '';
+    }
+    if (!empty($geo['hosting']) || preg_match(ISP_DE_DATACENTER, $red)) {
+        return 'datacenter';
+    }
+    return '';
 }
 
 /**
@@ -797,7 +912,7 @@ function resolveGeo(string $ip): array {
     // 30 días de ventana para que una IP reasignada no se quede marcada con el
     // país anterior para siempre. La consulta entra por el índice idx_ip.
     $cached = Database::fetchOne(
-        "SELECT country, country_code, city, region, lat, lon, isp, org, as_name
+        "SELECT country, country_code, city, region, lat, lon, isp, org, as_name, excluido
            FROM visitors
           WHERE ip_address = ? AND country <> '' AND country <> 'Local'
             AND visited_at > DATE_SUB(NOW(), INTERVAL 30 DAY)
@@ -816,10 +931,11 @@ function resolveGeo(string $ip): array {
             'isp'         => $cached['isp'],
             'org'         => $cached['org'],
             'as'          => $cached['as_name'],
+            'hosting'     => ($cached['excluido'] ?? '') === 'datacenter',
         ];
     }
 
-    $url = "http://ip-api.com/json/{$ip}?fields=status,country,countryCode,regionName,city,lat,lon,isp,org,as";
+    $url = "http://ip-api.com/json/{$ip}?fields=status,country,countryCode,regionName,city,lat,lon,isp,org,as,hosting";
     
     $ctx = stream_context_create([
         'http' => [
@@ -873,6 +989,7 @@ function ensureTable(): void {
         pixel_ratio   DECIMAL(4,2) NOT NULL DEFAULT 1.00,
         session_id    VARCHAR(64)  NOT NULL DEFAULT '',
         visited_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        excluido      VARCHAR(20)  NOT NULL DEFAULT '',
         INDEX idx_visited  (visited_at),
         INDEX idx_ip       (ip_address),
         INDEX idx_page     (page_url(100)),
@@ -880,6 +997,14 @@ function ensureTable(): void {
         INDEX idx_browser  (browser),
         INDEX idx_device   (device_type)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    // `excluido` (2026-11-16): por qué una visita no cuenta ('bot',
+    // 'datacenter', 'local', 'dueno'). Las tablas de antes no la tienen.
+    try {
+        $pdo->query('SELECT excluido FROM visitors LIMIT 0');
+    } catch (Throwable $e) {
+        $pdo->exec("ALTER TABLE visitors ADD COLUMN excluido VARCHAR(20) NOT NULL DEFAULT '' AFTER visited_at");
+    }
 
     // Section dwell-time tracking
     $pdo->exec("CREATE TABLE IF NOT EXISTS section_times (
@@ -903,8 +1028,8 @@ function handleTrackTime(): void {
         return;
     }
 
-    // El dueño no se cuenta a sí mismo.
-    if (isTrackingExcluded()) {
+    // El dueño no se cuenta a sí mismo, ni un servidor local.
+    if (isTrackingExcluded() || !vieneDelSitio([])) {
         Middleware::success(['status' => 'excluded']);
     }
 
