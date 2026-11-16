@@ -1639,6 +1639,354 @@ button[aria-disabled="true"]:hover {
 }
 
 
+/* ============================================================
+   SELECTOR DE COLOR (src/components/ui/SelectorColor.jsx, DESIGN.md §14.15)
+   Reemplaza al selector nativo del sistema. Superficie del panel del
+   teléfono (#0d0714, borde de 2px), cuadro de saturación y brillo, barra
+   de tono y los puntos con contorno de tinta, como el hull de Skulley.
+   En escritorio es un globo con piquito pegado al círculo; en pantallas
+   angostas, una hoja abajo. Cero sombra: el anillo de tinta es borde.
+   ============================================================ */
+
+/* El círculo que lo abre (ColorWell) es un botón que se ve como el control
+   de antes: sin el brinco de los botones (sus círculos los mueven los vuelos
+   de lib/vueloColores.js) y con el anillo magenta mientras su selector está
+   abierto, como la skin elegida. */
+.color-well,
+.color-well:hover,
+.color-well:active {
+  transform: none;
+  filter: none;
+  will-change: auto;
+}
+
+.color-well:focus-visible {
+  outline: none;
+}
+
+.color-well:focus-visible > .color-well__swatch {
+  outline: 2px solid #e600ff;
+  outline-offset: 3px;
+}
+
+.color-well[aria-expanded="true"] > .color-well__swatch {
+  border-color: #e600ff;
+  box-shadow: 0 0 0 2px #e600ff;
+}
+
+.selcolor {
+  position: fixed;
+  inset: auto;
+  z-index: 2147482000; /* solo cuenta sin popover */
+  width: 284px;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  background: #0d0714;
+  color: #fff;
+  font-family: var(--font-body);
+  text-align: left;
+}
+
+.selcolor__cuerpo {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+/* El nombre de lo que se pinta: un título, en la letra de la marquesina. */
+.selcolor__titulo {
+  margin: 2px 0 0;
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+/* ── Globo (escritorio) ─────────────────────────────────────── */
+
+.selcolor--globo {
+  --sc-desde: 0 -6px;
+  transform-origin: var(--sc-piquito, 50%) 0;
+  animation: selcolor-entra 180ms var(--ease-expo-out) both;
+}
+
+.selcolor--globo[data-lado="top"] {
+  --sc-desde: 0 6px;
+  transform-origin: var(--sc-piquito, 50%) 100%;
+}
+
+.selcolor--globo[data-lado="left"] {
+  --sc-desde: 6px 0;
+  transform-origin: 100% var(--sc-piquito, 50%);
+}
+
+.selcolor--globo[data-lado="right"] {
+  --sc-desde: -6px 0;
+  transform-origin: 0 var(--sc-piquito, 50%);
+}
+
+/* Piquito: el de los tooltips (§14.12) con los colores del globo; su fondo
+   tapa el borde del globo donde se une. */
+.selcolor--globo::after {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  background: #0d0714;
+  transform: rotate(45deg);
+}
+
+.selcolor--globo:not([data-lado])::after {
+  display: none;
+}
+
+.selcolor--globo[data-lado="bottom"]::after {
+  top: -7px;
+  left: var(--sc-piquito);
+  margin-left: -6px;
+  border-right: 0;
+  border-bottom: 0;
+}
+
+.selcolor--globo[data-lado="top"]::after {
+  bottom: -7px;
+  left: var(--sc-piquito);
+  margin-left: -6px;
+  border-top: 0;
+  border-left: 0;
+}
+
+.selcolor--globo[data-lado="left"]::after {
+  right: -7px;
+  top: var(--sc-piquito);
+  margin-top: -6px;
+  border-bottom: 0;
+  border-left: 0;
+}
+
+.selcolor--globo[data-lado="right"]::after {
+  left: -7px;
+  top: var(--sc-piquito);
+  margin-top: -6px;
+  border-top: 0;
+  border-right: 0;
+}
+
+@keyframes selcolor-entra {
+  from { opacity: 0; translate: var(--sc-desde); scale: 0.96; }
+  to { opacity: 1; translate: 0 0; scale: 1; }
+}
+
+/* ── Hoja (pantallas angostas) ──────────────────────────────── */
+/* Abajo y a lo ancho, encima del panel de Personalizar: Skulley sigue a la
+   vista. Sube con el teclado del teléfono (--sc-teclado). */
+.selcolor--hoja {
+  left: 0;
+  right: 0;
+  bottom: var(--sc-teclado, 0px);
+  width: auto;
+  padding-bottom: env(safe-area-inset-bottom);
+  border-bottom: 0;
+  border-radius: 24px 24px 0 0;
+  animation: selcolor-sube 360ms var(--ease-expo-out) both;
+}
+
+.selcolor--hoja .selcolor__cuerpo {
+  max-width: 440px;
+  margin: 0 auto;
+  padding: 18px 14px 16px;
+  gap: 14px;
+}
+
+@keyframes selcolor-sube {
+  from { translate: 0 100%; }
+  to { translate: 0 0; }
+}
+
+.selcolor.is-saliendo {
+  pointer-events: none;
+  animation: selcolor-sale 140ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.selcolor--hoja.is-saliendo {
+  animation: selcolor-baja 140ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+@keyframes selcolor-sale {
+  to { opacity: 0; scale: 0.97; }
+}
+
+@keyframes selcolor-baja {
+  to { translate: 0 100%; }
+}
+
+/* ── Controles ──────────────────────────────────────────────── */
+
+.selcolor__cuadro {
+  position: relative;
+  height: 156px;
+  border-radius: 12px;
+  background:
+    linear-gradient(to top, #000, rgba(0, 0, 0, 0)),
+    linear-gradient(to right, #fff, var(--sc-tono));
+  touch-action: none;
+  outline: none;
+}
+
+.selcolor--hoja .selcolor__cuadro {
+  height: clamp(116px, 18vh, 164px);
+}
+
+.selcolor__tono {
+  --sc-color: var(--sc-tono);
+  position: relative;
+  height: 28px;
+  touch-action: none;
+  outline: none;
+}
+
+.selcolor__riel {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 14px;
+  margin-top: -7px;
+  border-radius: 999px;
+  background: linear-gradient(to right, #f00 0%, #ff0 16.667%, #0f0 33.333%, #0ff 50%, #00f 66.667%, #f0f 83.333%, #f00 100%);
+}
+
+/* El punto: el color que tiene, aro blanco y contorno de tinta. */
+.selcolor__punto {
+  position: absolute;
+  top: var(--sc-y, 50%);
+  left: var(--sc-x);
+  width: 24px;
+  height: 24px;
+  margin: -12px 0 0 -12px;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: var(--sc-color);
+  box-shadow: 0 0 0 2px #0a0510;
+  pointer-events: none;
+}
+
+.selcolor__cuadro:focus-visible .selcolor__punto,
+.selcolor__tono:focus-visible .selcolor__punto {
+  outline: 2px solid #e600ff;
+  outline-offset: 3px;
+}
+
+.selcolor__pie {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+/* El color con que se abrió. Cuando ya cambió, lleva la flecha de regresar. */
+.selcolor__antes {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-radius: 50%;
+}
+
+.selcolor__antes svg {
+  transition: opacity 160ms ease, scale 220ms var(--ease-expo-out);
+}
+
+.selcolor__antes:disabled svg {
+  opacity: 0;
+  scale: 0.5;
+}
+
+.selcolor__antes:focus-visible,
+.selcolor__listo:focus-visible {
+  outline: 2px solid #e600ff;
+  outline-offset: 2px;
+}
+
+/* El campo hex: el input toon (§5.1) con el # fijo adelante. */
+.selcolor__hex {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  height: 44px;
+  padding: 0 12px;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  background: #150a1d;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  transition: border-color 120ms ease;
+}
+
+.selcolor__hex > span {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.selcolor__hex input {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: uppercase;
+  caret-color: #e600ff;
+}
+
+.selcolor__hex:focus-within {
+  border-color: #e600ff;
+}
+
+.selcolor__hex:has(input:focus-visible) {
+  outline: 2px solid #e600ff;
+  outline-offset: 2px;
+}
+
+/* 16 px en el teléfono: con menos, iOS acerca la página al escribir. */
+.selcolor--hoja .selcolor__hex {
+  font-size: 16px;
+}
+
+.selcolor__listo {
+  flex: none;
+  height: 44px;
+  padding: 0 16px;
+  font-size: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .selcolor,
+  .selcolor.is-saliendo,
+  .selcolor--hoja.is-saliendo {
+    animation: none;
+  }
+}
+
+
 /* ═══════════════════════════════════════════════════════════════════
    SHOP — Section3 / "THE GIFT SHOP" del mausoleo
    ═══════════════════════════════════════════════════════════════════ */
@@ -4604,8 +4952,8 @@ div:has(> #privy-dialog-backdrop) {
   clip-path: inset(50%);
 }
 
-.dwp-fondo label:has(input:focus-visible) > .color-well__swatch,
-.dwp button:focus-visible {
+.dwp-fondo .color-well:focus-visible > .color-well__swatch,
+.dwp button:not(.color-well):focus-visible {
   outline: 2px solid #e600ff;
   outline-offset: 2px;
 }
@@ -5026,16 +5374,14 @@ div:has(> #privy-dialog-backdrop) {
   transition: transform 420ms var(--ease-expo-out), visibility 0s;
 }
 
-.mcz button:focus-visible,
-.mcz-colores label:has(input:focus-visible) > .color-well__swatch,
-.mcz-fondo label:has(input:focus-visible) > .color-well__swatch,
-.mcz-wall-controles label:has(input:focus-visible) > .color-well__swatch {
+.mcz button:not(.color-well):focus-visible,
+.mcz .color-well:focus-visible > .color-well__swatch {
   outline: 2px solid #e600ff;
   outline-offset: 4px;
 }
 
 /* Como la X de las secciones (.mobile-close). */
-.mcz-arriba button:focus-visible {
+.mcz-arriba button:not(.color-well):focus-visible {
   outline-color: #fff;
   outline-offset: 2px;
 }

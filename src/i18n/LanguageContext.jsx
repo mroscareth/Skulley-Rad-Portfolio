@@ -262,6 +262,15 @@ const resources = {
       wallRetry: 'Try again',
       close: 'Close',
     },
+    colorPicker: {
+      area: 'Saturation and brightness',
+      areaValue: 'Saturation {s} %, brightness {v} %',
+      hue: 'Hue',
+      hex: 'Hex code',
+      previous: 'Back to {hex}',
+      previousTip: 'Previous color',
+      done: 'Done',
+    },
     account: {
       open: 'My account',
     },
@@ -764,6 +773,15 @@ const resources = {
       wallError: 'No se pudo hacer. Inténtalo otra vez.',
       wallRetry: 'Intentar otra vez',
       close: 'Cerrar',
+    },
+    colorPicker: {
+      area: 'Saturación y brillo',
+      areaValue: 'Saturación {s} %, brillo {v} %',
+      hue: 'Tono',
+      hex: 'Código hex',
+      previous: 'Regresar a {hex}',
+      previousTip: 'Color anterior',
+      done: 'Listo',
     },
     account: {
       open: 'Mi cuenta',

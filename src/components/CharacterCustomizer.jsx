@@ -28,6 +28,10 @@ import SkinChip from './SkinChip.jsx'
 import ColorWell from './ColorWell.jsx'
 import SkinCarousel from './SkinCarousel.jsx'
 
+// La columna de colores va a la derecha y Skulley a la izquierda: el selector
+// se abre hacia el hueco que queda entre los dos, no encima de los otros colores.
+const LADOS_COLUMNA = ['left', 'bottom', 'top', 'right']
+
 // Panel de personalización de color del personaje (lado derecho de la pantalla;
 // la cámara del mundo se posa al frente con el personaje a la izquierda, ver
 // CameraController `customizeActive`). Escribe en el slot global characterColors
@@ -177,7 +181,7 @@ export default function CharacterCustomizer({
             <h3 className="text-[11px] font-bold uppercase tracking-widest opacity-80 mb-2 text-center">{lang === 'es' ? 'Color' : 'Color'}</h3>
             <div className="flex flex-col items-center gap-3">
               {visibleRows.map((row) => (
-                <ColorWell key={row.key} label={row.label} value={colors[row.key]} onChange={(v) => update(row.key, v)} />
+                <ColorWell key={row.key} label={row.label} value={colors[row.key]} onChange={(v) => update(row.key, v)} lados={LADOS_COLUMNA} />
               ))}
             </div>
             {/* Reset + Randomize (solo Custom) — botones circulares flotantes.

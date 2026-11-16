@@ -734,7 +734,7 @@ export default function DesktopWallpaper({ lista = false, onSalir, fondo, onFond
         )}
         {herramienta === 'fondo' && (
           <div className="dwp-fondo">
-            <ColorWell label={fondo.toUpperCase()} value={fondo} onChange={elegirFondo} />
+            <ColorWell label={fondo.toUpperCase()} titulo={t('customizer.wallBg')} value={fondo} onChange={elegirFondo} />
           </div>
         )}
       </div>
