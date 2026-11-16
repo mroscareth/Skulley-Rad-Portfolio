@@ -54,6 +54,10 @@ export default function CameraController({
 }) {
   const { camera, gl } = useThree()
   const controlsRef = useRef()
+  // De frente (Customize, primer plano) el arrastre no gira la cámara del juego:
+  // seguía sonando el swipe y la dejaba girada al salir (Oscar).
+  const deFrenteRef = useRef(false)
+  deFrenteRef.current = customizeActive || primerPlano
   const followOffset = useMemo(() => new THREE.Vector3(0, 2.4, -5.2), [])
   const targetOffset = useMemo(() => new THREE.Vector3(0, 1.6, 0), [])
   
@@ -397,7 +401,8 @@ export default function CameraController({
       try { window.dispatchEvent(new CustomEvent('camera-grab', { detail: { state } })) } catch { }
     }
     const updateCursor = () => {
-      if (dragging) setCursor('grabbing')
+      if (deFrenteRef.current) setCursor('')
+      else if (dragging) setCursor('grabbing')
       else if (hovering) setCursor('grab')
       else setCursor('')
     }
@@ -406,6 +411,7 @@ export default function CameraController({
     const onLeave = () => { hovering = false; if (!dragging) updateCursor() }
     const onDown = (e) => {
       if (e.button !== 0) return // solo click izquierdo
+      if (deFrenteRef.current) return
       // Si la escena ya capturó este drag (ej. user agarró una esfera de
       // HomeOrbs), NO iniciamos rotación de cámara. R3F dispatchea sus
       // onPointerDown sintéticos antes que este listener nativo, así que la
@@ -439,8 +445,9 @@ export default function CameraController({
         return
       }
       const dx = e.clientX - startX
-      // Si hubo pinch durante esta secuencia, no commitear rotación.
-      if (!topDownPinchActiveRef.current && Math.abs(dx) > TOP_DOWN_DRAG_THRESHOLD_PX) {
+      // Si hubo pinch durante esta secuencia, no commitear rotación; tampoco si
+      // a media arrastrada se abrió Customize.
+      if (!topDownPinchActiveRef.current && !deFrenteRef.current && Math.abs(dx) > TOP_DOWN_DRAG_THRESHOLD_PX) {
         // Drag derecha → cámara CW (yaw negativo); drag izquierda → CCW.
         // Invertido vs versión inicial.
         topDownYawTargetRef.current -= Math.sign(dx) * (Math.PI / 2)
@@ -474,6 +481,13 @@ export default function CameraController({
       setCursor('') // reset al salir de top-down
     }
   }, [mode, gl])
+
+  // Al entrar de frente con el mouse encima, la mano de "agarrar" se iba hasta
+  // el siguiente movimiento.
+  useEffect(() => {
+    if (!customizeActive && !primerPlano) return
+    try { window.dispatchEvent(new CustomEvent('camera-grab', { detail: { state: '' } })) } catch { }
+  }, [customizeActive, primerPlano])
 
   // Place the camera behind the player on mount. Solo al inicio: en cada cambio de
   // modo la teletransportaba antes de que empezara el barrido.
