@@ -680,6 +680,21 @@ const OJOS = {
   rebote: 0.45,
 }
 const esUi = (t) => !!t?.closest?.('button, a, input, textarea, select, [role="button"]')
+// Los lentes de Customize tapan los ojos: picarlos los tira (Oscar,
+// 2026-11-17), para que se puedan picar los ojos. Saltan hacia la cámara, caen
+// girando, rebotan en el piso y ahí se quedan. Regresan a la cara al
+// empezar la historia (a oscuras) o al abrir el personalizador del teléfono,
+// donde su botón tiene que decir la verdad. La copia que cae no necesita
+// montarse antes: es el material de los lentes sin esqueleto, que la fase 2 de
+// PrecompilaDesarme ya compiló para el despiece.
+const LENTES_CAEN = {
+  salto: 2.4,        // m/s hacia arriba
+  frente: 1.1,       // m/s hacia la cámara
+  lado: 0.35,        // m/s de lado, al azar
+  giro: 9,           // rad/s al salir
+  rebote: 0.35,
+  asienta: 6,        // qué tan rápido se acomodan ya en el piso
+}
 
 // Rojo puro mientras dura el destello: el color base se apaga y manda el
 // emisivo (sumado al amarillo del ojo salía naranja). Al apagarse regresa lo
@@ -700,12 +715,121 @@ function destello(ojo, on) {
   }
 }
 
-function PicarOjos({ modelo, rigRef, escenaRef, fitRef, activoAhora }) {
+function PicarOjos({ modelo, rigRef, escenaRef, fitRef, activoAhora, personalizaRef }) {
   const { gl, camera } = useThree()
   const ojosRef = useRef([])
   const punteroRef = useRef({ x: 0, y: 0, sucio: false, ultimo: 0, encima: false })
   const activoRef = useRef(false)
   const tmp = useMemo(() => ({ s: new THREE.Sphere(), v: new THREE.Vector3(), c: new THREE.Vector3() }), [])
+
+  // Los lentes (si el personaje los trae): la malla, su caja de reposo y la
+  // copia que cae, fuera de la escena hasta que se tiran.
+  const lentesRef = useRef(null)
+  useEffect(() => {
+    let malla = null
+    modelo.traverse((o) => { if (!malla && o.userData?.accesorio === 'lentes' && o.isSkinnedMesh) malla = o })
+    if (!malla) { lentesRef.current = null; return undefined }
+    malla.geometry.computeBoundingBox()
+    const copia = new THREE.Mesh(new THREE.BufferGeometry(), malla.material)
+    copia.frustumCulled = false
+    // la tinta y la sombra la tratan como una pieza del despiece
+    copia.userData.__disassembleOwned = true
+    const l = {
+      malla, copia, caja: malla.geometry.boundingBox.clone(),
+      vel: new THREE.Vector3(), giro: new THREE.Vector3(), cae: false, abajo: 0,
+      M: new THREE.Matrix4(), esquina: new THREE.Vector3(), cajaCopia: new THREE.Box3(),
+    }
+    lentesRef.current = l
+    return () => {
+      malla.userData.caido = false
+      copia.parent?.remove(copia)
+      copia.geometry.dispose()
+      lentesRef.current = null
+    }
+  }, [modelo])
+  // Dónde están ahora: hueso de la cabeza · su inverso (bindMode 'attached').
+  const matrizLentes = useCallback((l) => {
+    const sk = l.malla.skeleton
+    return l.M.multiplyMatrices(sk.bones[0].matrixWorld, sk.boneInverses[0])
+  }, [])
+  // ¿El puntero cae sobre los lentes? La caja de reposo, puesta y proyectada:
+  // en la pantalla principal la cabeza casi siempre va de frente.
+  const tocaLentes = useCallback((x, y) => {
+    const l = lentesRef.current
+    if (!l || !l.malla.visible || l.malla.userData.caido) return false
+    const rect = gl.domElement.getBoundingClientRect()
+    if (!rect.width) return false
+    const M = matrizLentes(l)
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
+    for (let k = 0; k < 8; k++) {
+      const e = l.esquina.set(k & 1 ? l.caja.max.x : l.caja.min.x, k & 2 ? l.caja.max.y : l.caja.min.y, k & 4 ? l.caja.max.z : l.caja.min.z)
+      e.applyMatrix4(M).project(camera)
+      const sx = rect.left + (e.x + 1) * 0.5 * rect.width
+      const sy = rect.top + (1 - e.y) * 0.5 * rect.height
+      x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); y0 = Math.min(y0, sy); y1 = Math.max(y1, sy)
+    }
+    return x >= x0 && x <= x1 && y >= y0 && y <= y1
+  }, [gl, camera, matrizLentes])
+  // Se hornean en su pose de este cuadro en la copia (en el espacio del
+  // contenedor, centrada) y la original se oculta (FallingSkulley respeta `caido`).
+  const tirarLentes = useCallback(() => {
+    const l = lentesRef.current
+    const rig = rigRef.current
+    if (!l || !rig) return
+    rig.updateMatrixWorld(true)
+    const M = matrizLentes(l)
+    const aRig = rig.matrixWorld.clone().invert().multiply(M)
+    const src = l.malla.geometry
+    const pos = src.attributes.position, nor = src.attributes.normal
+    const arr = new Float32Array(pos.count * 3)
+    const v = new THREE.Vector3()
+    const centro = new THREE.Vector3()
+    for (let i = 0; i < pos.count; i += 1) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(aRig)
+      arr[i * 3] = v.x; arr[i * 3 + 1] = v.y; arr[i * 3 + 2] = v.z
+      centro.add(v)
+    }
+    centro.divideScalar(Math.max(1, pos.count))
+    for (let i = 0; i < pos.count; i += 1) {
+      arr[i * 3] -= centro.x; arr[i * 3 + 1] -= centro.y; arr[i * 3 + 2] -= centro.z
+    }
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.BufferAttribute(arr, 3))
+    if (nor) {
+      const n = new Float32Array(nor.count * 3)
+      const nm = new THREE.Matrix3().getNormalMatrix(aRig)
+      for (let i = 0; i < nor.count; i += 1) {
+        v.fromBufferAttribute(nor, i).applyMatrix3(nm).normalize()
+        n[i * 3] = v.x; n[i * 3 + 1] = v.y; n[i * 3 + 2] = v.z
+      }
+      g.setAttribute('normal', new THREE.BufferAttribute(n, 3))
+    }
+    if (src.index) g.setIndex(src.index.clone())
+    for (const gr of src.groups) g.addGroup(gr.start, gr.count, gr.materialIndex)
+    g.computeBoundingBox()
+    l.copia.geometry.dispose()
+    l.copia.geometry = g
+    l.copia.position.copy(centro)
+    l.copia.rotation.set(0, 0, 0)
+    l.copia.scale.setScalar(1)
+    if (!l.copia.parent) rig.add(l.copia)
+    l.copia.visible = true
+    // en las unidades del contenedor, como la copia del ojo (OJOS.gravedad)
+    l.vel.set((Math.random() - 0.5) * 2 * LENTES_CAEN.lado, LENTES_CAEN.salto, LENTES_CAEN.frente)
+    l.giro.set(-LENTES_CAEN.giro * (0.8 + Math.random() * 0.4), (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 4)
+    l.cae = true
+    l.abajo = 0
+    l.malla.userData.caido = true
+    l.malla.visible = false
+    playEyePop()
+  }, [rigRef, matrizLentes])
+  const reponerLentes = useCallback(() => {
+    const l = lentesRef.current
+    if (!l || !l.malla.userData.caido) return
+    l.malla.userData.caido = false
+    l.cae = false
+    l.copia.parent?.remove(l.copia)
+  }, [])
 
   // Cada ojo es su globo (material "Eyes") y su pupila, emparentados por
   // nombre (Skull043 / Skull043_1), y su copia para volar, fuera de cuadro.
@@ -795,8 +919,14 @@ function PicarOjos({ modelo, rigRef, escenaRef, fitRef, activoAhora }) {
         }
       })
     }
-    return () => { delete window.__ojos }
-  }, [gl, camera, centroDe, tmp])
+    // y `window.__lentesCaidos()`, los lentes tirados
+    window.__lentesCaidos = () => {
+      const l = lentesRef.current
+      if (!l) return null
+      return { caido: !!l.malla.userData.caido, cae: l.cae, botes: l.abajo, pos: l.copia.position.toArray().map((n) => +n.toFixed(3)), rot: l.copia.rotation.toArray().slice(0, 3).map((n) => +n.toFixed(2)), piso: fitRef.current?.piso }
+    }
+    return () => { delete window.__ojos; delete window.__lentesCaidos }
+  }, [gl, camera, centroDe, tmp, fitRef])
 
   // El ojo se hornea en su pose de este cuadro (con la piel aplicada) en la
   // copia rígida, en el espacio del contenedor, y la original se oculta.
@@ -861,6 +991,8 @@ function PicarOjos({ modelo, rigRef, escenaRef, fitRef, activoAhora }) {
       const e = escenaRef?.current
       if (!activoAhora() || e?.pausa != null) return
       if (ev.button !== 0 || esUi(ev.target)) return
+      // con lentes, primero se caen ellos (tapan los ojos)
+      if (tocaLentes(ev.clientX, ev.clientY)) { tirarLentes(); return }
       const ojo = tocado(ev.clientX, ev.clientY)
       if (!ojo) return
       ojo.piquetes += 1
@@ -879,10 +1011,62 @@ function PicarOjos({ modelo, rigRef, escenaRef, fitRef, activoAhora }) {
       window.removeEventListener('pointermove', mueve)
       if (punteroRef.current.encima) document.body.style.cursor = ''
     }
-  }, [escenaRef, tocado, saltar, activoAhora])
+  }, [escenaRef, tocado, saltar, activoAhora, tocaLentes, tirarLentes])
+
+  // Caen girando, rebotan contra lo más bajo de su caja (girada) y, ya casi
+  // quietos en el piso, se asientan como unos lentes abiertos sobre una mesa:
+  // de pie sobre los aros y las patas, derechos o de cabeza, lo que quede más
+  // cerca (con las micas hacia arriba las patas se clavaban en el piso).
+  const caerLentes = (l, dt) => {
+    if (dt <= 0) return
+    const c = l.copia
+    l.vel.y -= OJOS.gravedad * dt
+    c.position.addScaledVector(l.vel, dt)
+    c.rotation.x += l.giro.x * dt
+    c.rotation.y += l.giro.y * dt
+    c.rotation.z += l.giro.z * dt
+    c.updateMatrix()
+    const piso = fitRef.current?.piso ?? 0
+    const bajo = l.cajaCopia.copy(c.geometry.boundingBox).applyMatrix4(c.matrix).min.y
+    if (bajo < piso) {
+      c.position.y += piso - bajo
+      if (l.vel.y < 0) {
+        const golpe = -l.vel.y
+        l.vel.y = golpe * LENTES_CAEN.rebote
+        l.vel.x *= 0.6
+        l.vel.z *= 0.6
+        l.giro.multiplyScalar(0.5)
+        l.abajo += 1
+        if (golpe > 0.8) playOrbBounce(Math.min(1, golpe / 4) * 0.5, 0.06)
+      }
+    }
+    if (l.abajo > 0 && bajo <= piso + 0.02 && Math.abs(l.vel.y) < 0.8) {
+      const k = 1 - Math.exp(-LENTES_CAEN.asienta * dt)
+      const ax = Math.round(c.rotation.x / Math.PI) * Math.PI
+      const az = Math.round(c.rotation.z / Math.PI) * Math.PI
+      c.rotation.x += (ax - c.rotation.x) * k
+      c.rotation.z += (az - c.rotation.z) * k
+      l.giro.multiplyScalar(1 - k)
+      l.vel.x *= 1 - k
+      l.vel.z *= 1 - k
+      if (l.vel.lengthSq() < 0.002 && Math.abs(ax - c.rotation.x) < 0.01 && Math.abs(az - c.rotation.z) < 0.01) {
+        c.rotation.x = ax
+        c.rotation.z = az
+        l.cae = false
+      }
+    }
+  }
 
   useFrame((_, delta) => {
     const e = escenaRef?.current
+    // Los lentes tirados siguen cayendo aunque ya no se pueda picar (en la
+    // entrada a las experiencias se quedan en el piso) y regresan a la cara
+    // con el personalizador del teléfono abierto o ya a oscuras en la historia.
+    const l = lentesRef.current
+    if (l?.malla.userData.caido) {
+      if (personalizaRef?.current?.eligeSkin || (e?.enHistoria && (e.ambiente ?? 1) < 0.3)) reponerLentes()
+      else if (l.cae && e?.pausa == null) caerLentes(l, Math.min(0.05, delta || 0))
+    }
     if (!e || !activoAhora()) {
       if (activoRef.current) reponer()
       return
@@ -898,7 +1082,7 @@ function PicarOjos({ modelo, rigRef, escenaRef, fitRef, activoAhora }) {
     if (p.sucio && ahora - p.ultimo > 90) {
       p.sucio = false
       p.ultimo = ahora
-      const encima = !enPausa && !!tocado(p.x, p.y) && !esUi(document.elementFromPoint(p.x, p.y))
+      const encima = !enPausa && (tocaLentes(p.x, p.y) || !!tocado(p.x, p.y)) && !esUi(document.elementFromPoint(p.x, p.y))
       if (encima !== p.encima) {
         p.encima = encima
         document.body.style.cursor = encima ? 'pointer' : ''
@@ -2240,7 +2424,8 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
       const luz = e?.ambiente ?? 1
       if ((luz < 0.3 && (e?.foco ?? 0) < 0.05) || (deseado && luz >= 0.999)) pr.mostrar = deseado
     }
-    for (const m of pr.mallas) m.visible = pr.mostrar && !!pr.estado[m.userData.accesorio]
+    // `caido`: los lentes que se tiraron picándolos (PicarOjos)
+    for (const m of pr.mallas) m.visible = pr.mostrar && !!pr.estado[m.userData.accesorio] && !m.userData.caido
     const b = pr.boxers
     const conBoxers = Boolean(b?.visible && liveRef.current?.visible !== false)
     const manos = cloned.userData.apartaManos
@@ -2276,7 +2461,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
           <meshBasicMaterial color="#ff6b00" toneMapped={false} />
         </mesh>
       )}
-      {escenaRef && <PicarOjos modelo={cloned} rigRef={rigRef} escenaRef={escenaRef} fitRef={fitRef} activoAhora={ojosActivos} />}
+      {escenaRef && <PicarOjos modelo={cloned} rigRef={rigRef} escenaRef={escenaRef} fitRef={fitRef} activoAhora={ojosActivos} personalizaRef={personalizaRef} />}
       {/* En la pantalla principal la cabeza y los ojos siguen un poco al
           cursor, como el retrato (Oscar). Solo con mouse: con el dedo seguiría
           al scroll. Fuera de ahí se suelta para no pelear con el numerito. */}
