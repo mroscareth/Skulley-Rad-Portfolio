@@ -1578,14 +1578,17 @@ function SiteApp() {
   // Close menu overlay with Escape
   useEffect(() => {
     if (!menuOpen) return undefined
+    // Marca la tecla como usada para que el Escape de la sección (en window) no
+    // te saque de ella al cerrar el menú. Llamaba a un setMenuOpen que aquí no
+    // existe y el try/catch se tragaba el error: Escape nunca cerró este menú.
     const onKeyDown = (e) => {
-      try {
-        if (e.key === 'Escape') setMenuOpen(false)
-      } catch { }
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      e.preventDefault()
+      closeMenuAnimated()
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [menuOpen])
+  }, [menuOpen, closeMenuAnimated])
 
   // Minimal preload: only the main character for fast entry.
   // bootAllDone es una señal REAL: DefaultLoadingManager.onLoad dispara cuando

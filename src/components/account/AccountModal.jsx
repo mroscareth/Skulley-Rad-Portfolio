@@ -68,9 +68,15 @@ export default function AccountModal({
 
   useEffect(() => {
     if (!open) return
-    const onKey = (e) => { if (e.key === 'Escape') onClose?.() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    // En captura y marcando la tecla como usada: el Escape de App (salir de la
+    // sección) la escucha en window, y abierta desde la tienda te sacaba de ella.
+    const onKey = (e) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      e.preventDefault()
+      onClose?.()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [open, onClose])
 
   useEffect(() => {

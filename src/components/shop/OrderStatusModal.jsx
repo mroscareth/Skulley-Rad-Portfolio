@@ -103,9 +103,15 @@ export default function OrderStatusModal() {
 
   useEffect(() => {
     if (!token) return
-    const onKey = (e) => { if (e.key === 'Escape') close() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    // En captura y marcando la tecla como usada: si no, el Escape de App también
+    // te sacaba de la tienda al cerrar el estado del pedido.
+    const onKey = (e) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      e.preventDefault()
+      close()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   })
 
   const close = () => {

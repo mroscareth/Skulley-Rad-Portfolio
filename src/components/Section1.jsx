@@ -96,6 +96,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
   const [detailOpening, setDetailOpening] = React.useState(false)
   const openTimerRef = React.useRef(null)
   const closeTimerRef = React.useRef(null)
+  const emitiendoCierreRef = React.useRef(false)
   const [hover, setHover] = React.useState({ active: false, title: '', x: 0, y: 0 })
   const listRef = React.useRef(null)
   const detailOverlayRef = React.useRef(null)
@@ -260,8 +261,12 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
     setDetailSlug(null)
     // Notify parent to update URL (back to /work)
     if (typeof onSlugChange === 'function') onSlugChange(null)
-    // Notify immediately to reactivate marquee
-    try { window.dispatchEvent(new CustomEvent('detail-close')) } catch { }
+    // Notify immediately to reactivate marquee. El aviso también le llega al
+    // listener de abajo (el del botón de regreso del retrato): sin la bandera
+    // closeDetail se llamaba a sí mismo hasta reventar la pila y dejaba decenas
+    // de cierres en cola.
+    emitiendoCierreRef.current = true
+    try { window.dispatchEvent(new CustomEvent('detail-close')) } catch { } finally { emitiendoCierreRef.current = false }
     // Wait for overlay exit animation
     closeTimerRef.current = setTimeout(() => {
       setDetailProject(null)
@@ -348,9 +353,23 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
     return () => { cancelled = true }
   }, [detailSlug])
 
+  // Escape cierra la ficha aunque el foco no esté en ella, y la marca como usada
+  // para que el Escape de App (en window) no te saque de Work. Va en document y
+  // no en captura: así un modal encima (Mi cuenta, el reproductor) la usa primero.
+  React.useEffect(() => {
+    if (!detailSlug) return undefined
+    const onKey = (e) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      e.preventDefault()
+      closeDetail()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [detailSlug])
+
   // Close detail when portrait emits the back event
   React.useEffect(() => {
-    const onBack = () => closeDetail()
+    const onBack = () => { if (!emitiendoCierreRef.current) closeDetail() }
     window.addEventListener('detail-close', onBack)
     return () => window.removeEventListener('detail-close', onBack)
   }, [])
@@ -497,7 +516,6 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
             aria-modal="true"
             aria-labelledby={projTitle ? 'project-detail-title' : undefined}
             onClick={(e) => { if (e.target === e.currentTarget) closeDetail() }}
-            onKeyDown={(e) => { if (e.key === 'Escape') closeDetail() }}
             tabIndex={-1}
           >
             <ProjectDetailArticle

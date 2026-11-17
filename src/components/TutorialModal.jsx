@@ -56,9 +56,15 @@ function TutorialModal({ t, open, onClose, tactil = false }) {
 
   useEffect(() => {
     if (!open) return undefined
-    const onKeyDown = (e) => { if (e?.key === 'Escape') salirRef.current(onClose) }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    // En captura y marcando la tecla como usada: se abre también desde el engrane
+    // dentro de una sección, y el Escape de App (en window) te sacaba de ella.
+    const onKeyDown = (e) => {
+      if (e?.key !== 'Escape' || e.defaultPrevented) return
+      e.preventDefault()
+      salirRef.current(onClose)
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [open, onClose])
 
   // El foco entra a la caja y no al botón: así probar la barra espaciadora no
