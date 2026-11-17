@@ -127,13 +127,14 @@ function texturas() {
   tela.wrapS = tela.wrapT = THREE.RepeatWrapping
   tela.colorSpace = THREE.SRGBColorSpace
   tela.anisotropy = 4
-  // El elástico: blanco con dos rayas rojas (su v va de 0 abajo a 1 arriba).
+  // El elástico: blanco con dos rayas rojas. Su v va de 0 arriba a 1 abajo
+  // (3 cm de banda) y el canvas se voltea: la fila de arriba es v = 1. De
+  // 3 mm casi no se veían; van de 5 mm.
   const e = document.createElement('canvas'); e.width = 16; e.height = 64
   const ex = e.getContext('2d')
   ex.fillStyle = TELA; ex.fillRect(0, 0, 16, 64)
   ex.fillStyle = TINTA_CORAZON
-  ex.fillRect(0, 64 * (1 - 0.34) - 3, 16, 6)
-  ex.fillRect(0, 64 * (1 - 0.70) - 3, 16, 6)
+  for (const v of [0.3, 0.68]) ex.fillRect(0, 64 * (1 - v) - 5, 16, 10)
   const elastico = new THREE.CanvasTexture(e)
   elastico.wrapS = elastico.wrapT = THREE.RepeatWrapping
   elastico.colorSpace = THREE.SRGBColorSpace

@@ -32,8 +32,22 @@ const INERCIA = 0.25         // parte del movimiento de la cadera (avance y giro
 const HOLGURA = 0.02         // m que se puede alejar de su posición animada (dobladillo)
 const FIJA_DESDE = 0.70      // m de alto (reposo): de ahí para arriba va pegada (el elástico)
 const LIBRE_DESDE = 0.545    // m: de ahí para abajo, toda la holgura
-const RADIO_FEMUR = 0.066    // m: el fémur (0.057) más el grueso de la tela
+const RADIO_FEMUR = 0.056    // m: el muslo (0.050 a la altura del dobladillo, medido) más el grueso de la tela
 const PELVIS = { c: [0, 0.6575, -0.005], r: [0.172, 0.072, 0.163] }
+// La pierna del bóxer cuelga. Girando completa con el muslo, en el idle (el
+// muslo derecho 29° adelante y 20° afuera de la pelvis) el dobladillo se
+// levantaba como pantalla de lámpara. Lo que lleva el muslo gira solo una
+// parte de su giro respecto a la pelvis (de COLGAR_MIN para arriba) y, si así
+// el muslo llega a la tela del dobladillo por dentro, empuja la pierna entera
+// lo que se mete (hasta EMPUJE; más allá, la pierna gira más con él). El
+// hueco por dentro se mide de la malla en cada dirección. Lo que no se hizo:
+// dejar que solo el choque la sacara (la doblaba en pico y el muslo parecía
+// salirse por el frente) ni trasladar cada anillo centrado en el muslo
+// (regresaba el ala: el muslo abierto la empujaba afuera aunque no la tocara).
+const COLGAR_MIN = 0.4
+const EMPUJE = 0.03          // m que el muslo puede empujar el dobladillo antes de que la pierna gire más
+const MARGEN_COLGAR = 0.006  // m de aire entre el muslo (con su radio de choque) y la tela
+const SECTORES = 16
 
 const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t) }
 
@@ -94,6 +108,8 @@ export class TelaProp {
     this.x = new Float32Array(P * 3); this.v = new Float32Array(P * 3)
     this.T = new Float32Array(P * 3); this.tmp = new Float32Array(P * 3)
     this.bind = new Float32Array(P * 3); this.nor = new Float32Array(P * 3)
+    // de qué lado de cada fémur quedó cada partícula (pose animada y tela)
+    this.ladoT = new Float32Array(P * 6); this.ladoX = new Float32Array(P * 6)
     // reposo de los huesos (relativo a la raíz de la escena)
     this.Rinv = d.reposos.map((m) => m.clone().invert())
     this.Rel0 = [1, 2].map((s) => new THREE.Matrix4().multiplyMatrices(this.Rinv[0], d.reposos[s]))
@@ -104,7 +120,41 @@ export class TelaProp {
       const m = new THREE.Matrix4().copy(d.huesos[1 + k].matrixWorld).invert().multiply(b.matrixWorld)
       return new THREE.Vector3().setFromMatrixPosition(new THREE.Matrix4().multiplyMatrices(d.reposos[1 + k], m))
     })
-    this.M = Array.from({ length: 5 }, () => new THREE.Matrix4())
+    // El dobladillo de cada pierna: dónde queda el eje del muslo a esa altura y,
+    // por dirección alrededor de él (SECTORES, 0 = afuera, en el plano del
+    // piso), cuánto hay del eje a la tela por dentro.
+    this.dobladillo = [0, 1].map((k) => {
+      const a = this.cadera[k], b = this.rodilla[k], sg = Math.sign(a.x) || 1
+      const eje = new THREE.Vector3().subVectors(b, a)
+      const L2 = eje.lengthSq()
+      let ymin = Infinity
+      for (let p = 0; p < P; p++) if (this.pr[p * 3] * sg > 0.01) ymin = Math.min(ymin, this.pr[p * 3 + 1])
+      const hueco = new Float32Array(SECTORES).fill(Infinity)
+      let tMed = 0, nT = 0
+      for (let p = 0; p < P; p++) {
+        const i = p * 3
+        if (this.pr[i] * sg <= 0.01 || this.pr[i + 1] > ymin + 0.012) continue
+        const t = ((this.pr[i] - a.x) * eje.x + (this.pr[i + 1] - a.y) * eje.y + (this.pr[i + 2] - a.z) * eje.z) / L2
+        tMed += t; nT++
+        const rx = (this.pr[i] - a.x - eje.x * t) * sg, rz = this.pr[i + 2] - a.z - eje.z * t
+        const sec = Math.round(Math.atan2(rz, rx) / (2 * Math.PI) * SECTORES + SECTORES) % SECTORES
+        hueco[sec] = Math.min(hueco[sec], Math.hypot(rx, rz))
+      }
+      for (let it = 0; it < SECTORES && hueco.includes(Infinity); it++) {
+        for (let s = 0; s < SECTORES; s++) {
+          if (hueco[s] !== Infinity) continue
+          const v = Math.min(hueco[(s + 1) % SECTORES], hueco[(s + SECTORES - 1) % SECTORES])
+          if (v !== Infinity) hueco[s] = v
+        }
+      }
+      return { sg, hueco, punto: a.clone().addScaledVector(eje, nT ? tMed / nT : 0.67) }
+    })
+    this.colgar = new Float32Array(2)   // la parte del giro que sigue cada pierna (para revisar)
+    this.empuje = new Float32Array(6)   // lo que el muslo empuja cada pierna, en mundo
+    this.metido = new Float32Array(3)   // _hueco: lo que se mete el muslo y hacia dónde (reposo de la tela)
+    // 0–2 piel (pelvis y muslos), 3–4 prop_cadera (mitad), 5–6 muslos colgando
+    this.M = Array.from({ length: 7 }, () => new THREE.Matrix4())
+    this._m = new THREE.Matrix4(); this._c = new THREE.Vector3()
     this.Mi = Array.from({ length: 3 }, () => new THREE.Matrix4())
     this._a = new THREE.Matrix4(); this._b = new THREE.Matrix4()
     this._p0 = new THREE.Vector3(); this._p1 = new THREE.Vector3(); this._q0 = new THREE.Quaternion(); this._q1 = new THREE.Quaternion()
@@ -141,19 +191,75 @@ export class TelaProp {
   _matrices() {
     const { huesos } = this.d
     for (let j = 0; j < 3; j++) this.M[j].multiplyMatrices(huesos[j].matrixWorld, this.Rinv[j])
-    // prop_cadera: la mitad del giro del muslo respecto a la pelvis
-    const Pw = huesos[0].matrixWorld
-    const Pinv = this._a.copy(Pw).invert()
     for (let s = 0; s < 2; s++) {
-      const rel = this._b.multiplyMatrices(Pinv, huesos[1 + s].matrixWorld)
-      this.Rel0[s].decompose(this._p0, this._q0, this._s0)
-      rel.decompose(this._p1, this._q1, this._s1)
-      this._p0.lerp(this._p1, 0.5); this._q0.slerp(this._q1, 0.5); this._s0.lerp(this._s1, 0.5)
-      rel.compose(this._p0, this._q0, this._s0)
-      this.M[3 + s].multiplyMatrices(Pw, rel).multiply(this.Rinv[1 + s])
-      Pinv.copy(Pw).invert()
+      // prop_cadera: la mitad del giro del muslo respecto a la pelvis
+      this._fraccion(s, 0.5, this.M[3 + s])
+      // colgando: lo menos que deja al muslo empujando a lo más EMPUJE
+      let f = COLGAR_MIN
+      if (this._hueco(s, f) > EMPUJE) {
+        let lo = f, hi = 1
+        for (let it = 0; it < 7; it++) { const m = 0.5 * (lo + hi); if (this._hueco(s, m) <= EMPUJE) hi = m; else lo = m }
+        f = hi
+      }
+      this.colgar[s] = f
+      // y lo que empuja, a mundo (la pierna se mueve entera eso)
+      const e = this._hueco(s, f)
+      this._fraccion(s, f, this.M[5 + s])
+      const o = s * 3
+      if (e > 0) {
+        const db = this.dobladillo[s], m = this.metido
+        this._c.set(db.punto.x + m[0] * e * db.sg, db.punto.y, db.punto.z + m[2] * e).applyMatrix4(this.M[5 + s])
+        this._p0.copy(db.punto).applyMatrix4(this.M[5 + s])
+        this.empuje[o] = this._c.x - this._p0.x; this.empuje[o + 1] = this._c.y - this._p0.y; this.empuje[o + 2] = this._c.z - this._p0.z
+      } else {
+        this.empuje[o] = this.empuje[o + 1] = this.empuje[o + 2] = 0
+      }
     }
     for (let j = 0; j < 3; j++) this.Mi[j].copy(this.M[j]).invert()
+  }
+
+  // La matriz de piel de un muslo que sigue `f` de su giro respecto a la pelvis.
+  _fraccion(s, f, out) {
+    const { huesos } = this.d
+    const Pw = huesos[0].matrixWorld
+    const rel = this._b.copy(Pw).invert().multiply(huesos[1 + s].matrixWorld)
+    this.Rel0[s].decompose(this._p0, this._q0, this._s0)
+    rel.decompose(this._p1, this._q1, this._s1)
+    this._p0.lerp(this._p1, f); this._q0.slerp(this._q1, f); this._s0.lerp(this._s1, f)
+    rel.compose(this._p0, this._q0, this._s0)
+    return out.multiplyMatrices(Pw, rel).multiply(this.Rinv[1 + s])
+  }
+
+  // Con la pierna siguiendo `f`, cuánto se mete el muslo en la tela del
+  // dobladillo (negativo: le sobra aire). El muslo de verdad, visto desde la
+  // tela en su reposo, cruza el plano del dobladillo en un elipse (más largo
+  // entre más inclinado: con el muslo adelante, lo que llega primero al frente
+  // es lo de cerca de la rodilla); se compara contra el hueco en cada
+  // dirección. Deja en `metido` hacia dónde se mete más (unitario, en el
+  // plano del piso; x hacia afuera).
+  _hueco(s, f) {
+    const db = this.dobladillo[s], m = this.metido
+    this._fraccion(s, f, this._m).invert()
+    const A = this._c.copy(this.cadera[s]).applyMatrix4(this.M[1 + s]).applyMatrix4(this._m)
+    const B = this._p0.copy(this.rodilla[s]).applyMatrix4(this.M[1 + s]).applyMatrix4(this._m)
+    let ux = B.x - A.x, uy = B.y - A.y, uz = B.z - A.z
+    const L = Math.hypot(ux, uy, uz) || 1
+    ux /= L; uy /= L; uz /= L
+    const cosA = Math.max(Math.abs(uy), 0.2)
+    const t = Math.min(L, Math.max(0, (db.punto.y - A.y) / (uy || -1e-6)))
+    // dónde cruza el eje, respecto al centro del dobladillo (x hacia afuera)
+    const qx = (A.x + ux * t - db.punto.x) * db.sg, qz = A.z + uz * t - db.punto.z
+    // hacia dónde se inclina, en el piso
+    const hx = ux * db.sg, hz = uz, hl = Math.hypot(hx, hz) || 1
+    const ra = RADIO_FEMUR / cosA, rb = RADIO_FEMUR
+    let peor = -Infinity
+    for (let k = 0; k < SECTORES; k++) {
+      const ang = (k / SECTORES) * 2 * Math.PI, nx = Math.cos(ang), nz = Math.sin(ang)
+      const c = (nx * hx + nz * hz) / hl, sn = (nz * hx - nx * hz) / hl
+      const e = qx * nx + qz * nz + Math.sqrt(ra * ra * c * c + rb * rb * sn * sn) + MARGEN_COLGAR - db.hueco[k]
+      if (e > peor) { peor = e; m[0] = nx; m[1] = 0; m[2] = nz }
+    }
+    return peor
   }
 
   _objetivos() {
@@ -167,7 +273,14 @@ export class TelaProp {
       for (let c = 0; c < 4; c++) {
         const w = cpuW[v * 4 + c]
         if (w <= 0) continue
-        const e = this.M[cpuIdx[v * 4 + c]].elements
+        let j = cpuIdx[v * 4 + c]
+        if (j === 1 || j === 2) {
+          // lo que lleva el muslo va colgando (M[5], M[6]) y empujado por él
+          const o = (j - 1) * 3
+          tx += w * this.empuje[o]; ty += w * this.empuje[o + 1]; tz += w * this.empuje[o + 2]
+          j += 4
+        }
+        const e = this.M[j].elements
         tx += w * (e[0] * x + e[4] * y + e[8] * z + e[12])
         ty += w * (e[1] * x + e[5] * y + e[9] * z + e[13])
         tz += w * (e[2] * x + e[6] * y + e[10] * z + e[14])
@@ -178,7 +291,11 @@ export class TelaProp {
 
   // Empuja fuera de la pelvis y de los fémures, en el reposo de cada hueso
   // (ahí la pelvis es un elipsoide fijo y cada fémur una cápsula fija).
-  _choca(p, x) {
+  // Del fémur sale por el lado por donde venía (`lado`, uno para la pose
+  // animada y otro para la tela): al correr, el muslo sube 76° contra el frente
+  // y la pose animada le pasa por el centro; sacándola por lo más cerca, la
+  // tela brincaba al otro lado del muslo.
+  _choca(p, x, lado) {
     const i = p * 3
     const mask = this.choques[p]
     for (let h = 0; h < 3; h++) {
@@ -201,11 +318,17 @@ export class TelaProp {
         let t = ((ux - a.x) * abx + (uy - a.y) * aby + (uz - a.z) * abz) / (abx * abx + aby * aby + abz * abz)
         t = t < 0 ? 0 : t > 1 ? 1 : t
         const cx = a.x + abx * t, cy = a.y + aby * t, cz = a.z + abz * t
-        const dx = ux - cx, dy = uy - cy, dz = uz - cz
+        let dx = ux - cx, dy = uy - cy, dz = uz - cz
         const l = Math.sqrt(dx * dx + dy * dy + dz * dz)
-        if (l >= RADIO_FEMUR || l < 1e-6) continue
-        const k = RADIO_FEMUR / l
-        nx = cx + dx * k; ny = cy + dy * k; nz = cz + dz * k
+        const o = (p * 2 + h - 1) * 3
+        const px = lado[o], py = lado[o + 1], pz = lado[o + 2]
+        if (l > 1e-6) { dx /= l; dy /= l; dz /= l }
+        if (l >= RADIO_FEMUR) { lado[o] = dx; lado[o + 1] = dy; lado[o + 2] = dz; continue }
+        // adentro: si quedó del otro lado del eje, sale por donde venía
+        if ((px !== 0 || py !== 0 || pz !== 0) && (l <= 1e-6 || dx * px + dy * py + dz * pz < 0)) { dx = px; dy = py; dz = pz }
+        else if (l <= 1e-6) continue
+        lado[o] = dx; lado[o + 1] = dy; lado[o + 2] = dz
+        nx = cx + dx * RADIO_FEMUR; ny = cy + dy * RADIO_FEMUR; nz = cz + dz * RADIO_FEMUR
       }
       const f = this.M[h].elements
       x[i] = f[0] * nx + f[4] * ny + f[8] * nz + f[12]
@@ -222,9 +345,6 @@ export class TelaProp {
     this._matrices()
     this._objetivos()
     const T = this.T, x = this.x, v = this.v, r = this.r, P = this.P
-    // La pose animada también sale de los fémures (al correr la piel los cruza):
-    // si el resorte jalara hacia adentro y el choque sacara, temblaría.
-    for (let p = 0; p < P; p++) if (r[p] > 0) this._choca(p, T)
     const esc = Math.hypot(this.M[0].elements[0], this.M[0].elements[1], this.M[0].elements[2])
     // lo que se movió la pelvis desde el cuadro anterior (avance y giro)
     const D = this.D.multiplyMatrices(this.M[0], this.M0prev)
@@ -233,9 +353,14 @@ export class TelaProp {
     const cadera = this._p1.setFromMatrixPosition(raiz.matrixWorld)
     const salto = cadera.distanceTo(this.caderaPrev)
     this.caderaPrev.copy(cadera)
-    if (this.nueva || dt > 0.1 || salto > 0.5 * esc) {
+    const reinicia = this.nueva || dt > 0.1 || salto > 0.5 * esc
+    if (reinicia) this.ladoT.fill(0)
+    // La pose animada también sale de los fémures (al correr la piel los cruza):
+    // si el resorte jalara hacia adentro y el choque sacara, temblaría.
+    for (let p = 0; p < P; p++) if (r[p] > 0) this._choca(p, T, this.ladoT)
+    if (reinicia) {
       x.set(T); v.fill(0); this.nueva = false
-      for (let p = 0; p < P; p++) if (r[p] > 0) this._choca(p, x)
+      this.ladoX.set(this.ladoT)
     } else {
       // la tela acompaña ese movimiento menos la parte de inercia
       const e = D.elements, k = 1 - INERCIA
@@ -290,7 +415,7 @@ export class TelaProp {
             if (vn > 0) { const f = vn / (lim || 1); v[i] -= dx * f; v[i + 1] -= dy * f; v[i + 2] -= dz * f }
           }
           x[i] = T[i] + dx; x[i + 1] = T[i + 1] + dy; x[i + 2] = T[i + 2] + dz
-          this._choca(p, x)
+          this._choca(p, x, this.ladoX)
         }
       }
     }
