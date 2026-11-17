@@ -1,4 +1,5 @@
 import React, { useEffect, useId, useRef, useState } from 'react'
+import useFocoModal from '../hooks/useFocoModal.js'
 import { BoltIcon, MusicalNoteIcon, PaintBrushIcon, VideoCameraIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
 import { useGlitchRunas, textoGlitch } from '../hooks/useGlitchRunas.js'
@@ -139,6 +140,9 @@ function TutorialModal({ t, open, onClose, tactil = false }) {
     }
   }, [open, tactil])
 
+  const raizRef = useRef(null)
+  useFocoModal(raizRef, open)
+
   if (!open) return null
 
   const encendida = (id) => presionadas.has(id)
@@ -150,7 +154,9 @@ function TutorialModal({ t, open, onClose, tactil = false }) {
 
   return (
     <div
-      className={`fixed inset-0 z-tutorial flex items-stretch sm:items-center justify-center p-0 sm:p-4 lg:p-8${armando ? ' argus-arma' : ''}${saliendo ? ' argus-sale pointer-events-none' : ''}`}
+      ref={raizRef}
+      tabIndex={-1}
+      className={`fixed inset-0 z-tutorial flex items-stretch sm:items-center justify-center p-0 sm:p-4 lg:p-8 outline-none${armando ? ' argus-arma' : ''}${saliendo ? ' argus-sale pointer-events-none' : ''}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby={tituloId}

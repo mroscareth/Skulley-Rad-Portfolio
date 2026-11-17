@@ -4,6 +4,14 @@ import { playSfx } from '../lib/sfx.js'
 import { sectionColors } from '../lib/appHelpers.js'
 import GamepadIcon from './icons/GamepadIcon.jsx'
 import { useGlitchRunas, textoGlitch } from '../hooks/useGlitchRunas.js'
+import useFocoModal from '../hooks/useFocoModal.js'
+
+// Tamaño de las palabras: el de antes (10vw, de 40 a 96 px) y además el alto,
+// para que las cinco con sus espacios quepan en la ventana. Cada palabra mide
+// 0.9 de su letra y el espacio 0.42; el menú completo mide ~6.6 letras más la
+// fila de botones y el aire (~120 px). Debajo de ~390 px de alto queda en el
+// mínimo y el menú se desplaza en lugar de cortarse.
+const MENU_LETRA = 'clamp(2.5rem, min(10vw, 15dvh - 1.15rem), 6rem)'
 
 // Las redes de Oscar. Las usan este menú y el footer de la home de teléfono.
 export const SOCIAL_LINKS = [
@@ -77,12 +85,19 @@ export default function NavOverlay({
   onInicio,
   inicioLabel = 'Back to start',
 }) {
+  const raizRef = React.useRef(null)
+  useFocoModal(raizRef, visible)
   return (
+    // Centrado con márgenes automáticos y no con items-center: si no cabe, se
+    // desplaza en vez de cortarse arriba y abajo.
     <div
+      ref={raizRef}
       id="nav-overlay"
       role="dialog"
       aria-modal="true"
-      className={`fixed inset-0 z-[999996] flex items-center justify-center transition-opacity duration-[260ms] ${visible ? 'opacity-100' : 'opacity-0'} ${visible ? '' : 'pointer-events-none'}`}
+      aria-label={t('a11y.navigationMenu')}
+      tabIndex={-1}
+      className={`fixed inset-0 z-[999996] flex overflow-y-auto overscroll-contain no-native-scrollbar outline-none transition-opacity duration-[260ms] ${visible ? 'opacity-100' : 'opacity-0'} ${visible ? '' : 'pointer-events-none'}`}
       onClick={onClose}
     >
       <style>{`
@@ -96,9 +111,10 @@ export default function NavOverlay({
         }
       `}</style>
       {/* /70 y no /85: con más tinta el blur deja de notarse (DESIGN.md §6.1). */}
-      <div className={`absolute inset-0 bg-black/70 backdrop-blur-xl transition-opacity duration-[260ms] ${visible ? 'opacity-100' : 'opacity-0'}`} />
+      <div className={`fixed inset-0 bg-black/70 backdrop-blur-xl transition-opacity duration-[260ms] ${visible ? 'opacity-100' : 'opacity-0'}`} />
       <div
-        className={`relative pointer-events-auto grid gap-10 w-full max-w-3xl px-8 place-items-center transition-all duration-[260ms] ${visible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-[0.98]'}`}
+        className={`relative m-auto py-6 pointer-events-auto grid w-full max-w-3xl px-8 place-items-center transition-all duration-[260ms] ${visible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-[0.98]'}`}
+        style={{ '--menu-letra': MENU_LETRA, rowGap: 'calc(var(--menu-letra) * 0.42)' }}
         onClick={(e) => e.stopPropagation()}
       >
         {sections.map((id, i) => (
@@ -107,6 +123,7 @@ export default function NavOverlay({
             type="button"
             style={{
               color: sectionColors[id] || '#ffffff',
+              fontSize: 'var(--menu-letra)',
               // Sin text-shadow: los títulos del sitio no llevan sombra ni
               // glow (DESIGN.md §14.2). El trazo sí es tinta.
               WebkitTextStroke: '1.25px rgba(0,0,0,0.40)',
@@ -119,7 +136,7 @@ export default function NavOverlay({
               try { playSfx('click', { volume: 1.0 }) } catch { }
               onSelectSection(id)
             }}
-            className="text-center font-marquee uppercase leading-[0.9] tracking-wide text-[clamp(40px,10vw,96px)] hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+            className="text-center font-marquee uppercase leading-[0.9] tracking-wide hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
           >
             {runasAlEntrar
               ? <PalabraRunas texto={sectionLabel[id]} visible={visible} retrasoMs={itemAnim.inMs + 380 + i * itemAnim.stepMs} />
@@ -128,7 +145,7 @@ export default function NavOverlay({
         ))}
 
         {/* Quick actions row — kept inside the overlay to avoid cluttering the bottom-right corner. */}
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+        <div className="flex flex-wrap items-center justify-center gap-3" style={{ marginTop: 'calc(var(--menu-letra) * 0.25)' }}>
           {typeof onInicio === 'function' && (
             <button
               type="button"

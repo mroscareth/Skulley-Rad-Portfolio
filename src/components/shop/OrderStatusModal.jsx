@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react'
+import useFocoModal from '../../hooks/useFocoModal.js'
 import { createPortal } from 'react-dom'
 import { XMarkIcon, ArrowDownTrayIcon } from '@heroicons/react/24/solid'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
@@ -120,6 +121,10 @@ export default function OrderStatusModal() {
     setOrder(null)
   }
 
+  const raizRef = useRef(null)
+  const tituloId = useId()
+  useFocoModal(raizRef, !!token)
+
   if (!token) return null
 
   const fmt = (n) => formatPriceWithCurrency(n, order?.currency || 'MXN')
@@ -128,7 +133,12 @@ export default function OrderStatusModal() {
 
   return createPortal(
     <div
-      className="fixed inset-0 flex items-stretch sm:items-center justify-center p-0 sm:p-4 lg:p-8 shop-inspect-enter"
+      ref={raizRef}
+      tabIndex={-1}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={tituloId}
+      className="fixed inset-0 flex items-stretch sm:items-center justify-center p-0 sm:p-4 lg:p-8 shop-inspect-enter outline-none"
       style={{ zIndex: 999997 }}
       onPointerDown={(e) => { if (e.target === e.currentTarget) close() }}
     >
@@ -147,7 +157,7 @@ export default function OrderStatusModal() {
 
         <div className="flex-1 overflow-y-auto modal-scroll p-6 sm:p-8 flex flex-col gap-6">
           <div className="pr-12">
-            <h2 className="shop-display shop-display--md">{view.title}</h2>
+            <h2 id={tituloId} className="shop-display shop-display--md">{view.title}</h2>
             {view.body && <p className="text-white/70 text-base leading-relaxed mt-3">{view.body}</p>}
           </div>
 

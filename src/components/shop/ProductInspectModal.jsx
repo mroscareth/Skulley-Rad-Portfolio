@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import useFocoModal from '../../hooks/useFocoModal.js'
 import { createPortal } from 'react-dom'
 import { XMarkIcon, MinusIcon, PlusIcon, ChevronLeftIcon, ChevronRightIcon, ShoppingCartIcon } from '@heroicons/react/24/solid'
 import { findVariantBySelection } from '../../lib/shopProduct.js'
@@ -160,6 +161,9 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
     return () => { document.body.style.overflow = prev }
   }, [product])
 
+  const raizRef = useRef(null)
+  useFocoModal(raizRef, !!product)
+
   if (!product) return null
 
   const selectOption = (optionName, value) => {
@@ -217,7 +221,9 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
   // compite contra el UI global (portrait, music btn, hamburger).
   return createPortal(
     <div
-      className="fixed inset-0 flex items-stretch sm:items-center justify-center p-0 sm:p-4 lg:p-8 shop-inspect-enter"
+      ref={raizRef}
+      tabIndex={-1}
+      className="fixed inset-0 flex items-stretch sm:items-center justify-center p-0 sm:p-4 lg:p-8 shop-inspect-enter outline-none"
       // Tiene que cubrir el retrato (999990) y el grupo flotante de música y
       // menú de mobile (999998): con la barra de compra pegada abajo, ese
       // grupo tapaba el botón. Mismo valor que el grupo; gana porque el

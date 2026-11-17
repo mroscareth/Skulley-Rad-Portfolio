@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useRef } from 'react'
+import useFocoModal from '../hooks/useFocoModal.js'
 import { XMarkIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
@@ -116,6 +117,9 @@ function SphereGameModal({ t, open, onClose, gameActive = false, onStartGame }) 
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [open, onClose])
 
+  const raizRef = useRef(null)
+  useFocoModal(raizRef, open)
+
   if (!open) return null
 
   const handlePlay = () => {
@@ -131,7 +135,9 @@ function SphereGameModal({ t, open, onClose, gameActive = false, onStartGame }) 
 
   return (
     <div
-      className="fixed inset-0 z-modal flex items-stretch sm:items-center justify-center p-0 sm:p-4 lg:p-8"
+      ref={raizRef}
+      tabIndex={-1}
+      className="fixed inset-0 z-modal flex items-stretch sm:items-center justify-center p-0 sm:p-4 lg:p-8 outline-none"
       role="dialog"
       aria-modal="true"
       aria-label={t('spheresTutorial.dialogAria')}

@@ -10,6 +10,7 @@ import ProductMeta from './ProductMeta.jsx'
 import PriceTag from './PriceTag.jsx'
 import HelpLink from '../help/HelpLink.jsx'
 import { removeFromCart, avisarCarrito } from '../../lib/addToCart.js'
+import useFocoModal from '../../hooks/useFocoModal.js'
 import { playCarritoAgregar } from '../../lib/carritoSound.js'
 
 const FOCUS_RING = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e600ff] focus-visible:outline-offset-2'
@@ -45,6 +46,8 @@ export default function ShopCart({
   // backend no va a aplicar.
   const activeDiscount = goldenTicketAvailable ? activeDiscountRaw : null
   const [open, setOpen] = useState(false)
+  const panelRef = useRef(null)
+  useFocoModal(panelRef, open)
   const [checkingOut, setCheckingOut] = useState(false)
   const [checkoutError, setCheckoutError] = useState(null)
   const [buttonPos, setButtonPos] = useState(null)
@@ -291,10 +294,12 @@ export default function ShopCart({
         onClick={onClose}
       />
       <aside
+        ref={panelRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="shop-cart-title"
-        className={`absolute top-0 right-0 bottom-0 w-full max-w-md border-l-2 border-white/12 bg-[#0d0714] text-white flex flex-col transition-transform duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] ${open ? 'translate-x-0' : 'translate-x-full'}`}
+        className={`absolute top-0 right-0 bottom-0 w-full max-w-md outline-none border-l-2 border-white/12 bg-[#0d0714] text-white flex flex-col transition-transform duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] ${open ? 'translate-x-0' : 'translate-x-full'}`}
       >
         <header className="flex items-start justify-between gap-4 px-5 sm:px-7 pt-6 sm:pt-7 pb-5 border-b-2 border-white/10">
           <div className="min-w-0">

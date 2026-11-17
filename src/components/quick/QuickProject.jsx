@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+import useFocoModal from '../../hooks/useFocoModal.js'
 import Lenis from 'lenis'
 import { XMarkIcon } from '@heroicons/react/24/solid'
 import { ProjectDetailArticle, useProjectDetail } from '../work/ProjectDetail.jsx'
@@ -16,6 +17,7 @@ export default function QuickProject({ slug, onCerrar, onLista, lang }) {
   const es = lang === 'es'
   const datos = useProjectDetail(slug)
   const raizRef = useRef(null)
+  useFocoModal(raizRef, true)
   const lenisRef = useRef(null)
   const [lista, setLista] = useState(null)
   const alLista = useCallback((s) => {

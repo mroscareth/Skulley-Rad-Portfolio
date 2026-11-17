@@ -1,4 +1,5 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
+import useFocoModal from '../../hooks/useFocoModal.js'
 import {
   ArrowRightOnRectangleIcon, ArrowTopRightOnSquareIcon, UserCircleIcon,
   ShoppingBagIcon, TicketIcon, CheckCircleIcon, XMarkIcon, ArrowDownTrayIcon,
@@ -86,6 +87,9 @@ export default function AccountModal({
     panelRef.current?.focus({ preventScroll: true })
   }, [open, initialTab, soloTienda])
 
+  const raizRef = useRef(null)
+  useFocoModal(raizRef, open)
+
   if (!open) return null
 
   // Sin íconos: los chips de filtro de la tienda tampoco llevan (H04). Logros
@@ -131,7 +135,9 @@ export default function AccountModal({
 
   return (
     <div
-      className="fixed inset-0 z-[999998] flex items-stretch sm:items-center justify-center p-0 sm:p-4 lg:p-8 shop-inspect-enter"
+      ref={raizRef}
+      tabIndex={-1}
+      className="fixed inset-0 z-[999998] flex items-stretch sm:items-center justify-center p-0 sm:p-4 lg:p-8 shop-inspect-enter outline-none"
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}

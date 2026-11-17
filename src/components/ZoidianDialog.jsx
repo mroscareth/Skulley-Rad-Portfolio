@@ -1,4 +1,5 @@
 import React, { useEffect, useId, useRef, useState, Suspense } from 'react'
+import useFocoModal from '../hooks/useFocoModal.js'
 import { Canvas, useThree, useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { XMarkIcon } from '@heroicons/react/24/solid'
@@ -350,6 +351,8 @@ export default function ZoidianDialog({ t, open, onClose, onPlay }) {
   const [tab, setTab] = useState('deal')
   useEffect(() => { if (open) setTab('deal') }, [open])
   const tabsId = useId()
+  const raizRef = useRef(null)
+  useFocoModal(raizRef, open)
 
   if (!open) return null
 
@@ -396,7 +399,9 @@ export default function ZoidianDialog({ t, open, onClose, onPlay }) {
 
   return (
     <div
-      className={`fixed inset-0 z-modal flex items-stretch sm:items-center justify-center p-0 sm:p-4 lg:p-8${armando ? ' argus-arma' : ''}${saliendo ? ' argus-sale pointer-events-none' : ''}`}
+      ref={raizRef}
+      tabIndex={-1}
+      className={`fixed inset-0 z-modal flex items-stretch sm:items-center justify-center p-0 sm:p-4 lg:p-8 outline-none${armando ? ' argus-arma' : ''}${saliendo ? ' argus-sale pointer-events-none' : ''}`}
       role="dialog"
       aria-modal="true"
       aria-label={t('zoidian.dialogAria')}

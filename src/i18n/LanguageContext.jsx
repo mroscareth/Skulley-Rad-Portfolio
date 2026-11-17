@@ -190,6 +190,7 @@ const resources = {
       toggleSettings: 'Toggle settings',
       toggleCameraMode: 'Toggle camera mode',
       openNavigationMenu: 'Open navigation menu',
+      navigationMenu: 'Navigation menu',
       characterPortrait: 'Character portrait',
     },
     camera: {
@@ -704,6 +705,7 @@ const resources = {
       toggleSettings: 'Mostrar/ocultar ajustes',
       toggleCameraMode: 'Cambiar modo de cámara',
       openNavigationMenu: 'Abrir menú de navegación',
+      navigationMenu: 'Menú de navegación',
       characterPortrait: 'Retrato del personaje',
     },
     camera: {

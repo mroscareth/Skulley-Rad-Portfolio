@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import useFocoModal from '../hooks/useFocoModal.js'
 import { CheckCircleIcon, TrophyIcon, InformationCircleIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
@@ -246,6 +247,9 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
     return () => window.removeEventListener('keydown', onKey)
   }, [open, phase, onExit])
 
+  const raizRef = useRef(null)
+  useFocoModal(raizRef, open)
+
   if (!open) return null
 
   const es = lang === 'es'
@@ -313,7 +317,9 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
 
   return (
     <div
-      className="fixed inset-0 z-[99999999] flex items-center justify-center p-4 shop-inspect-enter"
+      ref={raizRef}
+      tabIndex={-1}
+      className="fixed inset-0 z-[99999999] flex items-center justify-center p-4 shop-inspect-enter outline-none"
       role="dialog"
       aria-modal="true"
       aria-label={tr.dialogAria}

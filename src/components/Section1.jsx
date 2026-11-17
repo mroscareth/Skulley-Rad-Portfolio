@@ -5,6 +5,7 @@ import DragShaderOverlay from './DragShaderOverlay.jsx'
 import WorkCard, { transformApiProject } from './work/WorkCard.jsx'
 import { ProjectDetailArticle } from './work/ProjectDetail.jsx'
 import SlimeSlugDOM from './SlimeSlugDOM.jsx'
+import useFocoModal from '../hooks/useFocoModal.js'
 
 // Fallback: static projects in case the API fails. Se pinta también mientras responde
 // la API, así que sus imágenes se piden en cada visita. Las de Art Toys y 2D Heads son
@@ -100,6 +101,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
   const [hover, setHover] = React.useState({ active: false, title: '', x: 0, y: 0 })
   const listRef = React.useRef(null)
   const detailOverlayRef = React.useRef(null)
+  useFocoModal(detailOverlayRef, !!detailSlug)
   const detailLenisRef = React.useRef(null)
 
   // Hovered card index for shader darkening (-1 = none)
@@ -511,7 +513,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
         return (
           <div
             ref={detailOverlayRef}
-            className={`fixed inset-0 z-[14000] bg-[#0a0510]/90 backdrop-blur-sm ${(!detailOpening && !detailClosing) ? 'pointer-events-auto' : 'pointer-events-none'} overflow-y-auto no-native-scrollbar transition-opacity ${detailOpening ? 'duration-600' : 'duration-300'} ease-out ${detailClosing || detailOpening ? 'opacity-0' : 'opacity-100'}`}
+            className={`fixed inset-0 z-[14000] bg-[#0a0510]/90 backdrop-blur-sm outline-none ${(!detailOpening && !detailClosing) ? 'pointer-events-auto' : 'pointer-events-none'} overflow-y-auto no-native-scrollbar transition-opacity ${detailOpening ? 'duration-600' : 'duration-300'} ease-out ${detailClosing || detailOpening ? 'opacity-0' : 'opacity-100'}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby={projTitle ? 'project-detail-title' : undefined}
