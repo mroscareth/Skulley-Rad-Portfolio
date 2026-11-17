@@ -15,7 +15,9 @@ export { URL_LENTES, URL_BOXERS, URL_CORRER, ACCESORIOS, ACCESORIOS_EVENT, getAc
 const MATERIALES_LENTES = {
   Lentes_Armazon: { color: 0x121212, roughness: 0.32, metalness: 0 },
   Lentes_Mica: { color: 0x0c1813, roughness: 0.12, metalness: 0 },
-  Lentes_Metal: { color: 0xd9d9df, roughness: 0.25, metalness: 1 },
+  // Los remaches, plateados (Oscar). Con metalness 1 y sin un reflejo que
+  // tomar (el toon apaga el del HDRI) salían negros: plateado de caricatura.
+  Lentes_Metal: { color: 0xd4d8de, roughness: 0.3, metalness: 0 },
 }
 
 function material(nombre) {
