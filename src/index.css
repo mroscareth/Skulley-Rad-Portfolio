@@ -5397,11 +5397,33 @@ div:has(> #privy-dialog-backdrop) {
   text-align: center;
 }
 
-/* Wallpaper 4K al pie del panel, centrado, abajo de los colores (pedido de
-   Oscar). */
+/* Al pie del panel, abajo de los colores: los props a la izquierda y Wallpaper
+   4K, la acción de color, al final (2026-11-17; antes iba sola y centrada). */
 .mcz-pie {
   display: flex;
-  justify-content: center;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mcz-props {
+  display: flex;
+  gap: 10px;
+}
+
+/* Puesto: amarillo, como el chip de escritorio. Sin el desenfoque del vidrio
+   (va sobre el panel opaco). */
+.mcz .mcz-prop {
+  width: 44px;
+  height: 44px;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.mcz .mcz-prop.is-puesto {
+  background: var(--amarillo);
+  border-color: var(--amarillo);
+  color: #000;
 }
 
 /* Las dos filas en la misma retícula de cuatro columnas iguales; con menos

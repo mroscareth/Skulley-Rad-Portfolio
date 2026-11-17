@@ -27,6 +27,9 @@ import { RUNE_FONT_FAMILY_BOLD } from '../../lib/installRuneFont.js'
 import { registrarCabeza } from '../../lib/cabezaEnPantalla.js'
 import { instalarPrepaso } from '../../lib/prepasoProfundidad.js'
 import LlamaMano from '../fx/LlamaMano.jsx'
+import { URL_LENTES, URL_BOXERS, ponerLentes, ponerBoxers, getAccesorios, ACCESORIOS_EVENT } from '../../lib/accesorios.js'
+import { telaDe } from '../../lib/telaProp.js'
+import { crearApartaManos } from '../../lib/apartaManos.js'
 
 // La caída: Skulley gira, le cae un rayo, se desarma y sus huesos aterrizan
 // en el pie de página.
@@ -964,6 +967,10 @@ function PicarOjos({ modelo, rigRef, escenaRef, fitRef, activoAhora }) {
 // el useGLTF de abajo y que el Player de escritorio.
 const MODELO_URL = `${import.meta.env.BASE_URL}character.glb`
 useGLTF.preload(MODELO_URL, true, true, extendGLTFLoaderKTX2)
+// Los props de Customize (lentes y bóxers, 150 KB entre los dos): salen junto
+// con el modelo, que pesa 2.2 MB, así que llegan antes que él.
+useGLTF.preload(URL_LENTES, true)
+useGLTF.preload(URL_BOXERS, true)
 // Cuadros con Skulley en pantalla antes de preparar lo que solo usa la historia
 // (el numerito y PrecompilaDesarme): primero que salga él.
 const ESPERA_TRAS_SKULLEY = 20
@@ -990,9 +997,29 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
   useEffect(() => { detectKTX2Support(gl) }, [gl])
 
   const { scene, animations } = useGLTF(MODELO_URL, true, true, extendGLTFLoaderKTX2)
+  const lentesGltf = useGLTF(URL_LENTES, true)
+  const boxersGltf = useGLTF(URL_BOXERS, true)
 
   const cloned = useMemo(() => {
     const clone = SkeletonUtils.clone(scene)
+    // Los props, en reposo y antes de los materiales: así reciben el mismo
+    // toon, la tinta, la sombra y el despiece, y se compilan con todo lo demás
+    // (como en Player). Cuáles se ven se decide cada cuadro (ver `propsRef`).
+    try { ponerLentes(clone, lentesGltf) } catch { }
+    try {
+      const b = ponerBoxers(clone, boxersGltf)?.[0]
+      if (b) telaDe(b)
+    } catch (e) { if (import.meta.env.DEV) console.warn('[boxers]', e) }
+    try {
+      clone.updateMatrixWorld(true)
+      const raizInv = new THREE.Matrix4().copy(clone.matrixWorld).invert()
+      clone.userData.apartaManos = crearApartaManos(clone, (b) => new THREE.Matrix4().multiplyMatrices(raizInv, b.matrixWorld))
+    } catch { }
+    // Los apagados salen ocultos desde ya: PrecompilaDesarme no los compila
+    // para el primer cuadro (los bóxers casi siempre van apagados) y los deja
+    // para cuando Skulley ya salió.
+    const puestos = getAccesorios()
+    clone.traverse((o) => { if (o.userData?.accesorio) o.visible = !!puestos[o.userData.accesorio] })
 
     // El GLB viene del caché compartido y puede traer los outline meshes que
     // inyecta Player.jsx. Acá estorban (BackSide negro).
@@ -1041,8 +1068,11 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
       obj.material = Array.isArray(obj.material) ? out : out[0]
     })
     return clone
-  }, [scene])
+  }, [scene, lentesGltf, boxersGltf])
 
+  // Las manos se apartan de los bóxers sobre la pose de cada cuadro: antes
+  // del mixer regresan a lo que él dejó (registrado antes de useAnimations).
+  useFrame(() => { cloned.userData.apartaManos?.restaurar() })
   const { actions, mixer } = useAnimations(animations, liveRef)
 
   // Los ojos se pican en la historia y en la pantalla principal (Oscar), con
@@ -2179,6 +2209,53 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     camera.lookAt(x + tx, sv.y + ty, z)
     camera.zoom = sv.zoom
     camera.updateProjectionMatrix()
+  })
+
+  // Los props puestos en Customize (Oscar, 2026-11-17): se ven en la pantalla
+  // principal, el teléfono y la versión simple, pero no en "Conocer la
+  // historia", que cuenta con los ojos (los rojos de la furia, picarlos, la
+  // mirada). Se quitan en el apagón con que empieza y regresan al terminar en
+  // lo más oscuro (el foco ya apagado, la luz apenas subiendo); si se saltó
+  // antes de que se apagara, al volver la luz completa. Corren después del mixer, del numerito y de la cámara: la
+  // tela de los bóxers y las manos que se apartan de ella, como en Player.
+  const propsRef = useRef({ mallas: null, boxers: null, estado: getAccesorios(), mostrar: null })
+  useEffect(() => {
+    const on = (e) => { propsRef.current.estado = e?.detail || getAccesorios() }
+    window.addEventListener(ACCESORIOS_EVENT, on)
+    return () => window.removeEventListener(ACCESORIOS_EVENT, on)
+  }, [])
+  useFrame((_, delta) => {
+    const pr = propsRef.current
+    if (!pr.mallas) {
+      pr.mallas = []
+      cloned.traverse((o) => { if (o.userData?.accesorio) pr.mallas.push(o) })
+      pr.boxers = pr.mallas.find((o) => o.userData.tela) || null
+    }
+    const e = escenaRef?.current
+    const deseado = !e?.enHistoria
+    if (pr.mostrar === null) pr.mostrar = deseado
+    else if (deseado !== pr.mostrar) {
+      // a oscuras: poca luz y el foco apagado (al terminar, el foco se apaga
+      // en medio segundo mientras la luz ya empieza a subir)
+      const luz = e?.ambiente ?? 1
+      if ((luz < 0.3 && (e?.foco ?? 0) < 0.05) || (deseado && luz >= 0.999)) pr.mostrar = deseado
+    }
+    for (const m of pr.mallas) m.visible = pr.mostrar && !!pr.estado[m.userData.accesorio]
+    const b = pr.boxers
+    const conBoxers = Boolean(b?.visible && liveRef.current?.visible !== false)
+    const manos = cloned.userData.apartaManos
+    const dt = Math.min(Math.max(delta || 0, 0), 0.1)
+    try {
+      if (!pr.mostrar) manos?.soltar()
+      else manos?.aplicar(dt, conBoxers)
+    } catch { }
+    if (b) {
+      const tela = telaDe(b)
+      try {
+        if (conBoxers) tela.paso(dt)
+        else tela.desactivar()
+      } catch (err) { if (import.meta.env.DEV) console.warn('[tela]', err) }
+    }
   })
 
   return (
@@ -4041,20 +4118,29 @@ function PrecompilaDesarme({ modelo, personalizaRef, escenaRef }) {
   // También lo que los pases dibujan sobre Skulley entero: la tinta (normales),
   // la sombra (blanco plano) y el prepaso, con las luces de la raíz (ninguna);
   // si no, el primer cuadro compilaba cada uno en serie, después de la ráfaga.
+  // Los props apagados (Customize) no entran: no se ven en ese cuadro; van en
+  // la fase 2, para que prenderlos después no compile nada.
   useLayoutEffect(() => {
     if (!modelo || sinPrecompila()) return
     const raiz = raizDe(modelo)
-    const mallas = []
-    modelo.traverse((o) => { if (o.isMesh) mallas.push([o, o.material]) })
-    escenaPreRef.current = compilarConRT(() => {
-      gl.compile(scene, camera)
-      for (const mat of [...mats, prepaso]) {
-        for (const [o] of mallas) o.material = mat
-        try { gl.compile(modelo, camera, raiz) } finally {
-          for (const [o, m] of mallas) o.material = m
+    const apagados = []
+    modelo.traverse((o) => { if (o.userData?.accesorio && !o.visible && o.parent) apagados.push([o, o.parent]) })
+    for (const [o, padre] of apagados) padre.remove(o)
+    try {
+      const mallas = []
+      modelo.traverse((o) => { if (o.isMesh) mallas.push([o, o.material]) })
+      escenaPreRef.current = compilarConRT(() => {
+        gl.compile(scene, camera)
+        for (const mat of [...mats, prepaso]) {
+          for (const [o] of mallas) o.material = mat
+          try { gl.compile(modelo, camera, raiz) } finally {
+            for (const [o, m] of mallas) o.material = m
+          }
         }
-      }
-    })
+      })
+    } finally {
+      for (const [o, padre] of apagados) padre.add(o)
+    }
   }, [modelo, mats, prepaso, gl, scene, camera])
   // 2. Las piezas del desarme, cuando Skulley ya salió.
   const correr = () => {
@@ -4062,11 +4148,21 @@ function PrecompilaDesarme({ modelo, personalizaRef, escenaRef }) {
     const t0 = performance.now()
     const raiz = raizDe(modelo)
     const grupo = muestras(modelo)
+    // los props enteros (los apagados no entraron a la fase 1), con sus pases
+    const props = []
+    modelo.traverse((o) => { if (o.userData?.accesorio && o.isMesh) props.push([o, o.material]) })
     const nuevos = compilarConRT(() => {
       gl.compile(grupo, camera, scene)
       for (const mat of mats) {
         grupo.traverse((o) => { if (o.isMesh) o.material = mat })
         gl.compile(grupo, camera, raiz)
+      }
+      for (const [o] of props) gl.compile(o, camera, scene)
+      for (const mat of [...mats, prepaso]) {
+        for (const [o] of props) o.material = mat
+        try { for (const [o] of props) gl.compile(o, camera, raiz) } finally {
+          for (const [o, m] of props) o.material = m
+        }
       }
     })
     estrenar([...escenaPreRef.current, ...nuevos], (todos) => {

@@ -94,7 +94,7 @@ function BoxersIcon({ className }) {
   )
 }
 
-const ICONOS_PROP = { lentes: LentesIcon, boxers: BoxersIcon }
+export const ICONOS_PROP = { lentes: LentesIcon, boxers: BoxersIcon }
 
 // Props de Skulley (Oscar, 2026-11-16): cada uno se pone o se quita. Mismo
 // tamaño que los chips de skin, en su misma cuadrícula; el puesto va en

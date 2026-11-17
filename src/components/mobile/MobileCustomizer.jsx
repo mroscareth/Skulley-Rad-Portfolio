@@ -8,6 +8,8 @@ import { chooseSkin, readActiveSkinId, readGoldOwned } from '../../lib/character
 import { useVueloColores } from '../../lib/vueloColores.js'
 import SkinChip from '../SkinChip.jsx'
 import ColorWell from '../ColorWell.jsx'
+import { ICONOS_PROP } from '../CharacterCustomizer.jsx'
+import { ACCESORIOS, ACCESORIOS_EVENT, getAccesorios, setAccesorio } from '../../lib/accesoriosEstado.js'
 
 // La versión ligera del personalizador de escritorio (CharacterCustomizer) para
 // la home de teléfono: cuatro skins, un color por parte solo en Personalizada y
@@ -375,6 +377,18 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
   const conColores = skinId === 'base'
   useVueloColores({ visibles: conColores, activo: open, bandejaRef, skinsRef })
 
+  // Los props (lentes y bóxers), los mismos de Customize de escritorio.
+  const [props, setProps] = useState(getAccesorios)
+  useEffect(() => {
+    const on = (e) => setProps(e?.detail ? { ...e.detail } : getAccesorios())
+    window.addEventListener(ACCESORIOS_EVENT, on)
+    return () => window.removeEventListener(ACCESORIOS_EVENT, on)
+  }, [])
+  const cambiarProp = (id) => {
+    setProps(setAccesorio(id, !props[id]))
+    try { navigator.vibrate?.(10) } catch { }
+  }
+
   const elegirSkin = (id) => {
     if (id === skinId) return
     chooseSkin(id)
@@ -632,6 +646,29 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
         </div>
 
         <div className="mcz-pie">
+          {/* Los props a la izquierda, el wallpaper (la acción de color) al final. */}
+          <div className="mcz-props" role="group" aria-label="Props">
+            {ACCESORIOS.map((a) => {
+              const puesto = !!props[a.id]
+              const accion = lang === 'es'
+                ? `${puesto ? 'Quitar' : 'Poner'} ${a.es.toLowerCase()}`
+                : `${puesto ? 'Remove' : 'Wear'} ${a.en.toLowerCase()}`
+              const Icono = ICONOS_PROP[a.id]
+              return (
+                <button
+                  key={a.id}
+                  type="button"
+                  className={`${BOTON_HUD} mcz-prop ${puesto ? 'is-puesto' : ''}`}
+                  onClick={() => cambiarProp(a.id)}
+                  aria-pressed={puesto}
+                  aria-label={accion}
+                  data-tip={accion}
+                >
+                  {Icono && <Icono className="w-7 h-7" />}
+                </button>
+              )
+            })}
+          </div>
           <button
             ref={wallBtnRef}
             type="button"

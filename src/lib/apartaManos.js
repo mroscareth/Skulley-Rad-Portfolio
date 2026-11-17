@@ -158,6 +158,15 @@ export function crearApartaManos(escena, reposoDe) {
     restaurar() {
       for (const l of lados) if (l.tieneCrudo) l.brazo.quaternion.copy(l.crudo)
     },
+    // Sin capa y sin memoria (el rig, en la historia: ahí mandan el numerito y
+    // sus poses, y la apertura no debe irse apagando encima de ellas). Va
+    // después del mixer: `restaurar` ya regresó el brazo este cuadro.
+    soltar() {
+      for (const l of lados) {
+        l.tieneCrudo = false
+        l.rv.set(0, 0, 0); l.sostiene.set(0, 0, 0); l.necesita = 0
+      }
+    },
     aplicar(dt, activo) {
       // window.__sinApartar (desarrollo): sin la capa, para medir contra qué se compara
       if (import.meta.env.DEV && typeof window !== 'undefined' && window.__sinApartar) activo = false

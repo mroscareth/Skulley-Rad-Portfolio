@@ -232,6 +232,9 @@ export function bakeCharacterPieces(root) {
     const baked = bakeSkinned(mesh)
     if (!baked) continue
     const mat = Array.isArray(mesh.material) ? (mesh.material[0] || mesh.material) : mesh.material
+    // Entera, con todos sus materiales si los trae por grupos (los props:
+    // armazón, micas y remaches; tela, elástico y forro). Cortada, solo el primero.
+    const matEntera = Array.isArray(mesh.material) && baked.groups?.length ? mesh.material : mat
 
     const gpv = groupsPerVertex(mesh, baked)
     const idx = baked.getIndex()
@@ -239,7 +242,7 @@ export function bakeCharacterPieces(root) {
     // Sin skinning utilizable o sin índice: la malla entera es una pieza, con
     // el grupo de su hueso dominante si se puede deducir.
     if (!gpv || !idx) {
-      push(`mesh:${mesh.uuid}`, baked, mat, mesh.name)
+      push(`mesh:${mesh.uuid}`, baked, matEntera, mesh.name)
       continue
     }
 
@@ -254,7 +257,7 @@ export function bakeCharacterPieces(root) {
       let dominante = `mesh:${mesh.uuid}`
       let maximo = -1
       cuenta.forEach((n, g) => { if (n > maximo) { maximo = n; dominante = g } })
-      push(dominante, baked, mat, mesh.name)
+      push(dominante, baked, matEntera, mesh.name)
       continue
     }
 
@@ -273,7 +276,7 @@ export function bakeCharacterPieces(root) {
     if (buckets.size <= 1) {
       // Toda la malla es un solo grupo: se empuja entera, sin reindexar.
       const only = buckets.keys().next().value ?? `mesh:${mesh.uuid}`
-      push(only, baked, mat, mesh.name)
+      push(only, baked, matEntera, mesh.name)
       continue
     }
 
@@ -377,7 +380,9 @@ export function muestraDePiezas(root) {
       geo.morphAttributes = src.morphAttributes
       geo.morphTargetsRelative = src.morphTargetsRelative
     }
-    const mat = Array.isArray(malla.material) ? (malla.material[0] || malla.material) : malla.material
+    const enGrupos = Array.isArray(malla.material) && src.groups?.length && !(malla === grande && grandeTri >= 800)
+    if (enGrupos) for (const g of src.groups) geo.addGroup(g.start, g.count, g.materialIndex)
+    const mat = enGrupos ? malla.material : (Array.isArray(malla.material) ? (malla.material[0] || malla.material) : malla.material)
     const m = new THREE.Mesh(geo, mat)
     m.frustumCulled = false
     m.userData.__disassembleOwned = true
