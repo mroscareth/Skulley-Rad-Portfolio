@@ -30,6 +30,7 @@ import LlamaMano from '../fx/LlamaMano.jsx'
 import { URL_LENTES, URL_BOXERS, ponerLentes, ponerBoxers, getAccesorios, ACCESORIOS_EVENT } from '../../lib/accesorios.js'
 import { telaDe } from '../../lib/telaProp.js'
 import { crearApartaManos } from '../../lib/apartaManos.js'
+import { crearCuerpoRigido, puntosDeApoyo } from '../../lib/cuerpoRigido.js'
 
 // La caída: Skulley gira, le cae un rayo, se desarma y sus huesos aterrizan
 // en el pie de página.
@@ -681,19 +682,22 @@ const OJOS = {
 }
 const esUi = (t) => !!t?.closest?.('button, a, input, textarea, select, [role="button"]')
 // Los lentes de Customize tapan los ojos: picarlos los tira (Oscar,
-// 2026-11-17), para que se puedan picar los ojos. Saltan hacia la cámara, caen
-// girando, rebotan en el piso y ahí se quedan. Regresan a la cara al
-// empezar la historia (a oscuras) o al abrir el personalizador del teléfono,
-// donde su botón tiene que decir la verdad. La copia que cae no necesita
-// montarse antes: es el material de los lentes sin esqueleto, que la fase 2 de
-// PrecompilaDesarme ya compiló para el despiece.
+// 2026-11-17), para que se puedan picar los ojos. Saltan hacia la cámara y
+// caen como cuerpo rígido (lib/cuerpoRigido.js: gravedad, giro, rebote y
+// fricción en sus puntos de apoyo), así que se quedan como los deje la física
+// y nunca parados en una pata, como con el acomodo a mano de la primera
+// versión (Oscar). Al rato regresan a la cara parpadeando, como el ojo, y
+// también al empezar la historia (a oscuras) o al abrir el personalizador del
+// teléfono, donde su botón tiene que decir la verdad. La copia que cae no
+// necesita montarse antes: es el material de los lentes sin esqueleto, que la
+// fase 2 de PrecompilaDesarme ya compiló para el despiece.
 const LENTES_CAEN = {
-  salto: 2.4,        // m/s hacia arriba
+  salto: 2.4,        // m/s hacia arriba (el contenedor va en metros)
   frente: 1.1,       // m/s hacia la cámara
   lado: 0.35,        // m/s de lado, al azar
-  giro: 9,           // rad/s al salir
-  rebote: 0.35,
-  asienta: 6,        // qué tan rápido se acomodan ya en el piso
+  giro: 9,           // rad/s al salir, sobre todo de maroma hacia adelante
+  muestra: 3000,     // vértices para la inercia y los apoyos (traen ~27 mil)
+  vuelveMs: 6000,    // en el piso, antes de regresar a la cara
 }
 
 // Rojo puro mientras dura el destello: el color base se apaga y manda el
@@ -736,8 +740,9 @@ function PicarOjos({ modelo, rigRef, escenaRef, fitRef, activoAhora, personaliza
     copia.userData.__disassembleOwned = true
     const l = {
       malla, copia, caja: malla.geometry.boundingBox.clone(),
-      vel: new THREE.Vector3(), giro: new THREE.Vector3(), cae: false, abajo: 0,
-      M: new THREE.Matrix4(), esquina: new THREE.Vector3(), cajaCopia: new THREE.Box3(),
+      // fuera: desde que se tiran hasta que regresan; cuerpo: su física
+      fuera: false, cuerpo: null, golpesOidos: 0, vuelveA: 0, parpadeoDesde: -1, parpadeoT: -1,
+      M: new THREE.Matrix4(), esquina: new THREE.Vector3(),
     }
     lentesRef.current = l
     return () => {
@@ -756,7 +761,7 @@ function PicarOjos({ modelo, rigRef, escenaRef, fitRef, activoAhora, personaliza
   // en la pantalla principal la cabeza casi siempre va de frente.
   const tocaLentes = useCallback((x, y) => {
     const l = lentesRef.current
-    if (!l || !l.malla.visible || l.malla.userData.caido) return false
+    if (!l || l.fuera || !l.malla.visible) return false
     const rect = gl.domElement.getBoundingClientRect()
     if (!rect.width) return false
     const M = matrizLentes(l)
@@ -810,24 +815,39 @@ function PicarOjos({ modelo, rigRef, escenaRef, fitRef, activoAhora, personaliza
     l.copia.geometry.dispose()
     l.copia.geometry = g
     l.copia.position.copy(centro)
-    l.copia.rotation.set(0, 0, 0)
+    l.copia.quaternion.identity()
     l.copia.scale.setScalar(1)
     if (!l.copia.parent) rig.add(l.copia)
     l.copia.visible = true
-    // en las unidades del contenedor, como la copia del ojo (OJOS.gravedad)
-    l.vel.set((Math.random() - 0.5) * 2 * LENTES_CAEN.lado, LENTES_CAEN.salto, LENTES_CAEN.frente)
-    l.giro.set(-LENTES_CAEN.giro * (0.8 + Math.random() * 0.4), (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 4)
-    l.cae = true
-    l.abajo = 0
+    // el cuerpo rígido, de una muestra de los vértices (ya centrados)
+    const cada = Math.max(1, Math.floor(pos.count / LENTES_CAEN.muestra))
+    const muestra = []
+    for (let i = 0; i < pos.count; i += cada) muestra.push([arr[i * 3], arr[i * 3 + 1], arr[i * 3 + 2]])
+    const cuerpo = crearCuerpoRigido(muestra, { apoyos: puntosDeApoyo(muestra, 240) })
+    cuerpo.p = [centro.x, centro.y, centro.z]
+    // en las unidades del contenedor (metros), hacia la cámara y de maroma
+    cuerpo.v = [(Math.random() - 0.5) * 2 * LENTES_CAEN.lado, LENTES_CAEN.salto, LENTES_CAEN.frente]
+    cuerpo.w = [LENTES_CAEN.giro * (0.8 + Math.random() * 0.4), (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 4]
+    l.cuerpo = cuerpo
+    l.golpesOidos = 0
+    l.fuera = true
+    // con el reloj de verdad: con la pestaña frenada (pocos cuadros) sumar los
+    // pasos del cuadro, que van topados, lo atrasaba mucho
+    l.vuelveA = performance.now() + LENTES_CAEN.vuelveMs
+    l.parpadeoDesde = -1
+    l.parpadeoT = -1
     l.malla.userData.caido = true
     l.malla.visible = false
     playEyePop()
   }, [rigRef, matrizLentes])
   const reponerLentes = useCallback(() => {
     const l = lentesRef.current
-    if (!l || !l.malla.userData.caido) return
+    if (!l || !l.fuera) return
+    l.fuera = false
     l.malla.userData.caido = false
-    l.cae = false
+    l.cuerpo = null
+    l.parpadeoDesde = -1
+    l.parpadeoT = -1
     l.copia.parent?.remove(l.copia)
   }, [])
 
@@ -920,10 +940,13 @@ function PicarOjos({ modelo, rigRef, escenaRef, fitRef, activoAhora, personaliza
       })
     }
     // y `window.__lentesCaidos()`, los lentes tirados
-    window.__lentesCaidos = () => {
+    // (`__lentesCaidos(20000)`: que tarden eso en regresar, para revisarlos)
+    window.__lentesCaidos = (vuelveMs) => {
       const l = lentesRef.current
       if (!l) return null
-      return { caido: !!l.malla.userData.caido, cae: l.cae, botes: l.abajo, pos: l.copia.position.toArray().map((n) => +n.toFixed(3)), rot: l.copia.rotation.toArray().slice(0, 3).map((n) => +n.toFixed(2)), piso: fitRef.current?.piso }
+      if (vuelveMs != null && l.fuera) l.vuelveA = performance.now() + vuelveMs
+      const c = l.cuerpo
+      return { fuera: l.fuera, caido: !!l.malla.userData.caido, dormido: c?.dormido, golpes: c?.golpes, vuelveEn: Math.round(l.vuelveA - performance.now()), parpadeoT: Math.round(l.parpadeoT), pos: l.copia.position.toArray().map((n) => +n.toFixed(3)), q: l.copia.quaternion.toArray().map((n) => +n.toFixed(3)), apoyos: c?.apoyos.length, piso: fitRef.current?.piso }
     }
     return () => { delete window.__ojos; delete window.__lentesCaidos }
   }, [gl, camera, centroDe, tmp, fitRef])
@@ -1013,59 +1036,43 @@ function PicarOjos({ modelo, rigRef, escenaRef, fitRef, activoAhora, personaliza
     }
   }, [escenaRef, tocado, saltar, activoAhora, tocaLentes, tirarLentes])
 
-  // Caen girando, rebotan contra lo más bajo de su caja (girada) y, ya casi
-  // quietos en el piso, se asientan como unos lentes abiertos sobre una mesa:
-  // de pie sobre los aros y las patas, derechos o de cabeza, lo que quede más
-  // cerca (con las micas hacia arriba las patas se clavaban en el piso).
-  const caerLentes = (l, dt) => {
-    if (dt <= 0) return
-    const c = l.copia
-    l.vel.y -= OJOS.gravedad * dt
-    c.position.addScaledVector(l.vel, dt)
-    c.rotation.x += l.giro.x * dt
-    c.rotation.y += l.giro.y * dt
-    c.rotation.z += l.giro.z * dt
-    c.updateMatrix()
-    const piso = fitRef.current?.piso ?? 0
-    const bajo = l.cajaCopia.copy(c.geometry.boundingBox).applyMatrix4(c.matrix).min.y
-    if (bajo < piso) {
-      c.position.y += piso - bajo
-      if (l.vel.y < 0) {
-        const golpe = -l.vel.y
-        l.vel.y = golpe * LENTES_CAEN.rebote
-        l.vel.x *= 0.6
-        l.vel.z *= 0.6
-        l.giro.multiplyScalar(0.5)
-        l.abajo += 1
-        if (golpe > 0.8) playOrbBounce(Math.min(1, golpe / 4) * 0.5, 0.06)
+  // Los lentes tirados: el cuerpo rígido avanza y la copia lo sigue; al rato
+  // regresan a la cara parpadeando mientras la copia del piso se apaga, como
+  // el ojo que reaparece.
+  const lentesEnElPiso = (l, dt) => {
+    const c = l.cuerpo
+    if (c && !c.dormido) {
+      c.paso(dt, OJOS.gravedad, fitRef.current?.piso ?? 0)
+      l.copia.position.set(c.p[0], c.p[1], c.p[2])
+      l.copia.quaternion.set(c.q[0], c.q[1], c.q[2], c.q[3])
+      if (c.golpes > l.golpesOidos) {
+        l.golpesOidos = c.golpes
+        if (c.golpe > 0.8) playOrbBounce(Math.min(1, c.golpe / 4) * 0.5, 0.06)
       }
     }
-    if (l.abajo > 0 && bajo <= piso + 0.02 && Math.abs(l.vel.y) < 0.8) {
-      const k = 1 - Math.exp(-LENTES_CAEN.asienta * dt)
-      const ax = Math.round(c.rotation.x / Math.PI) * Math.PI
-      const az = Math.round(c.rotation.z / Math.PI) * Math.PI
-      c.rotation.x += (ax - c.rotation.x) * k
-      c.rotation.z += (az - c.rotation.z) * k
-      l.giro.multiplyScalar(1 - k)
-      l.vel.x *= 1 - k
-      l.vel.z *= 1 - k
-      if (l.vel.lengthSq() < 0.002 && Math.abs(ax - c.rotation.x) < 0.01 && Math.abs(az - c.rotation.z) < 0.01) {
-        c.rotation.x = ax
-        c.rotation.z = az
-        l.cae = false
-      }
+    const ahora = performance.now()
+    if (l.parpadeoDesde < 0) {
+      if (ahora < l.vuelveA) return
+      l.parpadeoDesde = ahora
+      playEyeRespawn()
     }
+    l.parpadeoT = ahora - l.parpadeoDesde
+    if (l.parpadeoT >= OJOS.parpadeoMs) { reponerLentes(); return }
+    const enCara = Math.floor(l.parpadeoT / OJOS.pasoParpadeoMs) % 2 === 0
+    l.malla.userData.caido = !enCara
+    l.copia.visible = !enCara
   }
 
   useFrame((_, delta) => {
     const e = escenaRef?.current
     // Los lentes tirados siguen cayendo aunque ya no se pueda picar (en la
     // entrada a las experiencias se quedan en el piso) y regresan a la cara
-    // con el personalizador del teléfono abierto o ya a oscuras en la historia.
+    // al rato, con el personalizador del teléfono abierto o ya a oscuras en
+    // la historia.
     const l = lentesRef.current
-    if (l?.malla.userData.caido) {
+    if (l?.fuera) {
       if (personalizaRef?.current?.eligeSkin || (e?.enHistoria && (e.ambiente ?? 1) < 0.3)) reponerLentes()
-      else if (l.cae && e?.pausa == null) caerLentes(l, Math.min(0.05, delta || 0))
+      else if (e?.pausa == null) lentesEnElPiso(l, Math.min(0.05, delta || 0))
     }
     if (!e || !activoAhora()) {
       if (activoRef.current) reponer()
