@@ -32,6 +32,8 @@ import { applyCharacterColorsToScene, getCharacterColors, CHARACTER_COLOR_EVENT,
 import { URL_LENTES, URL_BOXERS, URL_CORRER, ponerLentes, ponerBoxers, getAccesorios, ACCESORIOS_EVENT } from '../lib/accesorios.js'
 import { telaDe } from '../lib/telaProp.js'
 import { crearApartaManos } from '../lib/apartaManos.js'
+import { crearConstructorTela, colocarTela, pasoTela as pasoTelaSuelta, escribirTela, bajoDe } from '../lib/telaSuelta.js'
+import { describirPieza, crearPieza, crearBuscadorApoyos, ponerApoyos, ponerCeldas, colocarPieza, pasoPieza, origenDePieza, despertar, asentar, fueraDelApoyo, masBajo, bajoEnPose } from '../lib/caidaPiezas.js'
 
 // Clip de correr: ciclo de 20 cuadros en su lugar. Se mezcla con el walk
 // mientras se corre con Shift.
@@ -89,6 +91,52 @@ function dampAngleWrapped(current, target, lambda, dt) {
   // damp formula: current + (target - current) * (1 - exp(-lambda * dt))
   // here target-current = delta (already normalized)
   return current + delta * (1 - Math.exp(-lambda * dt))
+}
+
+// Los bóxers que cayeron como tela regresan a su forma al rearmarse: el centro
+// viaja como las demás piezas y la forma se infla desde el montón arrugado,
+// pasándose un poco antes de quedar (Oscar: "se inflan o toman la forma que
+// deben"). Al final queda idéntica a la malla de antes del despiece.
+function rearmarTela(it, tEase, a, piso, alPiso) {
+  const g = it.mallaTela.geometry
+  const arr = g.attributes.position.array
+  const n = arr.length / 3
+  if (!it.telaInicio) {
+    it.telaInicio = arr.slice()
+    const meta = new Float32Array(arr.length)
+    const hp = it.homePos, hq = it.homeQuat
+    const qx = hq.x, qy = hq.y, qz = hq.z, qw = hq.w
+    const r = it.vertices
+    let sx = 0, sy = 0, sz = 0, tx = 0, ty = 0, tz = 0
+    for (let i = 0; i < n * 3; i += 3) {
+      // q · v (con el giro de reposo de la pieza) + su posición
+      const vx = r[i], vy = r[i + 1], vz = r[i + 2]
+      const ix = qw * vx + qy * vz - qz * vy, iy = qw * vy + qz * vx - qx * vz
+      const iz = qw * vz + qx * vy - qy * vx, iw = -qx * vx - qy * vy - qz * vz
+      meta[i] = ix * qw + iw * -qx + iy * -qz - iz * -qy + hp.x
+      meta[i + 1] = iy * qw + iw * -qy + iz * -qx - ix * -qz + hp.y
+      meta[i + 2] = iz * qw + iw * -qz + ix * -qy - iy * -qx + hp.z
+      sx += arr[i]; sy += arr[i + 1]; sz += arr[i + 2]
+      tx += meta[i]; ty += meta[i + 1]; tz += meta[i + 2]
+    }
+    it.telaMeta = meta
+    it.telaCentros = [sx / n, sy / n, sz / n, tx / n, ty / n, tz / n]
+  }
+  const ini = it.telaInicio, meta = it.telaMeta, c = it.telaCentros
+  const u = Math.min(1, Math.max(0, (a - 0.12) / 0.72))
+  const inflar = u >= 1 ? 1 : 1 + 2.70158 * (u - 1) ** 3 + 1.70158 * (u - 1) ** 2
+  const cx = c[0] + (c[3] - c[0]) * tEase, cy = c[1] + (c[4] - c[1]) * tEase, cz = c[2] + (c[5] - c[2]) * tEase
+  for (let i = 0; i < n * 3; i += 3) {
+    const sx = ini[i] - c[0], sy = ini[i + 1] - c[1], sz = ini[i + 2] - c[2]
+    const mx = meta[i] - c[3], my = meta[i + 1] - c[4], mz = meta[i + 2] - c[5]
+    arr[i] = cx + sx + (mx - sx) * inflar
+    let y = cy + sy + (my - sy) * inflar
+    if (y < piso) y += (piso - y) * alPiso
+    arr[i + 1] = y
+    arr[i + 2] = cz + sz + (mz - sz) * inflar
+  }
+  g.attributes.position.needsUpdate = true
+  g.computeVertexNormals()
 }
 
 /**
@@ -1925,6 +1973,76 @@ export default function Player({
     try { setCharacterShadowEnabled(true) } catch { }
   }, [applyModelOpacity, clearDisassemblePieces, onOrbStateChange])
 
+  // Cada pieza del despiece como cuerpo rígido (lib/caidaPiezas.js): sus
+  // vértices en el marco de su malla (posición y giro; su escala va adentro) y
+  // de ellos su centro de masa, su inercia y los puntos de su casco, que son
+  // los que tocan el piso. Los contornos comparten la geometría de su pieza.
+  const prepararFisicaPiezas = useCallback((pieces) => {
+    const root = piecesRootRef.current
+    if (!root) return
+    const t0 = performance.now()
+    try { root.updateMatrixWorld(true) } catch { }
+    const rootInv = new THREE.Matrix4().copy(root.matrixWorld).invert()
+    const marcoInv = new THREE.Matrix4()
+    const m = new THREE.Matrix4()
+    const unos = new THREE.Vector3(1, 1, 1)
+    let vertices = 0
+    let tJ = 0
+    for (let p = 0; p < pieces.length; p += 1) {
+      const it = pieces[p]
+      const mesh = it?.mesh
+      if (!mesh) continue
+      it.cuerpo = null
+      marcoInv.compose(mesh.position, mesh.quaternion, unos).invert()
+      const mallas = []
+      let n = 0
+      mesh.traverse((o) => {
+        if (!o?.isMesh || !o.geometry?.attributes?.position) return
+        if ((o.name || '').endsWith('_outline')) return
+        mallas.push(o)
+        n += o.geometry.attributes.position.count
+      })
+      if (!n) continue
+      const tA = performance.now()
+      const pos = new Float32Array(n * 3)
+      let k = 0
+      for (let j = 0; j < mallas.length; j += 1) {
+        const o = mallas[j]
+        const e = m.multiplyMatrices(rootInv, o.matrixWorld).premultiply(marcoInv).elements
+        const a = o.geometry.attributes.position
+        const arr = a.array
+        const directo = !a.isInterleavedBufferAttribute && !a.normalized && a.itemSize === 3 && arr instanceof Float32Array
+        for (let i = 0; i < a.count; i += 1) {
+          let x, y, z
+          if (directo) { x = arr[i * 3]; y = arr[i * 3 + 1]; z = arr[i * 3 + 2] } else { x = a.getX(i); y = a.getY(i); z = a.getZ(i) }
+          pos[k++] = e[0] * x + e[4] * y + e[8] * z + e[12]
+          pos[k++] = e[1] * x + e[5] * y + e[9] * z + e[13]
+          pos[k++] = e[2] * x + e[6] * y + e[10] * z + e[14]
+        }
+      }
+      vertices += n
+      tJ += performance.now() - tA
+      // Empieza tocando con su caja; los puntos del casco se buscan por partes
+      // en los cuadros siguientes, mientras vuela (ver buscarApoyos).
+      const cuerpo = crearPieza(describirPieza(pos, { apoyos: 'caja' }))
+      it.buscador = crearBuscadorApoyos(pos)
+      colocarPieza(cuerpo, [mesh.position.x, mesh.position.y, mesh.position.z], [mesh.quaternion.x, mesh.quaternion.y, mesh.quaternion.z, mesh.quaternion.w])
+      it.cuerpo = cuerpo
+      it.vertices = pos
+      it.asentada = false
+      it.tela = null
+      it.telaInicio = null
+      it.mallaTela = it.esTela && mallas.length === 1 && mallas[0].geometry.index ? mallas[0] : null
+      it.telaConstructor = it.mallaTela ? crearConstructorTela(pos, it.mallaTela.geometry.index.array) : null
+      // la tela se usa a los 80 ms: se arma ya (unos ms dentro del golpe)
+      if (it.telaConstructor) it.telaConstructor.avanza()
+    }
+    disassembleRef.current.fisicaMs = performance.now() - t0
+    disassembleRef.current.fisicaJuntar = tJ
+    disassembleRef.current.asentado = 0
+    disassembleRef.current.fisicaVertices = vertices
+  }, [])
+
   const startDisassemble = useCallback((opts = {}) => {
     // Reset reason
     try {
@@ -2411,6 +2529,8 @@ export default function Player({
           releasePos: null,
           impulseV: null,
           impulseW: null,
+          // los bóxers caen como tela (telaSuelta.js)
+          esTela: obj.userData?.accesorio === 'boxers',
         }
         pieces.push(data)
       }
@@ -2948,6 +3068,7 @@ export default function Player({
         }
       } catch { }
 
+      prepararFisicaPiezas(pieces)
       disassembleActiveRef.current = true
       disassembleRef.current.phase = 'fall'
       disassembleRef.current.t = 0
@@ -3562,6 +3683,7 @@ export default function Player({
       disassembleRef.current.maxDelayS = 0
     }
 
+    prepararFisicaPiezas(pieces)
     disassembleActiveRef.current = true
     disassembleRef.current.phase = 'fall'
     disassembleRef.current.t = 0
@@ -3598,7 +3720,7 @@ export default function Player({
     applyModelOpacity(0)
     return true
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [applyModelOpacity, bakeSkinnedGeometry, clearDisassemblePieces, createRigidMaterial, playerRef, readDisassembleDebugFlags, scene, splitGeometryByGroupsOrIslands, splitGeometryByBoneGroups])
+  }, [applyModelOpacity, bakeSkinnedGeometry, clearDisassemblePieces, createRigidMaterial, playerRef, prepararFisicaPiezas, readDisassembleDebugFlags, scene, splitGeometryByGroupsOrIslands, splitGeometryByBoneGroups])
 
   const requestAssemble = useCallback(() => {
     if (!disassembleActiveRef.current) return
@@ -3638,6 +3760,79 @@ export default function Player({
       window.__playerDisassemble.trigger = () => { try { startDisassemble() } catch { } }
     } catch { }
   }, [startDisassemble])
+
+  // En desarrollo: cómo va la caída (`__caidaPiezas.estado()`: lo más bajo de
+  // cada pieza contra el piso, medido con todos sus vértices como se dibujan) y
+  // las piezas tal cual, para probar la física en Node (`exportar(url)`).
+  useEffect(() => {
+    if (!import.meta.env.DEV) return undefined
+    const q = new THREE.Quaternion()
+    const v = new THREE.Vector3()
+    window.__caidaPiezas = {
+      estado: () => {
+        const dis = disassembleRef.current
+        const piso = dis.floorLocalY || 0
+        return {
+          fase: dis.phase,
+          t: dis.t,
+          ms: dis.fisicaMs,
+          juntar: dis.fisicaJuntar,
+          asentado: dis.asentado || 0,
+          vertices: dis.fisicaVertices,
+          piezas: (dis.pieces || []).map((it) => {
+            const c = it.cuerpo
+            if (!c) return { nombre: it.mesh?.name, sinFisica: true }
+            if (it.tela) return { nombre: it.mesh?.name, tela: true, dormido: it.tela.dormida, nodos: it.tela.N, t: it.tela.t, mueve: it.tela.mueve, nodoY: it.tela.x[1], visible: it.mesh.visible, padre: it.mesh.parent?.name, bajo: bajoDe(it.mallaTela.geometry.attributes.position.array) - piso }
+            q.copy(it.mesh.quaternion)
+            let bajo = Infinity
+            const pos = it.vertices
+            for (let i = 0; i < pos.length; i += 3) {
+              v.set(pos[i], pos[i + 1], pos[i + 2]).applyQuaternion(q)
+              bajo = Math.min(bajo, v.y)
+            }
+            return {
+              nombre: it.mesh?.name,
+              dormido: c.dormido,
+              tocando: c.tocando,
+              apoyos: c.desc.nAp,
+              vertices: pos.length / 3,
+              tam: c.desc.tam,
+              bajo: it.mesh.position.y + bajo - piso,
+              fuera: fueraDelApoyo(c, piso) / c.desc.tam,
+              golpes: c.golpes,
+            }
+          }),
+        }
+      },
+      exportar: async (url) => {
+        const dis = disassembleRef.current
+        const b64 = (f32) => {
+          const u8 = new Uint8Array(f32.buffer, f32.byteOffset, f32.byteLength)
+          let s = ''
+          for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000))
+          return btoa(s)
+        }
+        const datos = {
+          piso: dis.floorLocalY || 0,
+          g: 22,
+          piezas: (dis.pieces || []).filter((it) => it.vertices).map((it) => ({
+            nombre: it.mesh?.name,
+            origen: it.homePos.toArray(),
+            q: it.homeQuat.toArray(),
+            pos: b64(it.vertices),
+            indice: it.mallaTela ? Array.from(it.mallaTela.geometry.index.array) : undefined,
+          })),
+        }
+        if (!url) return datos
+        const r = await fetch(url, { method: 'POST', body: JSON.stringify(datos) })
+        return r.status
+      },
+      masBajo,
+      escena: () => scene,
+      piezas: () => disassembleRef.current.pieces,
+    }
+    return () => { try { delete window.__caidaPiezas } catch { } }
+  }, [scene])
 
   // Integration with the global easter egg state:
   // - if activated before the model is ready, we retry on load.
@@ -3696,6 +3891,10 @@ export default function Player({
                 }
               } catch { }
               const tmp = new THREE.Vector3()
+              // Las velocidades de las piezas van en el marco de piecesRoot, que
+              // gira con Skulley: la dirección del mundo se pasa a ese marco.
+              const aLocal = new THREE.Quaternion()
+              try { piecesRootRef.current?.getWorldQuaternion(aLocal); aLocal.invert() } catch { }
               for (let i = 0; i < dis.pieces.length; i += 1) {
                 const it = dis.pieces[i]
                 if (!it || !it.mesh) continue
@@ -3704,7 +3903,7 @@ export default function Player({
                 // Radial direction from impact to piece, with guaranteed upward bias.
                 const dir = tmp.clone().sub(impact)
                 if (dir.lengthSq() < 1e-4) dir.set((Math.random() - 0.5), 0.5, (Math.random() - 0.5))
-                dir.normalize()
+                dir.normalize().applyQuaternion(aLocal)
                 // Force more outward (horizontal) + strong upward kick.
                 const horiz = 6.5 + Math.random() * 4.0
                 const vert = 4.5 + Math.random() * 3.5
@@ -3759,6 +3958,9 @@ export default function Player({
   // easter egg y lo re-armamos solo tras un beat. El shockwave a las esferas ya
   // lo aplica HomeOrbs; acá solo empujamos las piezas del personaje.
   const ANTIMATTER_DISASSEMBLE_RADIUS = 4.0
+  const REARME_MIN_MS = 1700
+  const REARME_RESPIRO_MS = 450
+  const REARME_MAX_MS = 3600
   const antimatterStrikeTimerRef = useRef(null)
   const antimatterReassembleTimerRef = useRef(null)
   // Refs a las funciones para que el listener se monte UNA sola vez (`[]`). Si
@@ -3801,13 +4003,15 @@ export default function Player({
               if (!dis || !Array.isArray(dis.pieces)) return
               const impact = new THREE.Vector3(sx, 0.2, sz)
               const tmp = new THREE.Vector3()
+              const aLocal = new THREE.Quaternion()
+              try { piecesRootRef.current?.getWorldQuaternion(aLocal); aLocal.invert() } catch { }
               for (let i = 0; i < dis.pieces.length; i += 1) {
                 const it = dis.pieces[i]
                 if (!it || !it.mesh) continue
                 try { it.mesh.getWorldPosition(tmp) } catch { continue }
                 const dir = tmp.clone().sub(impact)
                 if (dir.lengthSq() < 1e-4) dir.set((Math.random() - 0.5), 0.5, (Math.random() - 0.5))
-                dir.normalize()
+                dir.normalize().applyQuaternion(aLocal)
                 const horiz = (6.5 + Math.random() * 4.0) * force
                 // La vertical baja MÁS que la horizontal en el empujón: las
                 // piezas se desparraman por el piso en vez de volar al cielo.
@@ -3820,16 +4024,29 @@ export default function Player({
               }
             } catch { }
           })
-          // Auto-reassemble after a beat (the strike is a punishment, not death).
+          // Se rearma solo (es castigo, no muerte) cuando las piezas ya se
+          // quedaron quietas en el piso, con un respiro para que se vean así;
+          // nunca antes de REARME_MIN_MS ni después de REARME_MAX_MS. Antes era
+          // a los 1.7 s fijos y casi siempre las agarraba en el aire.
           if (antimatterReassembleTimerRef.current) clearTimeout(antimatterReassembleTimerRef.current)
-          antimatterReassembleTimerRef.current = setTimeout(() => {
+          const desde = performance.now()
+          let quietasDesde = 0
+          const revisar = () => {
+            const t = performance.now() - desde
+            const piezas = disassembleRef.current.pieces || []
+            const quietas = piezas.every((it) => (it.tela ? it.tela.dormida : (!it.cuerpo || it.cuerpo.dormido)))
+            if (!quietas) quietasDesde = 0
+            else if (!quietasDesde) quietasDesde = t
+            const listo = t >= REARME_MIN_MS && ((quietasDesde && t - quietasDesde >= REARME_RESPIRO_MS) || t >= REARME_MAX_MS)
+            if (!listo) { antimatterReassembleTimerRef.current = setTimeout(revisar, 100); return }
             antimatterReassembleTimerRef.current = null
             // Mismo "rewind" que la desactivación del easter egg: overlay VHS +
             // boost de postfx + whirr, sincronizado con el requestAssemble.
             try { window.dispatchEvent(new CustomEvent('egg-rewind-start', { detail: { at: performance.now() } })) } catch { }
             try { playSfx('rewind.mp3', { volume: 0.75 }) } catch { }
             try { if (disassembleActiveRef.current) requestAssembleRef.current?.() } catch { }
-          }, 1700)
+          }
+          antimatterReassembleTimerRef.current = setTimeout(revisar, 100)
         }, delayMs)
       } catch { }
     }
@@ -5362,21 +5579,52 @@ export default function Player({
       const dis = disassembleRef.current
       dis.t += dtMoveRef.current || dt
       const pieces = dis.pieces || []
-      const GRAV = -14.5
-      const LIN_DAMP = 0.992
-      const ANG_DAMP = 0.985
-      const BOUNCE_Y = 0.42        // vertical restitution (0 = no bounce, 1 = perfect)
-      const BOUNCE_STOP_V = 0.9    // below this |vy| at floor contact, stop bouncing
-      const FLOOR_FRICTION = 0.82  // horizontal friction applied on bounce
-      const ANG_BOUNCE = 0.78      // angular velocity retained on bounce
+      // u/s² en el marco de las piezas (el del modelo, escala 1.5). Era 14.5:
+      // con la física de verdad tardaban 4 s en quedarse quietas; así pesan
+      // más, caen antes y se asientan en ~3 s.
+      const GRAV = 22
       const dbg = disassembleDebugRef.current
       const hold = !!(dbg.hold || dis.holdExternal)
-      const FLOOR_EPS = 0.015
+      const piso = (typeof dis.floorLocalY === 'number' ? dis.floorLocalY : 0)
+      const dtF = dtMoveRef.current || dt
+      const origen = tmpRef.current.disOrigen || (tmpRef.current.disOrigen = [0, 0, 0])
 
       if (dis.phase === 'fall') {
-        const allowFloor = dis.t >= dis.floorDelayS
+        // Los apoyos de verdad, unos 2 ms por cuadro (todos juntos eran 25 ms
+        // en el cuadro del golpe); primero la que va a llegar antes al piso.
+        let pendientes = null
+        let telaPendiente = null
+        for (let i = 0; i < pieces.length; i += 1) {
+          if (pieces[i].buscador && pieces[i].cuerpo) (pendientes || (pendientes = [])).push(pieces[i])
+          if (pieces[i].telaConstructor && !pieces[i].telaConstructor.listo) telaPendiente = pieces[i].telaConstructor
+        }
+        const limite = performance.now() + 2
+        if (pendientes) {
+          const llega = (it) => {
+            const c = it.cuerpo
+            const hueco = c.p[1] - c.desc.tam - piso
+            return (c.v[1] + Math.sqrt(Math.max(0, c.v[1] * c.v[1] + 2 * GRAV * Math.max(0, hueco)))) / GRAV
+          }
+          pendientes.sort((a, b) => llega(a) - llega(b))
+          for (let i = 0; i < pendientes.length && performance.now() < limite; i += 1) {
+            const it = pendientes[i]
+            while (!it.buscador.avanza(20) && performance.now() < limite) { /* por partes */ }
+            // con las celdas ya puede buscar su vértice más bajo de verdad
+            if (it.buscador.celdas && !it.cuerpo.celdas) ponerCeldas(it.cuerpo, it.buscador.celdas)
+            if (it.buscador.listo) {
+              ponerApoyos(it.cuerpo, it.vertices, it.buscador.indices())
+              it.buscador = null
+              // si ya se había dormido sobre su caja, que caiga a su casco
+              despertar(it.cuerpo)
+              it.asentada = false
+            }
+          }
+        }
+        // y con lo que sobre, la tela de los bóxers
+        if (telaPendiente && performance.now() < limite) telaPendiente.avanza(limite - performance.now())
         for (let i = 0; i < pieces.length; i += 1) {
           const it = pieces[i]
+          const c = it.cuerpo
           const delayS = (typeof it.delayS === 'number' && Number.isFinite(it.delayS)) ? it.delayS : 0
           // Staggered release: stays assembled until its turn arrives.
           if (!it.started) {
@@ -5393,40 +5641,54 @@ export default function Player({
             try {
               if (it.impulseW) it.w.copy(it.impulseW)
             } catch { }
-          }
-          it.v.y += GRAV * (dtMoveRef.current || dt)
-          it.v.multiplyScalar(LIN_DAMP)
-          it.w.multiplyScalar(ANG_DAMP)
-          it.mesh.position.addScaledVector(it.v, (dtMoveRef.current || dt))
-          // Simple angular integration - reuse quaternion/euler
-          const dtMove = dtMoveRef.current || dt
-          tmpRef.current.disEuler.set(it.w.x * dtMove, it.w.y * dtMove, it.w.z * dtMove)
-          tmpRef.current.disQuat.setFromEuler(tmpRef.current.disEuler)
-          it.mesh.quaternion.multiply(tmpRef.current.disQuat).normalize()
-
-          if (allowFloor) {
-            const floorY = (typeof dis.floorLocalY === 'number' ? dis.floorLocalY : 0)
-            const yMin = floorY + (Number.isFinite(it.bottom) ? it.bottom : it.radius) + FLOOR_EPS
-            if (it.mesh.position.y < yMin) {
-              it.mesh.position.y = yMin
-              if (it.v.y < -BOUNCE_STOP_V) {
-                // Bounce with energy loss — realistic impact.
-                it.v.y = -it.v.y * BOUNCE_Y
-                it.v.x *= FLOOR_FRICTION
-                it.v.z *= FLOOR_FRICTION
-                // Slight angular perturbation from the impact, then damp rotation.
-                it.w.multiplyScalar(ANG_BOUNCE)
-                it.w.x += (Math.random() - 0.5) * Math.abs(it.v.y) * 0.6
-                it.w.z += (Math.random() - 0.5) * Math.abs(it.v.y) * 0.6
-              } else {
-                // Too slow to bounce — settle on the floor.
-                it.v.y = 0
-                it.v.x *= 0.65
-                it.v.z *= 0.65
-                it.w.multiplyScalar(0.55)
-              }
+            if (c) {
+              const mp = it.mesh.position, mq = it.mesh.quaternion
+              colocarPieza(c, [mp.x, mp.y, mp.z], [mq.x, mq.y, mq.z, mq.w])
             }
           }
+          if (!c) continue
+          if (it.tela) {
+            // ya es tela: su geometría va en el marco de piecesRoot
+            if (!it.tela.dormida) {
+              // (pasoTela a secas es la tela de los bóxers puestos, más arriba)
+              pasoTelaSuelta(it.tela, dtF, GRAV, piso)
+              const g = it.mallaTela.geometry
+              escribirTela(it.tela, g.attributes.position.array, piso)
+              g.attributes.position.needsUpdate = true
+              g.computeVertexNormals()
+            }
+            continue
+          }
+          // Los empujones de fuera (el rayo, Argus) llegan a it.v / it.w.
+          if (c.dormido && (it.v.lengthSq() > 1e-12 || it.w.lengthSq() > 1e-12)) { despertar(c); it.asentada = false }
+          c.v[0] = it.v.x; c.v[1] = it.v.y; c.v[2] = it.v.z
+          c.w[0] = it.w.x; c.w[1] = it.w.y; c.w[2] = it.w.z
+          pasoPieza(c, dtF, GRAV, piso)
+          if (c.dormido && !it.asentada) {
+            it.asentada = true
+            dis.asentado = Math.max(dis.asentado || 0, asentar(c, it.vertices, piso))
+          }
+          it.v.set(c.v[0], c.v[1], c.v[2])
+          it.w.set(c.w[0], c.w[1], c.w[2])
+          origenDePieza(c, origen)
+          // Los bóxers son tela desde que el rayo se los lleva (ya pasado el
+          // empujón, que llega a it.v / it.w en el cuadro siguiente al golpe):
+          // sin la cadera adentro no tienen por qué guardar su forma.
+          if (it.telaConstructor && (c.tocando || dis.t > 0.08)) {
+            it.telaConstructor.avanza()
+            const tela = it.telaConstructor.tela
+            colocarTela(tela, c.R, c.q, origen, c.v, c.w, c.p)
+            it.tela = tela
+            it.mesh.position.set(0, 0, 0)
+            it.mesh.quaternion.identity()
+            const g = it.mallaTela.geometry
+            escribirTela(tela, g.attributes.position.array, piso)
+            g.attributes.position.needsUpdate = true
+            g.computeVertexNormals()
+            continue
+          }
+          it.mesh.position.set(origen[0], origen[1], origen[2])
+          it.mesh.quaternion.set(c.q[0], c.q[1], c.q[2], c.q[3])
         }
 
         const maxDelay = (typeof dis.maxDelayS === 'number' && Number.isFinite(dis.maxDelayS)) ? dis.maxDelayS : 0
@@ -5446,11 +5708,23 @@ export default function Player({
         const a = THREE.MathUtils.clamp(dis.t / Math.max(1e-3, dis.assembleS), 0, 1)
         // easeInOut
         const tEase = a * a * (3 - 2 * a)
+        // De regreso tampoco se mete nada en el piso; al final se suelta,
+        // porque manda la pose del modelo que regresa.
+        const alPiso = 1 - THREE.MathUtils.smoothstep(a, 0.85, 1)
         for (let i = 0; i < pieces.length; i += 1) {
           const it = pieces[i]
           try { it.mesh.visible = true } catch { }
+          if (it.tela) {
+            rearmarTela(it, tEase, a, piso, alPiso)
+            continue
+          }
           it.mesh.position.lerpVectors(it.assembleStartPos, it.homePos, tEase)
           it.mesh.quaternion.slerpQuaternions(it.assembleStartQuat, it.homeQuat, tEase)
+          if (it.cuerpo && alPiso > 0) {
+            const mq = it.mesh.quaternion
+            const bajo = bajoEnPose(it.cuerpo.desc, [mq.x, mq.y, mq.z, mq.w], it.mesh.position.y)
+            if (bajo < piso) it.mesh.position.y += (piso - bajo) * alPiso
+          }
         }
 
         if (!hold && a >= 1) {
