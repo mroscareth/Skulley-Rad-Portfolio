@@ -804,7 +804,7 @@ def pesar_metal(o):
     return len(islas)
 
 
-def giro_manga(o, t0=0.4, t1=0.7, t2=1.0, max_huesos=4):
+def giro_manga(o, t0=0.55, t1=0.8, t2=1.0, max_huesos=4):
     """Reparte el peso del brazo entre sus tres huesos según la altura en el brazo (0 hombro, 1 codo).
 
     Los pesos venían del brazo del personaje, que es delgado: ahí que arm_twist_2 y
@@ -812,7 +812,9 @@ def giro_manga(o, t0=0.4, t1=0.7, t2=1.0, max_huesos=4):
     gruesa y la tela de la axila queda a ~9 cm del eje: con ese giro barría la tela de
     atrás por debajo del brazo, atravesaba la del frente y salían astillas (Oscar,
     2026-11-18). Hasta `t0` todo va con arm_twist, que no se tuerce; de `t0` a `t1` pasa
-    a arm_twist_2 y de `t1` a `t2` a arm_stretch. Lo que no es de esos tres no cambia."""
+    a arm_twist_2 y de `t1` a `t2` a arm_stretch. Lo que no es de esos tres no cambia.
+    Medido (pliegues de la piel en idle, caminar y correr): con t0 0.4 la torsión todavía
+    llegaba a la axila; con 0.65 se amontonaba en el codo."""
     B = ARM.data.bones
     from mathutils.geometry import intersect_point_line
     me = o.data
@@ -842,6 +844,155 @@ def giro_manga(o, t0=0.4, t1=0.7, t2=1.0, max_huesos=4):
                 o.vertex_groups[k].add([v.index], x / s, 'REPLACE')
             n += 1
     return n
+
+
+def suavizar_pesos(o, zonas, iters, factor=0.8, max_huesos=4):
+    """Laplaciano de los pesos de la piel de afuera alrededor de cada zona (centro en cm, con
+    |x| para los dos lados; radio), con caída suave a la orilla; deja `max_huesos`."""
+    import numpy as np
+    me = o.data
+    fuera = sorted({i for p in me.polygons if p.material_index in (0, 2) for i in p.vertices})
+    pos = {i: k for k, i in enumerate(fuera)}
+    n = len(fuera)
+    W = np.zeros((n, len(o.vertex_groups)))
+    for k, i in enumerate(fuera):
+        for g in me.vertices[i].groups:
+            W[k, g.group] = g.weight
+    co = np.array([tuple(me.vertices[i].co) for i in fuera])
+    co[:, 0] = np.abs(co[:, 0])
+    a, b = [], []
+    for e in me.edges:
+        x, y = e.vertices
+        if x in pos and y in pos:
+            a += [pos[x], pos[y]]; b += [pos[y], pos[x]]
+    a = np.array(a); b = np.array(b)
+    grado = np.bincount(a, minlength=n).astype(float); grado[grado == 0] = 1
+    peso = np.zeros(n)
+    for centro, radio in zonas:
+        t = np.clip(1 - np.linalg.norm(co - np.array(centro), axis=1) / radio, 0, 1)
+        peso = np.maximum(peso, t * t * (3 - 2 * t))
+    f = (factor * peso)[:, None]
+    for _ in range(iters):
+        S = np.zeros_like(W); np.add.at(S, a, W[b])
+        W = W * (1 - f) + (S / grado[:, None]) * f
+    filas = np.arange(n)[:, None]
+    top = np.argsort(-W, axis=1)[:, :max_huesos]
+    W2 = np.zeros_like(W); W2[filas, top] = W[filas, top]
+    W2[W2 < 0.01] = 0
+    s = W2.sum(1, keepdims=True); s[s == 0] = 1; W2 /= s
+    tocados = np.where(peso > 0)[0]
+    for k in tocados:
+        i = fuera[k]
+        for g in list(me.vertices[i].groups):
+            o.vertex_groups[g.group].remove([i])
+        for j in np.nonzero(W2[k])[0]:
+            o.vertex_groups[int(j)].add([i], float(W2[k, j]), 'REPLACE')
+    return int(len(tocados))
+
+
+def huesos_axila(o, centro=(23.0, 1.5, 104.0), radio=26.0, brazo_t0=0.5, brazo_t1=0.65):
+    """Alrededor de cada axila todos los vértices con los mismos 4 huesos: hombro, arm_twist,
+    spine_03 y spine_02. Al dejar 4 por vértice, cada uno tiraba otro (spine_01, el hombro,
+    arm_twist...) y dos vecinos quedaban con juegos distintos: ahí se quebraba la tela. Los
+    demás pasan su peso al vecino de la cadena (spine_01 y root.x a spine_02, que es lo que
+    tiene el torso del cuerpo a esa altura; los del brazo a arm_twist, solo hasta `brazo_t0`
+    del brazo, porque más abajo manda giro_manga), con caída suave hacia la orilla."""
+    from mathutils.geometry import intersect_point_line
+    B = ARM.data.bones
+    me = o.data
+    nombres = {g.index: g.name for g in o.vertex_groups}
+    for k in ("spine_02.x", "spine_03.x", "arm_twist.l", "arm_twist.r", "shoulder.l", "shoulder.r"):
+        if k not in o.vertex_groups:
+            o.vertex_groups.new(name=k)
+    n = 0
+    for v in me.vertices:
+        s = "l" if v.co.x > 0 else "r"
+        d = (Vector((abs(v.co.x), v.co.y, v.co.z)) - Vector(centro)).length
+        if d >= radio:
+            continue
+        p = suavestep(0.0, 1.0, 1 - d / radio)
+        ta = intersect_point_line(v.co, B["arm_stretch." + s].head_local, B["forearm_stretch." + s].head_local)[1]
+        p_brazo = p * (1 - suavestep(brazo_t0, brazo_t1, ta))
+        permitidos = {"shoulder." + s, "arm_twist." + s, "spine_03.x", "spine_02.x"}
+        nuevo = {}
+        for g in v.groups:
+            h, x = nombres[g.group], g.weight
+            if h in permitidos:
+                nuevo[h] = nuevo.get(h, 0.0) + x
+                continue
+            es_brazo = h.endswith("." + s) and h.startswith(("arm_", "forearm_"))
+            q = p_brazo if es_brazo else p
+            dst = "arm_twist." + s if es_brazo else ("spine_02.x" if h in ("spine_01.x", "root.x") else "spine_03.x")
+            nuevo[h] = nuevo.get(h, 0.0) + x * (1 - q)
+            nuevo[dst] = nuevo.get(dst, 0.0) + x * q
+        for g in list(v.groups):
+            o.vertex_groups[g.group].remove([v.index])
+        for h, x in nuevo.items():
+            if x > 1e-4:
+                o.vertex_groups[h].add([v.index], x, 'REPLACE')
+        n += 1
+    return n
+
+
+# Zonas de suavizado (centro en cm, |x|; radio) y pasadas. Medidas el 2026-11-18 con los
+# pliegues de la piel (aristas que se doblan 60° más que en reposo) en idle, caminar y
+# correr, y revisadas en Cycles: más pasadas en la axila o en el codo regaban el peso del
+# brazo y la manga se sumía (con 300 en el codo asomaba el brazo).
+ZONA_HOMBRO = ((14.0, 0.0, 125.0), 9.0)
+ZONA_CODO = ((43.1, 2.5, 98.7), 12.0)
+ZONA_AXILA = ((23.0, 1.5, 104.0), 16.0)
+# la franja del fondo de la axila, donde el peso va mitad brazo y mitad torso, y el cuello por atrás
+FRANJAS = (((24.0, 7.0, 110.0), 9.0), ((24.0, -2.0, 106.0), 7.0), ((24.0, 2.0, 104.0), 7.0), ((10.5, 8.0, 124.5), 7.0))
+# la línea del pliegue de adentro del codo: sin esto quedaba una raya pellizcada
+CODO_PLIEGUE = (((41.0, -4.0, 98.0), 5.0), ((43.0, -4.5, 100.5), 5.0), ((45.5, -2.5, 103.5), 5.0))
+
+
+def pesos_finos(o):
+    """Después de giro_manga: hombros, codos y axilas sin quiebres (Oscar, 2026-11-18, "que
+    quede bien pesado"). Contra los pesos de pesar(): aristas que se doblan 60° de más al
+    caminar, en las axilas de 554 a 11, en los codos de 100 a 56 y en los hombros de 161
+    a 14; ninguna al correr."""
+    return dict(
+        hombro=suavizar_pesos(o, [ZONA_HOMBRO], 300),
+        codo=suavizar_pesos(o, [ZONA_CODO], 50),
+        huesos=huesos_axila(o),
+        axila=suavizar_pesos(o, [ZONA_AXILA], 40),
+        franjas=suavizar_pesos(o, FRANJAS, 300),
+        codo_pliegue=suavizar_pesos(o, CODO_PLIEGUE, 200),
+    )
+
+
+def repesar_estampados(o):
+    """Los estampados (material 4 en adelante) con el peso de la piel bajo cada vértice, como
+    los deja estampado(), para cuando cambian los pesos de la piel sin volver a pegarlos."""
+    from mathutils.bvhtree import BVHTree
+    from mathutils.geometry import barycentric_transform
+    me = o.data
+    nombres = {g.index: g.name for g in o.vertex_groups}
+    coords = [v.co for v in me.vertices]
+    tris = []
+    for p in me.polygons:
+        if p.material_index == 0:
+            vv = list(p.vertices)
+            for t in range(1, len(vv) - 1):
+                tris.append((vv[0], vv[t], vv[t + 1]))
+    bvh = BVHTree.FromPolygons(coords, tris)
+    estampa = sorted({i for p in me.polygons if p.material_index >= 4 for i in p.vertices})
+    for i in estampa:
+        loc, _, ti, _ = bvh.find_nearest(coords[i])
+        a, b, c = tris[ti]
+        bar = barycentric_transform(loc, coords[a], coords[b], coords[c], Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1)))
+        acc = {}
+        for idx, w in zip((a, b, c), (bar.x, bar.y, bar.z)):
+            for g in me.vertices[idx].groups:
+                acc[nombres[g.group]] = acc.get(nombres[g.group], 0.0) + max(w, 0.0) * g.weight
+        top = sorted(acc.items(), key=lambda kv: -kv[1])[:4]
+        s = sum(w for _, w in top) or 1.0
+        for g in list(me.vertices[i].groups):
+            o.vertex_groups[g.group].remove([i])
+        for h, w in top:
+            o.vertex_groups[h].add([i], w / s, 'REPLACE')
+    return len(estampa)
 
 
 def pesos_forro(o, vecinos=8):
@@ -1102,6 +1253,7 @@ def todo(kw_pesos=dict(radio_axila=22, rep_axila=140)):
     montar(o)
     info["simetria"] = simetrizar(o)
     info["giro_manga"] = giro_manga(o)
+    info["pesos_finos"] = pesos_finos(o)
     info["forro"] = pesos_forro(o)
     info["metal"] = pesar_metal(o)
     # después de simetrizar: las imágenes no son simétricas

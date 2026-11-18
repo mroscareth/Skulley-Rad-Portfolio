@@ -237,3 +237,233 @@ def con_accion(nombre_accion, cuadros):
         ad.action = antes[0]
         sc.frame_set(antes[1])
     return res
+
+
+# --- Lo que se ve en el render (2026-11-18, axilas de la chamarra) -----------------
+# Pliegues de la piel, forro asomado y tela al revés, por zona y en las tres acciones.
+# Con los pesos de pesar() salían astillas en el render de Blender; con giro_manga,
+# pesos_finos y pesos_forro de chamarra.py casi no queda nada (números en CLAUDE.md).
+import math
+
+AXILA = Vector((23.0, 1.5, 104.0))
+CODO = Vector((43.1, 2.5, 98.7))
+ACCIONES = (("root|root|Iddle", 6), ("root|root|Walking", 2), ("Correr", 2))
+
+
+def zona(c):
+    a = Vector((abs(c.x), c.y, c.z))
+    if (a - AXILA).length < 16:
+        return "axila"
+    if (a - CODO).length < 11:
+        return "codo"
+    if abs(c.x) > 30:
+        return "manga"
+    return "hombro_cuello" if c.z > 116 else "torso"
+
+
+def en_acciones(fn, acciones=ACCIONES):
+    """fn() en cada cuadro (cada `paso`, o una lista de cuadros) de cada acción; deja la acción, el slot y el cuadro como estaban."""
+    ad = ARM.animation_data; sc = bpy.context.scene
+    antes = (ad.action, ad.action_slot, sc.frame_current)
+    res = {}
+    try:
+        for a, cuadros in acciones:
+            act = bpy.data.actions[a]; ad.action = act
+            if len(act.slots):
+                ad.action_slot = act.slots[0]
+            if isinstance(cuadros, int):
+                f0, f1 = [int(round(x)) for x in act.frame_range]
+                cuadros = range(f0, f1 + 1, cuadros)
+            for f in cuadros:
+                sc.frame_set(f)
+                res.setdefault(a, []).append((f, fn()))
+    finally:
+        ad.action = antes[0]
+        if antes[1] is not None:
+            ad.action_slot = antes[1]
+        sc.frame_set(antes[2])
+    return res
+
+
+def _normal(pts):
+    n = Vector()
+    for k in range(len(pts)):
+        n += pts[k].cross(pts[(k + 1) % len(pts)])
+    return n.normalized()
+
+
+_ARISTAS = {}
+
+
+def pliegues(nombre="Chamarra", umbral=60.0):
+    """Por zona: aristas de la piel de afuera que se doblan `umbral` grados más que en reposo (cuántas, suma de grados de más)."""
+    o = bpy.data.objects[nombre]
+    if nombre not in _ARISTAS:
+        bm = bmesh.new(); bm.from_mesh(o.data)
+        ar = []
+        for e in bm.edges:
+            if len(e.link_faces) == 2 and all(f.material_index in (0, 2) for f in e.link_faces):
+                f1, f2 = e.link_faces
+                ar.append(([v.index for v in f1.verts], [v.index for v in f2.verts], f1.normal.angle(f2.normal, 0.0),
+                           (e.verts[0].co + e.verts[1].co) / 2))
+        bm.free(); _ARISTAS[nombre] = ar
+    dg = bpy.context.evaluated_depsgraph_get()
+    vs, _ = malla_eval(o, dg, ARM.matrix_world.inverted())
+    out = {}
+    u = math.radians(umbral)
+    for a, b, ang0, c in _ARISTAS[nombre]:
+        d = _normal([vs[k] for k in a]).angle(_normal([vs[k] for k in b]), 0.0) - ang0
+        if d > u:
+            n, s = out.get(zona(c), (0, 0.0)); out[zona(c)] = (n + 1, s + math.degrees(d - u))
+    return {z: (n, round(s)) for z, (n, s) in out.items()}
+
+
+_FORRO = {}
+
+
+def _forro_visible(vs, nr, caras, pareja):
+    bvh = BVHTree.FromPolygons(vs, caras)
+    out = []
+    for i, j in pareja.items():
+        d = nr[j]
+        if d.length < 0.5:
+            continue
+        hit = bvh.ray_cast(vs[i] + d * 0.02, d, 80)
+        if hit[0] is None or hit[1].dot(d) < 0:
+            out.append(i)
+    return out
+
+
+def forro_asomado(nombre="Chamarra"):
+    """Por zona: vértices del forro que quedan afuera de su piel (el rayo hacia afuera no la cruza), sin los que ya se ven en reposo."""
+    o = bpy.data.objects[nombre]; me = o.data
+    if nombre not in _FORRO:
+        caras = [tuple(p.vertices) for p in me.polygons if p.material_index != 3]
+        fv = {i for p in me.polygons if p.material_index in (0, 2) for i in p.vertices}
+        dv = {i for p in me.polygons if p.material_index == 1 for i in p.vertices}
+        afuera = sorted(fv - dv)
+        kd = KDTree(len(afuera))
+        for i in afuera:
+            kd.insert(me.vertices[i].co, i)
+        kd.balance()
+        pareja = {}
+        for i in dv - fv:
+            p = me.vertices[i].co
+            for q, j, d in kd.find_n(p, 8):
+                if d > 1e-6 and (q - p).dot(me.vertices[j].normal) > 0.7 * d:
+                    pareja[i] = j
+                    break
+        rest = [v.co.copy() for v in me.vertices]
+        ya = set(_forro_visible(rest, [v.normal.copy() for v in me.vertices], caras, pareja))
+        _FORRO[nombre] = (caras, pareja, ya, rest)
+    caras, pareja, ya, rest = _FORRO[nombre]
+    dg = bpy.context.evaluated_depsgraph_get(); inv = ARM.matrix_world.inverted()
+    oe = o.evaluated_get(dg); em = oe.to_mesh(); m = inv @ o.matrix_world; m3 = m.to_3x3()
+    vs = [m @ v.co for v in em.vertices]; nr = [(m3 @ v.normal).normalized() for v in em.vertices]
+    oe.to_mesh_clear()
+    out = {}
+    for i in _forro_visible(vs, nr, caras, pareja):
+        if i not in ya:
+            out[zona(rest[i])] = out.get(zona(rest[i]), 0) + 1
+    return out
+
+
+def _vistas(elevaciones=(-25, 10)):
+    out = []
+    for e in elevaciones:
+        for a in range(0, 360, 45):
+            ra, re = math.radians(a), math.radians(e)
+            out.append(Vector((math.cos(re) * math.sin(ra), -math.cos(re) * math.cos(ra), math.sin(re))))
+    return out
+
+
+def tela_al_reves(nombre="Chamarra", paso=0.7, medio=18.0, radio=14.0):
+    """Rayos desde 16 vistas a cada axila, con el cuerpo tapando: cuántos pegan primero en el forro o en el revés de la piel.
+    Ojo: el forro también se ve de verdad por la bastilla y los puños; sirve para comparar dos versiones."""
+    o = bpy.data.objects[nombre]
+    dg = bpy.context.evaluated_depsgraph_get(); inv = ARM.matrix_world.inverted()
+    vs, cs = malla_eval(o, dg, inv)
+    rest = [v.co for v in o.data.vertices]
+    tri = [c for c, m in cs]; info = [(m, k) for k, (c, m) in enumerate(cs)]; todos = list(vs)
+    for n in CUERPO:
+        b = bpy.data.objects.get(n)
+        if b:
+            bv, bc = malla_eval(b, dg, inv); off = len(todos); todos += bv
+            for c, m in bc:
+                tri.append(tuple(off + i for i in c)); info.append((-1, -1))
+    bvh = BVHTree.FromPolygons(todos, tri)
+    out = {}
+    for s in (1, -1):
+        A = Vector((AXILA.x * s, AXILA.y, AXILA.z))
+        idx = [i for i, p in enumerate(rest) if (p - A).length < 6]
+        C = sum((vs[i] for i in idx), Vector()) / len(idx)
+        for d in _vistas():
+            u = d.cross(Vector((0, 0, 1))).normalized(); w = u.cross(d).normalized(); n = int(medio / paso)
+            for i in range(-n, n + 1):
+                for j in range(-n, n + 1):
+                    hit = bvh.ray_cast(C + u * (i * paso) + w * (j * paso) - d * 60, d, 200)
+                    if hit[0] is None or info[hit[2]][0] in (-1, 3):
+                        continue
+                    mat, k = info[hit[2]]
+                    if (sum((rest[q] for q in cs[k][0]), Vector()) / len(cs[k][0]) - A).length > radio:
+                        continue
+                    if mat == 1 or hit[1].dot(d) > 0:
+                        key = ("L" if s > 0 else "R") + ("_forro" if mat == 1 else "_reves")
+                        out[key] = out.get(key, 0) + 1
+    return out
+
+
+def render_comparar(tomas, salida, versiones=(("antes", "Chamarra"),), lado=440, muestras=32, lente=50):
+    """Render en Cycles fuera de pantalla (no depende de que la ventana se dibuje): una fila por toma, una columna por objeto.
+    tomas: (acción, cuadro, centro en reposo en cm, azimut, elevación, distancia en m). Deja la escena como estaba."""
+    import numpy as np, os
+    from mathutils import Matrix
+    sc = bpy.context.scene; r = sc.render; ad = ARM.animation_data
+    antes = (r.resolution_x, r.resolution_y, r.resolution_percentage, sc.camera, r.filepath, sc.cycles.samples,
+             ad.action, ad.action_slot, sc.frame_current, r.image_settings.file_format)
+    ocultos = {n: bpy.data.objects[n].hide_render for _, n in versiones}
+    cd = bpy.data.cameras.new("_cam_revision"); cd.lens = lente; cd.clip_start = 0.01
+    cam = bpy.data.objects.new("_cam_revision", cd); sc.collection.objects.link(cam)
+    filas = []
+    try:
+        r.resolution_x = r.resolution_y = lado; r.resolution_percentage = 100
+        sc.cycles.samples = muestras; sc.camera = cam; r.image_settings.file_format = 'PNG'
+        for acc, fr, centro, az, el, dist in tomas:
+            act = bpy.data.actions[acc]; ad.action = act
+            if len(act.slots):
+                ad.action_slot = act.slots[0]
+            sc.frame_set(fr)
+            o = bpy.data.objects[versiones[0][1]]
+            dg = bpy.context.evaluated_depsgraph_get(); oe = o.evaluated_get(dg); em = oe.to_mesh()
+            c0 = Vector(centro); radio = 6.0; idx = []
+            while not idx:
+                idx = [i for i, v in enumerate(o.data.vertices) if (v.co - c0).length < radio]
+                radio *= 1.5
+            c = o.matrix_world @ (sum((em.vertices[i].co for i in idx), Vector()) / len(idx))
+            oe.to_mesh_clear()
+            a, e = math.radians(az), math.radians(el)
+            dv = Vector((math.cos(e) * math.sin(a), -math.cos(e) * math.cos(a), math.sin(e)))
+            x = Vector((0, 0, 1)).cross(dv).normalized(); y = dv.cross(x)
+            cam.matrix_world = Matrix.Translation(c + dv * dist) @ Matrix((x, y, dv)).transposed().to_4x4()
+            fila = []
+            for _, n in versiones:
+                for _, m2 in versiones:
+                    bpy.data.objects[m2].hide_render = (m2 != n)
+                ruta = os.path.join(os.path.dirname(salida), "_render_tmp.png"); r.filepath = ruta
+                bpy.ops.render.render(write_still=True)
+                im = bpy.data.images.load(ruta, check_existing=False); w, h = im.size
+                fila.append(np.array(im.pixels[:]).reshape(h, w, 4)); bpy.data.images.remove(im)
+            filas.append(np.concatenate(fila, axis=1))
+    finally:
+        r.resolution_x, r.resolution_y, r.resolution_percentage, sc.camera, r.filepath, sc.cycles.samples = antes[:6]
+        ad.action = antes[6]
+        if antes[7] is not None:
+            ad.action_slot = antes[7]
+        sc.frame_set(antes[8]); r.image_settings.file_format = antes[9]
+        for n, h in ocultos.items():
+            bpy.data.objects[n].hide_render = h
+        bpy.data.objects.remove(cam, do_unlink=True); bpy.data.cameras.remove(cd)
+    m = np.concatenate(filas[::-1], axis=0); H, W = m.shape[:2]
+    img = bpy.data.images.new("_revision", W, H); img.pixels = m.ravel()
+    img.filepath_raw = salida; img.file_format = 'PNG'; img.save(); bpy.data.images.remove(img)
+    return salida
