@@ -804,6 +804,82 @@ def pesar_metal(o):
     return len(islas)
 
 
+def giro_manga(o, t0=0.4, t1=0.7, t2=1.0, max_huesos=4):
+    """Reparte el peso del brazo entre sus tres huesos según la altura en el brazo (0 hombro, 1 codo).
+
+    Los pesos venían del brazo del personaje, que es delgado: ahí que arm_twist_2 y
+    arm_stretch se tuerzan (hasta 56° y 99° al caminar) casi no mueve nada. La manga es
+    gruesa y la tela de la axila queda a ~9 cm del eje: con ese giro barría la tela de
+    atrás por debajo del brazo, atravesaba la del frente y salían astillas (Oscar,
+    2026-11-18). Hasta `t0` todo va con arm_twist, que no se tuerce; de `t0` a `t1` pasa
+    a arm_twist_2 y de `t1` a `t2` a arm_stretch. Lo que no es de esos tres no cambia."""
+    B = ARM.data.bones
+    from mathutils.geometry import intersect_point_line
+    me = o.data
+    nombres = {g.index: g.name for g in o.vertex_groups}
+    n = 0
+    for lado in ("l", "r"):
+        J = B["arm_stretch." + lado].head_local
+        E = B["forearm_stretch." + lado].head_local
+        huesos = ("arm_twist." + lado, "arm_twist_2." + lado, "arm_stretch." + lado)
+        for k in huesos:
+            if k not in o.vertex_groups:
+                o.vertex_groups.new(name=k)
+        for v in me.vertices:
+            w = {nombres[g.group]: g.weight for g in v.groups}
+            U = sum(w.get(k, 0.0) for k in huesos)
+            if U < 1e-4:
+                continue
+            t = intersect_point_line(v.co, J, E)[1]
+            a = suavestep(t0, t1, t); b = suavestep(t1, t2, t)
+            w.update(zip(huesos, (U * (1 - a), U * a * (1 - b), U * a * b)))
+            # el sitio usa 4 huesos por vértice: los mismos 4 aquí, para que se mueva igual
+            top = dict(sorted(((k, x) for k, x in w.items() if x > 0.01), key=lambda kv: -kv[1])[:max_huesos])
+            s = sum(top.values()) or 1.0
+            for g in list(v.groups):
+                o.vertex_groups[g.group].remove([v.index])
+            for k, x in top.items():
+                o.vertex_groups[k].add([v.index], x / s, 'REPLACE')
+            n += 1
+    return n
+
+
+def pesos_forro(o, vecinos=8):
+    """Cada vértice del forro con los pesos de su vértice de afuera.
+
+    Con pesos propios (transferidos y suavizados aparte) el forro se movía distinto que la
+    piel y donde la tela se dobla se asomaba en manchas claras (Oscar, 2026-11-18). Su
+    pareja es el vértice de afuera del que el Solidify lo bajó: está del lado al que apunta
+    su normal; el más cercano a secas, en las solapas dobladas, era la piel del pecho."""
+    from mathutils.kdtree import KDTree
+    me = o.data
+    fuera_v, dentro_v = set(), set()
+    for p in me.polygons:
+        if p.material_index in (0, 2):
+            fuera_v.update(p.vertices)
+        elif p.material_index == 1:
+            dentro_v.update(p.vertices)
+    afuera = sorted(fuera_v - dentro_v)
+    kd = KDTree(len(afuera))
+    for i in afuera:
+        kd.insert(me.vertices[i].co, i)
+    kd.balance()
+    nombres = {g.index: g.name for g in o.vertex_groups}
+    hechos = 0
+    for i in sorted(dentro_v - fuera_v):
+        p = me.vertices[i].co
+        for q, j, d in kd.find_n(p, vecinos):
+            if d > 1e-6 and (q - p).dot(me.vertices[j].normal) > 0.7 * d:
+                src = {nombres[g.group]: g.weight for g in me.vertices[j].groups}
+                for g in list(me.vertices[i].groups):
+                    o.vertex_groups[g.group].remove([i])
+                for k, w in src.items():
+                    o.vertex_groups[k].add([i], w, 'REPLACE')
+                hechos += 1
+                break
+    return hechos
+
+
 # Estampado de la espalda (Oscar, 2026-11-17): su imagen (el círculo rojo con
 # el bicho negro, el pico se sale del círculo por abajo), en un cuadro con
 # fondo transparente, en Character/assets. El círculo mide 24 cm en la espalda.
@@ -1025,6 +1101,8 @@ def todo(kw_pesos=dict(radio_axila=22, rep_axila=140)):
     info["pesos"] = pesar(o, **(kw_pesos or {}))["sin_peso"]
     montar(o)
     info["simetria"] = simetrizar(o)
+    info["giro_manga"] = giro_manga(o)
+    info["forro"] = pesos_forro(o)
     info["metal"] = pesar_metal(o)
     # después de simetrizar: las imágenes no son simétricas
     info["estampados"] = {n: estampado(o, n) for n in ESTAMPADOS}
