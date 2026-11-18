@@ -669,7 +669,107 @@ const SIN_TINTA_MUNEQUERAS = ['Munequera_Metal', 'Munequera_Cincho']
 
 /** Las muñequeras como `Egg_MunequeraL` y `Egg_MunequeraR` (no ocultan nada del cuerpo). */
 export function ponerMunequeras(escena, gltf) {
-  return ponerCalzado(escena, gltf, MUNEQUERAS, SIN_TINTA_MUNEQUERAS, null)
+  const hechas = ponerCalzado(escena, gltf, MUNEQUERAS, SIN_TINTA_MUNEQUERAS, null)
+  try { prepararMangasCenidas(escena) } catch (e) { if (import.meta.env.DEV) console.warn('[mangas ceñidas]', e) }
+  return hechas
+}
+
+// Con el hoodie y la inflada, la muñequera aprieta la manga (Oscar, 2026-11-18: "déjalas en su tamaño normal
+// para todos"; con el hueco de 10 cm que pedía el puño del hoodie le parecieron demasiado grandes). El puño
+// del hoodie llega a 9.5 cm del eje del antebrazo y el de la inflada a 7.8; el hueco mide 6.9. Desde 3 cm
+// antes del aro, lo de la manga se aprieta hacia el eje, de `dentro` (más afuera que el antebrazo y la mano
+// al doblarse) a `fuera` (medio centímetro menos que el hueco), conservando el orden de las capas; los picos
+// de la inflada no cuentan para la escala pero también entran. Mismo cálculo que munequeras.py (cenido,
+// CINE_*), medido allá cuadro por cuadro. Medidas en metros, en el marco de forearm_twist en reposo.
+// Pasando la cara de enfrente del aro (y1) la manga se suelta y el puño vuelve a abrirse: ceñido hasta la
+// punta, la mano al doblarse se metía en el final del puño del hoodie caminando.
+const CINE = { y0: -0.008, y1: 0.06, desde: 0.03, lleno: 0.003, suelta: [0.0015, 0.006], dentro: 0.058, fuera: 0.064, picos: ['Inflada_Picos'] }
+const CON_MANGAS = ['hoodie', 'inflada']
+
+function suave(a, b, x) {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)))
+  return t * t * (3 - 2 * t)
+}
+
+/**
+ * Para cada prenda con mangas que ya esté en la escena (hoodie, inflada), arma sus posiciones con las mangas
+ * ceñidas y deja en `escena.userData.cenirMangas(estado)` el cambio entre unas y otras: se ciñen cuando van
+ * puestas junto con las muñequeras. Escribe encima de las posiciones (el contorno comparte la geometría).
+ */
+function prepararMangasCenidas(escena) {
+  const porNombre = {}
+  escena.traverse((o) => { if (o.isBone) porNombre[o.name] = o })
+  escena.updateMatrixWorld(true)
+  const raizInv = new THREE.Matrix4().copy(escena.matrixWorld).invert()
+  const marcos = {}
+  for (const s of ['l', 'r']) {
+    const b = porNombre[`forearm_twist${s}`]
+    if (!b) return
+    const R = new THREE.Matrix4().multiplyMatrices(raizInv, b.matrixWorld)
+    const t = new THREE.Vector3(), q = new THREE.Quaternion(), e = new THREE.Vector3()
+    R.decompose(t, q, e)
+    const marco = new THREE.Matrix4().compose(t, q, new THREE.Vector3(1, 1, 1))
+    marcos[s] = { marco, inv: marco.clone().invert() }
+  }
+  const mallas = []
+  escena.traverse((o) => { if (o.isSkinnedMesh && CON_MANGAS.includes(o.userData?.accesorio) && !o.geometry.userData.posCenida) mallas.push(o) })
+  for (const m of mallas) {
+    const g = m.geometry
+    const pos = g.attributes.position, si = g.attributes.skinIndex, sw = g.attributes.skinWeight
+    const nombres = m.skeleton.bones.map((b) => b.name)
+    const mats = Array.isArray(m.material) ? m.material : [m.material]
+    const esPico = new Uint8Array(pos.count)
+    if (g.index) {
+      for (const gr of g.groups) {
+        if (!CINE.picos.includes(mats[gr.materialIndex]?.name)) continue
+        for (let k = gr.start; k < gr.start + gr.count; k++) esPico[g.index.getX(k)] = 1
+      }
+    }
+    const original = Float32Array.from(pos.array)
+    const cenida = Float32Array.from(pos.array)
+    const p = new THREE.Vector3()
+    for (const s of ['l', 'r']) {
+      const brazo = new RegExp(`^(arm|forearm|hand).*${s}$`)
+      const esBrazo = nombres.map((n) => brazo.test(n))
+      const lado = []
+      for (let i = 0; i < pos.count; i++) {
+        let w = 0
+        for (let c = 0; c < 4; c++) if (esBrazo[si.getComponent(i, c)]) w += sw.getComponent(i, c)
+        if (w < 0.5) continue
+        p.fromBufferAttribute(pos, i).applyMatrix4(marcos[s].inv)
+        lado.push([i, p.x, p.y, p.z])
+      }
+      const yLleno = CINE.y0 - CINE.lleno
+      let rmax = 0
+      for (const [i, x, y, z] of lado) if (y >= yLleno && !esPico[i]) rmax = Math.max(rmax, Math.hypot(x, z))
+      if (rmax <= CINE.fuera) continue
+      const k = (CINE.fuera - CINE.dentro) / (rmax - CINE.dentro)
+      for (const [i, x, y, z] of lado) {
+        const w = suave(CINE.y0 - CINE.desde, yLleno, y) * (1 - suave(CINE.y1 + CINE.suelta[0], CINE.y1 + CINE.suelta[1], y))
+        const r = Math.hypot(x, z)
+        if (w <= 0 || r <= CINE.dentro) continue
+        const r2 = Math.min(CINE.dentro + (r - CINE.dentro) * k, CINE.fuera)
+        const f = (r + w * (r2 - r)) / r
+        p.set(x * f, y, z * f).applyMatrix4(marcos[s].marco)
+        cenida[i * 3] = p.x; cenida[i * 3 + 1] = p.y; cenida[i * 3 + 2] = p.z
+      }
+    }
+    g.userData.posOriginal = original
+    g.userData.posCenida = cenida
+    g.userData.cenida = false
+  }
+  const todas = []
+  escena.traverse((o) => { if (o.isSkinnedMesh && o.geometry?.userData?.posCenida && !todas.some((t) => t.geometry === o.geometry)) todas.push(o) })
+  escena.userData.cenirMangas = (estado) => {
+    for (const m of todas) {
+      const quiere = !!estado?.munequeras && !!estado?.[m.userData.accesorio]
+      const g = m.geometry
+      if (g.userData.cenida === quiere) continue
+      g.attributes.position.array.set(quiere ? g.userData.posCenida : g.userData.posOriginal)
+      g.attributes.position.needsUpdate = true
+      g.userData.cenida = quiere
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

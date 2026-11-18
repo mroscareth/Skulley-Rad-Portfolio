@@ -34,11 +34,10 @@ const LLAVE = 'skulley_accesorios'
 const PRENDIDOS_DE_INICIO = { lentes: true, boxers: false, pantalones: false, chamarra: false, hoodie: false, inflada: false, tenis: false, botas: false, munequeras: false, beanie: false }
 // La chamarra, el hoodie y la inflada se encimaban (una adentro de la otra): ponerse una quita las otras.
 // Igual los tenis y las botas: los dos van en los pies. Y los bóxers y los pantalones: los bóxers son más
-// anchos y bajan casi a la rodilla, no caben debajo. Las muñequeras solo libran la manga de la chamarra: el
-// puño del hoodie y el de la inflada no caben en su hueco (Oscar escogió el aro grueso, 2026-11-18).
+// anchos y bajan casi a la rodilla, no caben debajo. Con el hoodie y la inflada, las muñequeras les aprietan
+// la manga (accesorios.js, cenirMangas): su puño no cabe en el hueco.
 const SE_EXCLUYEN = {
-  chamarra: ['hoodie', 'inflada'], hoodie: ['chamarra', 'inflada', 'munequeras'], inflada: ['chamarra', 'hoodie', 'munequeras'],
-  munequeras: ['hoodie', 'inflada'],
+  chamarra: ['hoodie', 'inflada'], hoodie: ['chamarra', 'inflada'], inflada: ['chamarra', 'hoodie'],
   tenis: ['botas'], botas: ['tenis'],
   boxers: ['pantalones'], pantalones: ['boxers'],
 }
@@ -72,4 +71,6 @@ export function mostrarAccesorios(escena, estado = getAccesorios(), extra = true
     const id = o.userData?.accesorio
     if (id) o.visible = !!estado[id] && extra
   })
+  // con las muñequeras, las mangas del hoodie y la inflada van ceñidas
+  escena?.userData?.cenirMangas?.(estado)
 }

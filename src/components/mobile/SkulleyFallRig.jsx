@@ -2425,6 +2425,8 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     }
     // `caido`: los lentes que se tiraron picándolos (PicarOjos)
     for (const m of pr.mallas) m.visible = pr.mostrar && !!pr.estado[m.userData.accesorio] && !m.userData.caido
+    // con las muñequeras, las mangas del hoodie y la inflada van ceñidas (solo escribe cuando cambia)
+    cloned.userData.cenirMangas?.(pr.estado)
     // los pies, ocultos mientras se ven sus tenis (en la historia los props se
     // quitan y los pies regresan); solo se regresa lo que se ocultó aquí
     for (const o of pr.ocultos) {

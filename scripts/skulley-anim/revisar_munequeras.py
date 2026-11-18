@@ -15,6 +15,9 @@ a cada cuadro con la matriz del hueso. Cuenta como traspaso cualquier par de tri
 - cada prenda (la chamarra separada en manga y cuerpo; pantalones, bóxers, botas, tenis, lentes);
 - la otra muñequera.
 Además da la holgura: lo más cerca que llega cada cosa (cm), para saber cuánto margen queda.
+
+Con el hoodie y la inflada, las mangas van ceñidas (munequeras.py, copia_cenida): para medirlas se cambia
+ROPA por las copias antes de medir, p. ej. ns["ROPA"] = ("mq_Hoodie_cenida", "mq_Inflada_cenida").
 """
 import bpy, bmesh, math
 import numpy as np
@@ -88,11 +91,12 @@ def dominante(o):
     return [max(((g.weight, gn[g.group]) for g in v.groups), default=(0, ""))[1] for v in o.data.vertices]
 
 
-def preparar():
-    """La muñequera en reposo (con bisel) partida por lado, y cómo partir lo que hay que partir."""
+def preparar(nombre="Munequeras"):
+    """La muñequera en reposo (con bisel) partida por lado, y cómo partir lo que hay que partir.
+    nombre: el objeto de las muñequeras (otro, para medir una prueba sin tocar el de verdad)."""
     quitar_accion()
     dg = bpy.context.evaluated_depsgraph_get(); inv = ARM.matrix_world.inverted()
-    vs, tri = malla(bpy.data.objects["Munequeras"], dg, inv)
+    vs, tri = malla(bpy.data.objects[nombre], dg, inv)
     lado = np.where(vs[tri[:, 0], 0] > 0, 0, 1)
     R = dict(vs=vs, tri={"l": tri[lado == 0], "r": tri[lado == 1]})
     R["reposo_hueso"] = {s: np.array(ARM.data.bones[HUESO + "." + s].matrix_local) for s in ("l", "r")}
@@ -178,11 +182,11 @@ def medir_cuadro(R, dg=None, inv=None, que=None):
     return res
 
 
-def medir(acciones=ACCIONES, paso=1, cuadros=None, que=None):
+def medir(acciones=ACCIONES, paso=1, cuadros=None, que=None, nombre="Munequeras"):
     """Cada cuadro de cada acción: por lado y cosa, en cuántos cuadros se cruza, lo peor (pares de
     triángulos, cuadro) y la holgura mínima (cm, cuadro)."""
     sc = bpy.context.scene; antes = sc.frame_current
-    R = preparar()
+    R = preparar(nombre)
     res = {}
     try:
         res["reposo"] = medir_cuadro(R, que=que)
@@ -246,11 +250,11 @@ def abrir_brazo(lado, grados):
     bpy.context.view_layer.update()
 
 
-def apertura_necesaria(acciones=ACCIONES, que=None, tope=30, paso=1, cuadros=None, ignorar=("antebrazo_propio",)):
+def apertura_necesaria(acciones=ACCIONES, que=None, tope=30, paso=1, cuadros=None, ignorar=("antebrazo_propio",), nombre="Munequeras"):
     """Por acción, cuadro y lado: los grados mínimos de apertura para que la muñequera no cruce nada de
     `que` (None = cuerpo y todas las prendas visibles). Regresa además el máximo por lado."""
     sc = bpy.context.scene; antes = sc.frame_current
-    R = preparar()
+    R = preparar(nombre)
     res = {}
     try:
         for a in acciones:

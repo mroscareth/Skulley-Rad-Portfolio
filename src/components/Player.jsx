@@ -1080,6 +1080,8 @@ export default function Player({
       }
     }
     if (!pr.mallas.length) return
+    // con las muñequeras, las mangas del hoodie y la inflada van ceñidas (solo escribe cuando cambia)
+    scene?.userData.cenirMangas?.(estado)
     const libre = !orbActiveRef.current && !showOrbRef.current && !disassembleActiveRef.current && (op < 0 || op > 0.01)
     for (let i = 0; i < pr.mallas.length; i++) {
       const m = pr.mallas[i]

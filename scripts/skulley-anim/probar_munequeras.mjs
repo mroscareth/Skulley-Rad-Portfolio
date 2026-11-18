@@ -4,7 +4,7 @@
 //
 // Uso (desde la raíz del repo): node scripts/skulley-anim/probar_munequeras.mjs <carpeta> [prendas...]
 // <carpeta> trae character.glb, munequeras.glb, correr.glb (y las prendas) sin texturas ni Draco, hechas
-// con gltf-transform (GLTFLoader en Node no lee imágenes ni Draco). prendas: chamarra, boxers, pantalones;
+// con gltf-transform (GLTFLoader en Node no lee imágenes ni Draco). prendas: chamarra, hoodie, inflada, boxers, pantalones;
 // "sin" las deja sin muñequeras (para comparar contra lo que ya hacía la capa con esa ropa).
 // Además, con la apertura ya puesta, revisa en cada cuadro TODOS los vértices del tórax, la pelvis y las
 // piernas contra la forma de cada muñequera (en el marco de su hueso: el radio más lejano del aro y de los
@@ -31,9 +31,10 @@ try {
   })
   const base = await cargar('character.glb')
   const s = SkeletonUtils.clone(base.scene)
-  acc.ponerMunequeras(s, await cargar('munequeras.glb'))
-  const poner = { chamarra: acc.ponerChamarra, boxers: acc.ponerBoxers, pantalones: acc.ponerPantalones }
+  // las prendas antes que las muñequeras, como en Player (ponerMunequeras prepara las mangas ceñidas)
+  const poner = { chamarra: acc.ponerChamarra, boxers: acc.ponerBoxers, pantalones: acc.ponerPantalones, hoodie: acc.ponerHoodie, inflada: acc.ponerInflada }
   for (const p of PRENDAS) poner[p](s, await cargar(`${p}.glb`))
+  acc.ponerMunequeras(s, await cargar('munequeras.glb'))
   s.updateMatrixWorld(true)
   const raizInv = new THREE.Matrix4().copy(s.matrixWorld).invert()
   const am = crearApartaManos(s, (b) => new THREE.Matrix4().multiplyMatrices(raizInv, b.matrixWorld))
@@ -60,7 +61,8 @@ try {
     for (const [y, r, b] of loc) if (y < y0 + placa || y > y1 - placa) aro[b] = Math.max(aro[b], r)
     let ys0 = Infinity, ys1 = -Infinity
     for (const [y, r, b] of loc) if (r > aro[b] + 0.0002) { pico[b] = Math.max(pico[b], r); ys0 = Math.min(ys0, y); ys1 = Math.max(ys1, y) }
-    forma[k] = { hueso, post, aro, pico, y0, y1, ys0, ys1, N }
+    const hueco = Math.min(...loc.map((v) => v[1]))
+    forma[k] = { hueso, post, aro, pico, y0, y1, ys0, ys1, N, hueco }
   }
   const cuerpo = []
   s.traverse((o) => {
@@ -73,6 +75,71 @@ try {
     }
   })
   console.log('vértices del cuerpo revisados', cuerpo.length)
+  // mangas del hoodie y la inflada (lo del brazo de cada lado), para ver que pasen por el hueco
+  const mangas = { l: [], r: [] }
+  s.traverse((o) => {
+    if (!o.isSkinnedMesh || !['hoodie', 'inflada'].includes(o.userData?.accesorio)) return
+    const si = o.geometry.attributes.skinIndex, sw = o.geometry.attributes.skinWeight
+    const nb = o.skeleton.bones.map((b) => b.name)
+    for (const k of ['l', 'r']) {
+      const re = new RegExp(`^(arm|forearm|hand).*${k}$`)
+      for (let i = 0; i < si.count; i++) {
+        let w = 0
+        for (let c = 0; c < 4; c++) if (re.test(nb[si.getComponent(i, c)])) w += sw.getComponent(i, c)
+        if (w >= 0.5) mangas[k].push([o, i])
+      }
+    }
+  })
+  // el cuerpo de las prendas de arriba (lo que no es manga) contra la forma de la muñequera
+  const torsoPrenda = []
+  s.traverse((o) => {
+    if (!o.isSkinnedMesh || !['hoodie', 'inflada', 'chamarra'].includes(o.userData?.accesorio)) return
+    const si = o.geometry.attributes.skinIndex, sw = o.geometry.attributes.skinWeight
+    const nb = o.skeleton.bones.map((b) => /^(arm|forearm|hand|shoulder)/.test(b.name))
+    for (let i = 0; i < si.count; i += 2) {
+      let w = 0
+      for (let c = 0; c < 4; c++) if (nb[si.getComponent(i, c)]) w += sw.getComponent(i, c)
+      if (w < 0.5) torsoPrenda.push([o, i])
+    }
+  })
+  const prendaMetida = () => {
+    const out = { l: 0, r: 0 }
+    const mundo = torsoPrenda.map(([o, i]) => o.getVertexPosition(i, new THREE.Vector3()).applyMatrix4(o.matrixWorld))
+    for (const k of ['l', 'r']) {
+      const F = forma[k]
+      fw.multiplyMatrices(F.hueso.matrixWorld, F.post); inv.copy(fw).invert()
+      for (const w of mundo) {
+        pw.copy(w).applyMatrix4(inv)
+        if (pw.y < F.y0 || pw.y > F.y1) continue
+        const r = Math.hypot(pw.x, pw.z)
+        const b = Math.min(F.N - 1, Math.floor((Math.atan2(pw.z, pw.x) + Math.PI) / (2 * Math.PI) * F.N))
+        let lim = F.aro[b]
+        if (pw.y > F.ys0 && pw.y < F.ys1) lim = Math.max(lim, F.pico[b])
+        if (lim - r > out[k]) out[k] = lim - r
+      }
+    }
+    return out
+  }
+  const mangaMetida = () => {
+    const out = { l: 0, r: 0 }
+    for (const k of ['l', 'r']) {
+      const F = forma[k]
+      fw.multiplyMatrices(F.hueso.matrixWorld, F.post); inv.copy(fw).invert()
+      for (const [o, i] of mangas[k]) {
+        pw.copy(o.getVertexPosition(i, new THREE.Vector3()).applyMatrix4(o.matrixWorld)).applyMatrix4(inv)
+        if (pw.y < F.y0 || pw.y > F.y1) continue
+        // dentro del aro: más afuera que el hueco y más adentro que su orilla (más lejos es otra cosa)
+        const r = Math.hypot(pw.x, pw.z)
+        const b = Math.min(F.N - 1, Math.floor((Math.atan2(pw.z, pw.x) + Math.PI) / (2 * Math.PI) * F.N))
+        let lim = F.aro[b]
+        if (pw.y > F.ys0 && pw.y < F.ys1) lim = Math.max(lim, F.pico[b])
+        if (r >= lim) continue
+        const d = Math.min(r - F.hueco, lim - r)
+        if (d > out[k]) out[k] = d
+      }
+    }
+    return out
+  }
   const fw = new THREE.Matrix4(), inv = new THREE.Matrix4(), pw = new THREE.Vector3()
   const metido = () => {
     const out = { l: 0, r: 0 }
@@ -95,6 +162,7 @@ try {
   const clips = [...base.animations, ...(await cargar('correr.glb')).animations]
   const que = { munequeras: !SIN }
   for (const p of PRENDAS) que[p] = true
+  s.userData.cenirMangas?.(que)
   const TRAZA = process.env.TRAZA ? process.env.TRAZA.split('-').map(Number) : null   // TRAZA=60-80: cuadros a detalle
   const HZ = Number(process.env.HZ || 60)   // cuadros por segundo (HZ=30 o 144 para probar otros)
   const dt = 1 / HZ
@@ -103,7 +171,7 @@ try {
     const act = mixer.clipAction(clip)
     act.play()
     const n = Math.round(clip.duration * 2 / dt)
-    const serie = { l: [], r: [] }, nec = { l: [], r: [] }, hondo = { l: [], r: [] }, costo = []
+    const serie = { l: [], r: [] }, nec = { l: [], r: [] }, hondo = { l: [], r: [] }, manga = { l: [], r: [] }, prenda = { l: [], r: [] }, costo = []
     const t0 = performance.now()
     for (let f = 0; f < n; f++) {
       am.restaurar()
@@ -117,13 +185,15 @@ try {
         serie[l.s].push(2 * Math.acos(Math.min(1, d)) * 180 / Math.PI)
         nec[l.s].push(Math.max(l.necesita, l.abdPide || 0) * 180 / Math.PI)
       }
-      if (TRAZA && clip.name.includes('Walk') && f >= TRAZA[0] && f <= TRAZA[1]) {
+      if (TRAZA && clip.name.includes(process.env.TRAZACLIP || 'Walk') && f >= TRAZA[0] && f <= TRAZA[1]) {
         console.log(f, am.lados.map((l) => `${l.s}: aplicada ${(2 * Math.acos(Math.min(1, Math.abs(l.brazo.quaternion.dot(l.crudo)))) * 180 / Math.PI).toFixed(2)} pide ${(l.necesita * 180 / Math.PI).toFixed(2)} muñ ${((l.abdPide || 0) * 180 / Math.PI).toFixed(2)}/${((l.abd || 0) * 180 / Math.PI).toFixed(2)} rv(${l.rv.toArray().map((x) => (x * 180 / Math.PI).toFixed(1)).join(',')}) sost(${l.sostiene.toArray().map((x) => (x * 180 / Math.PI).toFixed(1)).join(',')})`).join(' | '))
       }
       if (!SIN) {
         s.updateMatrixWorld(true)
         const h = metido()
         hondo.l.push(h.l); hondo.r.push(h.r)
+        if (mangas.l.length) { const mm = mangaMetida(); manga.l.push(mm.l); manga.r.push(mm.r) }
+        if (torsoPrenda.length) { const pm = prendaMetida(); prenda.l.push(pm.l); prenda.r.push(pm.r) }
       }
     }
     const ms = (performance.now() - t0) / n
@@ -141,6 +211,9 @@ try {
         cada10: a.filter((_, i) => i % 10 === 0).map((x) => +x.toFixed(1)).join(' '),
         metidos: hondo[k].filter((x) => x > 0.0005).length,
         hondo: hondo[k].length ? +(Math.max(...hondo[k]) * 100).toFixed(2) : 0,
+        manga: (manga[k].length ? `; manga en el aro en ${manga[k].filter((x) => x > 0).length} cuadros (${(Math.max(...manga[k]) * 100).toFixed(2)} cm)` : '')
+          + (prenda[k].length ? `; prenda metida en ${prenda[k].filter((x) => x > 0.0005).length} cuadros (${(Math.max(...prenda[k]) * 100).toFixed(2)} cm)` : '')
+          + (prenda[k].length ? ' ' + prenda[k].map((x, i) => (x > 0.0005 ? `[${i}:${(x * 100).toFixed(1)}/${a[i].toFixed(1)}/${nec[k][i].toFixed(1)}]` : null)).filter(Boolean).join(' ') : ''),
         // cuadro:hondura(cm)/apertura/pedido de los cuadros que se meten
         donde: hondo[k].map((x, i) => (x > 0.0005 ? `${i}:${(x * 100).toFixed(1)}/${a[i].toFixed(1)}/${nec[k][i].toFixed(1)}` : null)).filter(Boolean).join(' '),
       }
@@ -148,7 +221,7 @@ try {
     const cs = [...costo].sort((x, y) => x - y)
     console.log(`
 ${clip.name} (${n} cuadros a ${HZ} Hz; aplicar: mediana ${cs[cs.length >> 1].toFixed(2)} ms, p90 ${cs[Math.floor(cs.length * 0.9)].toFixed(2)} ms)`)
-    for (const k of ['l', 'r']) console.log(` ${k}: apertura max ${res[k].max}°, lo que pidió max ${res[k].necMax}°, salto max ${res[k].saltoMax}° (cuadro ${res[k].en}); cuerpo metido en ${res[k].metidos} cuadros, lo más hondo ${res[k].hondo} cm\n    ${res[k].cada10}
+    for (const k of ['l', 'r']) console.log(` ${k}: apertura max ${res[k].max}°, lo que pidió max ${res[k].necMax}°, salto max ${res[k].saltoMax}° (cuadro ${res[k].en}); cuerpo metido en ${res[k].metidos} cuadros, lo más hondo ${res[k].hondo} cm${res[k].manga}\n    ${res[k].cada10}
     ${res[k].donde}`)
   }
 } finally {

@@ -392,9 +392,82 @@ def todo():
     return o, info
 
 
+# ---------------------------------------------------------------- mangas ceñidas
+# Con el hoodie y la inflada la muñequera aprieta la manga (Oscar, 2026-11-18: "déjalas en su tamaño normal
+# para todos"; una variante con hueco de 10 cm le pareció demasiado grande). El puño del hoodie llega a 9.5 cm
+# del eje y el de la inflada a 7.8: todo lo de la manga, desde CINE_DESDE antes del aro, se aprieta hacia el
+# eje del antebrazo, de CINE_DENTRO (más afuera que el antebrazo, 4.95) a CINE_FUERA (el hueco menos medio
+# centímetro), conservando el orden de las capas. Esto lo hace el sitio al ponerlas juntas
+# (accesorios.js, cenirMangas); aquí solo se arma en una copia para verlo y medirlo, nunca encima de la prenda.
+CINE_DESDE = 3.0
+CINE_DENTRO = 5.8
+CINE_FUERA = HUECO - 0.5
+# pasando la cara de enfrente del aro la manga se suelta y el puño vuelve a abrirse: ceñido hasta la punta,
+# la mano al doblarse se metía en el final del puño del hoodie caminando
+CINE_SUELTA = (0.15, 0.6)
+
+
+def suave(a, b, x):
+    t = min(1.0, max(0.0, (x - a) / (b - a)))
+    return t * t * (3 - 2 * t)
+
+
+def cenido(o, picos_mat=("Inflada_Picos",)):
+    """Posiciones de reposo de la prenda `o` con las mangas ceñidas (coordenadas del objeto)."""
+    me = o.data
+    gn = {g.index: g.name for g in o.vertex_groups}
+    inv_o = o.matrix_world.inverted() @ ARM.matrix_world
+    a_arm = ARM.matrix_world.inverted() @ o.matrix_world
+    mat_de = {}
+    for poly in me.polygons:
+        for vi in poly.vertices:
+            mat_de[vi] = me.materials[poly.material_index].name if me.materials[poly.material_index] else ""
+    nuevas = [v.co.copy() for v in me.vertices]
+    for s in ("l", "r"):
+        B = ARM.data.bones[HUESO + "." + s].matrix_local
+        Binv = B.inverted()
+        lado = []
+        for v in me.vertices:
+            w = sum(g.weight for g in v.groups if gn[g.group].endswith("." + s) and gn[g.group].split(".")[0].startswith(("arm", "forearm", "hand")))
+            if w < 0.5:
+                continue
+            l = Binv @ (a_arm @ v.co)
+            lado.append((v.index, l))
+        y_full = Y0 - 0.3
+        rmax = max((math.hypot(l.x, l.z) for i, l in lado if l.y >= y_full and mat_de.get(i) not in picos_mat), default=0.0)
+        if rmax <= CINE_FUERA:
+            continue
+        k = (CINE_FUERA - CINE_DENTRO) / (rmax - CINE_DENTRO)
+        for i, l in lado:
+            w = suave(Y0 - CINE_DESDE, y_full, l.y) * (1 - suave(Y1 + CINE_SUELTA[0], Y1 + CINE_SUELTA[1], l.y))
+            if w <= 0:
+                continue
+            r = math.hypot(l.x, l.z)
+            if r <= CINE_DENTRO:
+                continue
+            r2 = min(CINE_DENTRO + (r - CINE_DENTRO) * k, CINE_FUERA)
+            r3 = r + w * (r2 - r)
+            l2 = Vector((l.x * r3 / r, l.y, l.z * r3 / r))
+            nuevas[i] = inv_o @ (B @ l2)
+    return nuevas
+
+
+def copia_cenida(nombre):
+    """Copia temporal de la prenda con las mangas ceñidas (mq_<nombre>_cenida, en la colección temporal)."""
+    o = bpy.data.objects[nombre]
+    borrar("mq_" + nombre + "_cenida")
+    c = o.copy(); c.data = o.data.copy()
+    c.name = "mq_" + nombre + "_cenida"; c.data.name = c.name
+    col_tmp().objects.link(c)
+    for v, p in zip(c.data.vertices, cenido(o)):
+        v.co = p
+    c.hide_set(False); c.hide_render = False
+    return c
+
+
 # ---------------------------------------------------------------- renders
 def render(ruta, objetivo, desde, lente=85.0, ancho=1100, alto=1100, mostrar=("Munequeras",), accion=None,
-           cuadro=None, motor="BLENDER_EEVEE", muestras=24, orto=None):
+           cuadro=None, motor="BLENDER_EEVEE", muestras=24, orto=None, pose=None):
     """Render con cámara temporal (objetivo y desde en cm del armature). Salen el cuerpo y lo de `mostrar`;
     lo demás (otros props, temporales de otras sesiones) se esconde y se regresa como estaba."""
     sc = bpy.context.scene; r = sc.render
@@ -431,6 +504,8 @@ def render(ruta, objetivo, desde, lente=85.0, ancho=1100, alto=1100, mostrar=("M
             sc.frame_set(cuadro or 1)
         else:
             quitar_accion()
+        if pose:
+            pose()   # p. ej. abrir los brazos como apartaManos (revisar_munequeras.abrir_brazo)
         sc.camera = cam
         r.engine = motor
         if motor.startswith("BLENDER_EEVEE"):
