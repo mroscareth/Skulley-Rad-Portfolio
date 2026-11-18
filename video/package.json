@@ -1,0 +1,18 @@
+{
+  "name": "skulley-video",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "preparar": "node capture/preparar.mjs"
+  },
+  "dependencies": {
+    "@remotion/bundler": "^4.0.544",
+    "@remotion/cli": "^4.0.544",
+    "@remotion/layout-utils": "^4.0.544",
+    "@remotion/renderer": "^4.0.544",
+    "puppeteer-core": "^24.43.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "remotion": "^4.0.544"
+  }
+}
