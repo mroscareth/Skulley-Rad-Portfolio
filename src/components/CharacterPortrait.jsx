@@ -13,7 +13,8 @@ import PortraitGlobo from './PortraitGlobo.jsx'
 import { applyToonBanding } from '../lib/toonBanding.js'
 import { compileAsyncSafe } from '../lib/compileAsyncSafe.js'
 import { applyCharacterColorsToScene, getCharacterColors, CHARACTER_COLOR_EVENT, EYES_ORB_ONLY } from '../lib/characterColors.js'
-import { URL_LENTES, URL_BOXERS, ponerLentes, ponerBoxers, mostrarAccesorios, getAccesorios, ACCESORIOS_EVENT } from '../lib/accesorios.js'
+import { URL_LENTES, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_INFLADA, URL_PANTALONES, ponerLentes, ponerBoxers, ponerChamarra, ponerHoodie, ponerInflada, ponerPantalones, mostrarAccesorios, getAccesorios, ACCESORIOS_EVENT } from '../lib/accesorios.js'
+import { crearApartaManos } from '../lib/apartaManos.js'
 import { applyCharacterSkinShader, materialTakesSkin, skinLineColor, SKIN_LINE_COLOR_EVENT, getSkinForcedColors } from '../lib/skinShaders.js'
 import CharacterNormalPass from './fx/CharacterNormalPass.jsx'
 import EdgeInkEffect from './fx/EdgeInkEffect.jsx'
@@ -102,6 +103,10 @@ function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
   )
   const lentesGltf = useGLTF(URL_LENTES, true)
   const boxersGltf = useGLTF(URL_BOXERS, true)
+  const chamarraGltf = useGLTF(URL_CHAMARRA, true)
+  const hoodieGltf = useGLTF(URL_HOODIE, true)
+  const infladaGltf = useGLTF(URL_INFLADA, true)
+  const pantalonesGltf = useGLTF(URL_PANTALONES, true)
   // Detect GPU compressed-texture support once per renderer
   useEffect(() => { detectKTX2Support(gl) }, [gl])
   // Load gold model WITHOUT KTX2 (re-exported with standard JPEG textures)
@@ -154,8 +159,18 @@ function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
 
     try { ponerLentes(clone, lentesGltf) } catch { }
     try { ponerBoxers(clone, boxersGltf) } catch { }
+    try { ponerChamarra(clone, chamarraGltf) } catch { }
+    try { ponerHoodie(clone, hoodieGltf) } catch { }
+    try { ponerInflada(clone, infladaGltf) } catch { }
+    try { ponerPantalones(clone, pantalonesGltf) } catch { }
+    // Las mangas de la chamarra, el hoodie y la inflada (y las manos con los bóxers o los pantalones) se apartan igual que en Player
+    try {
+      clone.updateMatrixWorld(true)
+      const raizInv = new THREE.Matrix4().copy(clone.matrixWorld).invert()
+      clone.userData.apartaManos = crearApartaManos(clone, (b) => new THREE.Matrix4().multiplyMatrices(raizInv, b.matrixWorld))
+    } catch { }
     return clone
-  }, [activeScene, lentesGltf, boxersGltf])
+  }, [activeScene, lentesGltf, boxersGltf, chamarraGltf, hoodieGltf, infladaGltf, pantalonesGltf])
 
   // Los props que se prenden y apagan en Customize
   useEffect(() => {
@@ -237,7 +252,23 @@ function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
     }
   }, [cloned, goldSkinActive])
 
+  // Antes del mixer el brazo regresa a lo que él dejó (registrado antes de useAnimations)
+  useFrame(() => { cloned.userData.apartaManos?.restaurar() })
   const { actions } = useAnimations(animations, cloned)
+  // Y después del mixer se abre lo justo (mismas reglas que Player)
+  const propsPuestosRef = useRef(null)
+  useFrame((_, delta) => {
+    const manos = cloned.userData.apartaManos
+    if (!manos) return
+    if (!propsPuestosRef.current) {
+      const l = []
+      cloned.traverse((o) => { if (['boxers', 'pantalones', 'chamarra', 'hoodie', 'inflada'].includes(o.userData?.accesorio)) l.push(o) })
+      propsPuestosRef.current = l
+    }
+    const puestos = { boxers: false, pantalones: false, chamarra: false, hoodie: false, inflada: false }
+    for (const o of propsPuestosRef.current) if (o.visible) puestos[o.userData.accesorio] = true
+    try { manos.aplicar(Math.min(Math.max(delta || 0, 0), 0.1), puestos) } catch { }
+  })
   const matUniformsRef = useRef(new Map())
   const glowColorRef = useRef(new THREE.Color('#ffd480'))
   const glowAmountRef = useRef(0)

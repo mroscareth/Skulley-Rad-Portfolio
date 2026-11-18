@@ -94,21 +94,175 @@ function BoxersIcon({ className }) {
   )
 }
 
-export const ICONOS_PROP = { lentes: LentesIcon, boxers: BoxersIcon }
+// Chamarra abierta con sus picos en los hombros para el botón del prop.
+function ChamarraIcon({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="currentColor" fillRule="evenodd" aria-hidden="true">
+      <path d="M8.6 6.2L12.6 5 16 10.5 19.4 5l4 1.2 4.2 2.4c.7.4 1.1 1 1.2 1.8L30 23.6c.1.8-.4 1.4-1.2 1.5l-2.2.3c-.7.1-1.3-.4-1.4-1.1L24 14.5v11.9c0 .7-.6 1.2-1.2 1.2H9.2c-.6 0-1.2-.5-1.2-1.2V14.5l-1.2 9.8c-.1.7-.7 1.2-1.4 1.1l-2.2-.3c-.8-.1-1.3-.7-1.2-1.5l1.2-13.2c.1-.8.5-1.4 1.2-1.8zM15.2 12h1.6v15.6h-1.6z" />
+      <path d="M5.6 7.9l.7-2.9 1.4 2.3zM8.4 6.8l.6-2.9 1.5 2.2zM11.1 5.9l.5-2.9 1.6 2.1zM26.4 7.9l-.7-2.9-1.4 2.3zM23.6 6.8l-.6-2.9-1.5 2.2zM20.9 5.9l-.5-2.9-1.6 2.1z" />
+    </svg>
+  )
+}
 
-// Props de Skulley (Oscar, 2026-11-16): cada uno se pone o se quita. Mismo
-// tamaño que los chips de skin, en su misma cuadrícula; el puesto va en
-// amarillo, como los chips marcados del sitio.
-function SelectorProps({ lang, enFila = false }) {
+// Hoodie con la capucha, sus cordones y el resorte de abajo para el botón del prop.
+function HoodieIcon({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="currentColor" fillRule="evenodd" aria-hidden="true">
+      <path d="M11 6.6C11.6 4.4 13.6 3 16 3s4.4 1.4 5 3.6l2.6.8 4 2.2c.7.4 1.1 1 1.2 1.8L30 23.6c.1.8-.4 1.4-1.2 1.5l-2.2.3c-.7.1-1.3-.4-1.4-1.1L24 14.5v11.9c0 .7-.6 1.2-1.2 1.2H9.2c-.6 0-1.2-.5-1.2-1.2V14.5l-1.2 9.8c-.1.7-.7 1.2-1.4 1.1l-2.2-.3c-.8-.1-1.3-.7-1.2-1.5l1.2-13.2c.1-.8.5-1.4 1.2-1.8l4-2.2zM13.2 7.4C13.6 5.8 14.7 5 16 5s2.4.8 2.8 2.4L16 10.2zM14 10.6h1v4.6h-1zM17 10.6h1v4.6h-1zM8 24.2h16v.9H8z" />
+    </svg>
+  )
+}
+
+// Tenis de bota de lado (caña, agujetas y suela con su línea) para el botón del prop.
+function TenisIcon({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="currentColor" fillRule="evenodd" aria-hidden="true">
+      <path d="M5 22V6.4C5 5.6 5.6 5 6.4 5h6.2c.8 0 1.4.6 1.4 1.4v5l4 2.6 7.2 2.4c2.3.8 3.8 2.9 3.8 5.3V22zM15.2 12.4h1.6v1.4h-1.6zM17.8 14.2h1.6v1.4h-1.6zM20.4 16h1.6v1.4h-1.6z" />
+      <path d="M3 23.2h26c.6 0 1 .4 1 1v1.4c0 1.3-1.1 2.4-2.4 2.4H4.4C3.1 28 2 26.9 2 25.6v-1.4c0-.6.4-1 1-1zM4 25.2v.9h24v-.9z" />
+    </svg>
+  )
+}
+
+// Chamarra inflada (gajos, cierre, cuello de rollo y los picos de las mangas) para el botón del prop.
+function InfladaIcon({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="currentColor" fillRule="evenodd" aria-hidden="true">
+      <path d="M8.6 6.6L12 5.4c1 1.2 2.4 1.8 4 1.8s3-.6 4-1.8l3.4 1.2 4.2 2.4c.7.4 1.1 1 1.2 1.8L30 23.6c.1.8-.4 1.4-1.2 1.5l-2.2.3c-.7.1-1.3-.4-1.4-1.1L24 14.5v11.9c0 .7-.6 1.2-1.2 1.2H9.2c-.6 0-1.2-.5-1.2-1.2V14.5l-1.2 9.8c-.1.7-.7 1.2-1.4 1.1l-2.2-.3c-.8-.1-1.3-.7-1.2-1.5l1.2-13.2c.1-.8.5-1.4 1.2-1.8zM15.6 8.4h.8v19.2h-.8zM8 12.6h7v.8H8zM17 12.6h7v.8h-7zM8 17h7v.8H8zM17 17h7v.8h-7zM8 21.4h7v.8H8zM17 21.4h7v.8h-7z" />
+      <path d="M11.4 4.6c1 1.5 2.7 2.4 4.6 2.4s3.6-.9 4.6-2.4l1.3.6c-1.3 2.1-3.4 3.3-5.9 3.3s-4.6-1.2-5.9-3.3zM4.4 9.4L1.7 9.9l2.3 1.6zM3.9 13.4l-2.6.5 2.2 1.6zM3.4 17.4l-2.4.6 2.1 1.4zM27.6 9.4l2.7.5-2.3 1.6zM28.1 13.4l2.6.5-2.2 1.6zM28.6 17.4l2.4.6-2.1 1.4z" />
+    </svg>
+  )
+}
+
+// Bota de lado (punta afilada, correa del tobillo con su hebilla, correa del empeine y suela gruesa) para el botón del prop.
+function BotasIcon({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="currentColor" fillRule="evenodd" aria-hidden="true">
+      <path d="M7 21.6V5.2C7 4.5 7.5 4 8.2 4h6.2c.7 0 1.2.5 1.2 1.2v8.2l5.2 2.4 6.8 3c1 .5 1.6 1.4 1.6 2.5v.3z" />
+      <path d="M5.6 8.6h11.6v3.2H5.6zM12.8 9.5h2.2v1.4h-2.2zM15.2 13.4l2.4-1.3 3.8 6.6-2.4 1.3z" />
+      <path d="M3.6 22.8h26.6c.5 0 .8.5.6 1l-1.2 2.6c-.5 1-1.5 1.6-2.6 1.6H5c-1.1 0-2-.9-2-2v-2.6c0-.3.3-.6.6-.6zM4.6 25h23.6v.8H4.6z" />
+    </svg>
+  )
+}
+
+// Pantalones de mezclilla con la pretina y su botón, el roto de cada rodilla y los rollos de abajo para el botón del prop.
+function PantalonesIcon({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="currentColor" fillRule="evenodd" aria-hidden="true">
+      <path d="M8.6 3h14.8c.4 0 .7.3.7.7v2.6c0 .4-.3.7-.7.7H8.6c-.4 0-.7-.3-.7-.7V3.7c0-.4.3-.7.7-.7zM16 4.1a.9.9 0 1 0 0 1.8.9.9 0 1 0 0-1.8z" />
+      <path d="M8 7.8h16l1.5 17.2h-6.3L16 12.6 12.8 25H6.5zM9.2 16c.6-.8 2.8-.8 3.4 0-.6.8-2.8.8-3.4 0zM19.4 16c.6-.8 2.8-.8 3.4 0-.6.8-2.8.8-3.4 0z" />
+      <path d="M6.2 25.6h6.8v2.6c0 .4-.3.7-.7.7H6.9c-.4 0-.7-.3-.7-.7zM19 25.6h6.8v2.6c0 .4-.3.7-.7.7h-5.4c-.4 0-.7-.3-.7-.7z" />
+    </svg>
+  )
+}
+
+export const ICONOS_PROP = { lentes: LentesIcon, boxers: BoxersIcon, pantalones: PantalonesIcon, chamarra: ChamarraIcon, hoodie: HoodieIcon, tenis: TenisIcon, inflada: InfladaIcon, botas: BotasIcon }
+
+// Íconos de las partes del cuerpo (pestaña Props).
+function CabezaIcon({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="currentColor" fillRule="evenodd" aria-hidden="true">
+      <path d="M16 3C9.4 3 5 7.4 5 13.2c0 3.4 1.6 6.1 4.2 7.6V24c0 1.1.9 2 2 2h1.3v-2.2h1.6V26h3.8v-2.2h1.6V26H21c1.1 0 2-.9 2-2v-3.2c2.6-1.5 4.2-4.2 4.2-7.6C27 7.4 22.6 3 16 3zM11.6 12.4a2.6 2.6 0 1 0 0 5.2 2.6 2.6 0 0 0 0-5.2zM20.4 12.4a2.6 2.6 0 1 0 0 5.2 2.6 2.6 0 0 0 0-5.2zM16 17.6l-1.3 2.3h2.6z" />
+    </svg>
+  )
+}
+function TorsoIcon({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="currentColor" aria-hidden="true">
+      <path d="M11 4.5L4.6 7.4 2 13.6l4.5 2L8 14.2v12.3c0 .6.4 1 1 1h14c.6 0 1-.4 1-1V14.2l1.5 1.4 4.5-2-2.6-6.2L21 4.5c-.6 1.8-2.6 3-5 3s-4.4-1.2-5-3z" />
+    </svg>
+  )
+}
+function MunecasIcon({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="currentColor" fillRule="evenodd" aria-hidden="true">
+      <path d="M12.5 3h7l.8 6.2A7 7 0 0 1 23 15a7 7 0 0 1-2.7 5.8L19.5 29h-7l-.8-8.2A7 7 0 0 1 9 15a7 7 0 0 1 2.7-5.8zM16 10.4a4.6 4.6 0 1 0 0 9.2 4.6 4.6 0 0 0 0-9.2z" />
+      <path d="M15.4 12h1.2v3.3l2.2 1.3-.6 1-2.8-1.6z" />
+    </svg>
+  )
+}
+function PiernasIcon({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="currentColor" aria-hidden="true">
+      <path d="M8.6 3h14.8c.5 0 .9.4 1 .9l2 23.9c0 .6-.4 1.2-1 1.2h-5c-.5 0-.9-.3-1-.8L16 13.6l-3.4 14.6c-.1.5-.5.8-1 .8h-5c-.6 0-1-.6-1-1.2l2-23.9c.1-.5.5-.9 1-.9z" />
+    </svg>
+  )
+}
+function PiesIcon({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="currentColor" aria-hidden="true">
+      <path d="M9 5h6c.6 0 1 .4 1 1v8.4l8.3 3c2.2.8 3.7 2.9 3.7 5.2V24H4v-2.6c0-1 .3-2 .9-2.8L8 14.2V6c0-.6.4-1 1-1z" />
+      <path d="M4 25.4h24V27c0 .6-.4 1-1 1H5c-.6 0-1-.4-1-1z" />
+    </svg>
+  )
+}
+
+// Props por parte del cuerpo (Oscar, 2026-11-17): a la izquierda la parte y a
+// la derecha lo que hay para ella. Un prop nuevo va en ACCESORIOS (con
+// `parte`, o aquí en PARTE_DE) y en ICONOS_PROP.
+const PARTES = [
+  { id: 'cabeza', es: 'Cabeza', en: 'Head', Icono: CabezaIcon },
+  { id: 'torso', es: 'Torso', en: 'Torso', Icono: TorsoIcon },
+  { id: 'munecas', es: 'Muñecas', en: 'Wrists', Icono: MunecasIcon },
+  { id: 'piernas', es: 'Piernas', en: 'Legs', Icono: PiernasIcon },
+  { id: 'pies', es: 'Pies', en: 'Feet', Icono: PiesIcon },
+]
+const PARTE_DE = { lentes: 'cabeza', chamarra: 'torso', hoodie: 'torso', inflada: 'torso', boxers: 'piernas', pantalones: 'piernas', tenis: 'pies', botas: 'pies' }
+const parteDe = (a) => a.parte || PARTE_DE[a.id] || 'torso'
+
+function useAccesorios() {
   const [estado, setEstado] = useState(getAccesorios)
   useEffect(() => {
     const on = (e) => setEstado(e?.detail ? { ...e.detail } : getAccesorios())
     window.addEventListener(ACCESORIOS_EVENT, on)
     return () => window.removeEventListener(ACCESORIOS_EVENT, on)
   }, [])
+  return [estado, setEstado]
+}
+
+// Las partes: mismo tamaño y cuadrícula que los chips de skin, y la escogida
+// marcada como la skin activa. El punto amarillo dice que esa parte trae algo puesto.
+function SelectorPartes({ lang, parte, onParte, estado, enFila = false }) {
   return (
-    <div className={enFila ? 'flex justify-center gap-3' : 'grid grid-cols-2 gap-2.5 md:gap-3'} role="group" aria-label="Props">
-      {ACCESORIOS.map((a) => {
+    <div className={enFila ? 'flex justify-center gap-3' : 'grid grid-cols-2 gap-2.5 md:gap-3'} role="group" aria-label={lang === 'es' ? 'Partes' : 'Body parts'}>
+      {PARTES.map((p) => {
+        const activa = p.id === parte
+        const nombre = lang === 'es' ? p.es : p.en
+        const conAlgo = ACCESORIOS.some((a) => parteDe(a) === p.id && estado[a.id])
+        return (
+          <div key={p.id} className="flex flex-col items-center">
+            <button
+              type="button"
+              onClick={() => { if (activa) return; try { playSfx('click', { volume: 1.0 }) } catch { }; onParte(p.id) }}
+              onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+              aria-pressed={activa}
+              aria-label={nombre}
+              className={`relative grid place-items-center w-12 h-12 md:w-16 md:h-16 rounded-full border-2 transition-all bg-black/35 backdrop-blur-md ${activa ? 'border-white shadow-[0_0_14px_rgba(255,255,255,0.5)] scale-105 text-white' : 'border-white/20 hover:border-white/60 text-white/80 shadow-elev-sm'}`}
+            >
+              <p.Icono className="w-7 h-7 md:w-9 md:h-9" />
+              {conAlgo && <span className="absolute top-0 right-0 w-3 h-3 md:w-3.5 md:h-3.5 rounded-full bg-amarillo border-2 border-black/70" aria-hidden="true" />}
+            </button>
+            <div className="mt-1 w-12 md:w-16 text-[9px] md:text-[10px] text-center leading-tight opacity-80 truncate">{nombre}</div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// Los props de una parte: cada uno se pone o se quita; el puesto va en
+// amarillo, como los chips marcados del sitio.
+function PropsDeParte({ lang, parte, estado, setEstado, enFila = false }) {
+  const lista = ACCESORIOS.filter((a) => parteDe(a) === parte)
+  if (!lista.length) {
+    return (
+      <p className={`text-[11px] leading-snug opacity-55 text-center ${enFila ? '' : 'w-28'}`}>
+        {lang === 'es' ? 'Aún no hay nada aquí.' : 'Nothing here yet.'}
+      </p>
+    )
+  }
+  return (
+    <div className={enFila ? 'flex justify-center gap-3' : 'flex flex-col items-center gap-3'} role="group" aria-label="Props">
+      {lista.map((a) => {
         const puesto = !!estado[a.id]
         const nombre = lang === 'es' ? a.es : a.en
         const accion = puesto ? (lang === 'es' ? `Quitar ${a.es.toLowerCase()}` : `Remove ${a.en.toLowerCase()}`) : (lang === 'es' ? `Poner ${a.es.toLowerCase()}` : `Wear ${a.en.toLowerCase()}`)
@@ -212,6 +366,8 @@ export default function CharacterCustomizer({
   const { t, lang } = useLanguage()
   const [colors, setColors] = useState(() => getCharacterColors())
   const [pestana, setPestana] = useState('skins')
+  const [parte, setParte] = useState('cabeza')
+  const [estadoProps, setEstadoProps] = useAccesorios()
   // Keys de color editables según la skin: registry override (ej. void = [],
   // ninguno) o default (base = las 4; otras = ojos + orb).
   const isBase = activeSkinId === 'base'
@@ -323,8 +479,9 @@ export default function CharacterCustomizer({
             <div id="cc-panel-skins" role="tabpanel" aria-labelledby="cc-pestana-skins" className={`[grid-area:1/1] self-end ${pestana === 'skins' ? '' : 'invisible'}`} inert={pestana !== 'skins' || undefined}>
               {skins.length > 0 && <SkinCarousel skins={skins} lang={lang} renderChip={(s) => renderSkinChip(s, true)} />}
             </div>
-            <div id="cc-panel-props" role="tabpanel" aria-labelledby="cc-pestana-props" className={`[grid-area:1/1] self-end pb-1 ${pestana === 'props' ? '' : 'invisible'}`} inert={pestana !== 'props' || undefined}>
-              <SelectorProps lang={lang} enFila />
+            <div id="cc-panel-props" role="tabpanel" aria-labelledby="cc-pestana-props" className={`[grid-area:1/1] self-end pb-1 flex flex-col gap-3 ${pestana === 'props' ? '' : 'invisible'}`} inert={pestana !== 'props' || undefined}>
+              <PropsDeParte lang={lang} parte={parte} estado={estadoProps} setEstado={setEstadoProps} enFila />
+              <SelectorPartes lang={lang} parte={parte} onParte={setParte} estado={estadoProps} enFila />
             </div>
           </div>
         </div>
@@ -338,9 +495,23 @@ export default function CharacterCustomizer({
               </div>
             </div>
             <div id="cc-panel-props" role="tabpanel" aria-labelledby="cc-pestana-props" className={`[grid-area:1/1] self-start ${pestana === 'props' ? '' : 'invisible'}`} inert={pestana !== 'props' || undefined}>
-              <SelectorProps lang={lang} />
+              <SelectorPartes lang={lang} parte={parte} onParte={setParte} estado={estadoProps} />
             </div>
           </div>
+        </div>
+      )}
+
+      {/* PROPS de la parte escogida — a la DERECHA, donde con las skins van
+          los colores (Oscar). En compacto van abajo, con las partes. */}
+      {!compact && (
+        <div
+          className={`absolute right-0 top-1/2 -translate-y-1/2 text-white [text-shadow:0_1px_5px_rgba(0,0,0,0.9)] transition-all duration-300 ${open && pestana === 'props' ? 'opacity-100 translate-x-0 pointer-events-auto' : 'opacity-0 translate-x-6 pointer-events-none'}`}
+          inert={!open || pestana !== 'props' || undefined}
+        >
+          <h3 className="text-[11px] font-bold uppercase tracking-widest opacity-80 mb-2 text-center">
+            {(() => { const p = PARTES.find((x) => x.id === parte); return lang === 'es' ? p?.es : p?.en })()}
+          </h3>
+          <PropsDeParte lang={lang} parte={parte} estado={estadoProps} setEstado={setEstadoProps} />
         </div>
       )}
 

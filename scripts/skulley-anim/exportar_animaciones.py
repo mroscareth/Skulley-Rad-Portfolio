@@ -28,7 +28,9 @@ import math
 import os
 import struct
 
-REPO = r"D:\Work\mroscar\Website\new\SkulleyRadPortfolio"
+# La carpeta del repo se llama distinto en cada PC
+_REPOS = [r"D:\Work\mroscar\Website\new\SkulleyRadPortfolio", r"D:\Work\mroscar\Website\new\Skulley-Rad-Portfolio"]
+REPO = next((r for r in _REPOS if os.path.isdir(os.path.join(r, "public"))), _REPOS[0])
 SALIDA = os.path.join(REPO, "public", "animaciones")
 ARMATURE = "root"
 
@@ -118,9 +120,23 @@ def exportar_todas():
 # Salen en la pose de reposo, en las coordenadas del personaje. Los lentes van
 # sin piel (el sitio los pega a la cabeza); los bóxers con la suya (pelvis,
 # prop_cadera y muslos), y el sitio les pone la física de tela.
+# imagenes=False: el .blend lleva la textura para verla, pero el sitio pinta la
+# suya en un canvas (accesorios.js) y no hace falta que viaje en el GLB.
 PROPS = {
     "Lentes": dict(archivo="lentes", piel=False),
-    "Boxers": dict(archivo="boxers", piel=True),
+    "Boxers": dict(archivo="boxers", piel=True, imagenes=False),
+    # con su imagen: el estampado de la espalda (Chamarra_Estampado) viaja en el GLB
+    "Chamarra": dict(archivo="chamarra", piel=True, imagenes=True),
+    # el hoodie sí lleva su textura: el SKULLEYRAD de las mangas (hoodie.py, estampado_mangas)
+    "Hoodie": dict(archivo="hoodie", piel=True, imagenes=True),
+    # los dos tenis en un objeto (tenis.py); el sitio los parte en izquierdo y derecho
+    "Tenis": dict(archivo="tenis", piel=True, imagenes=False),
+    # la chamarra inflada con picos (inflada.py), con su imagen: la X de la espalda y el pecho (Inflada_Estampado)
+    "Inflada": dict(archivo="inflada", piel=True, imagenes=True),
+    # las dos botas en un objeto (botas.py); el sitio las parte en izquierda y derecha, como los tenis
+    "Botas": dict(archivo="botas", piel=True, imagenes=False),
+    # los pantalones de mezclilla (pantalones.py), con su textura deslavada en JPEG (con ruido, en PNG pesa ~2 MB)
+    "Pantalones": dict(archivo="pantalones", piel=True, imagenes=True, formato="JPEG"),
 }
 SALIDA_PROPS = os.path.join(REPO, "public", "props")
 
@@ -135,11 +151,13 @@ def exportar_prop(nombre, carpeta=SALIDA_PROPS, armature=ARMATURE):
     crudo = os.path.join(carpeta, cfg["archivo"] + "_raw.glb")
     ruta = os.path.join(carpeta, cfg["archivo"] + ".glb")
     bisel = ob.modifiers.get("Bisel")
-    antes = dict(pose=arm.data.pose_position, oculto=arm.hide_get(), seg=bisel.segments if bisel else None,
+    antes = dict(pose=arm.data.pose_position, oculto=arm.hide_get(), prop_oculto=ob.hide_get(), seg=bisel.segments if bisel else None,
                  activo=vl.objects.active, seleccion=[o for o in vl.objects if o.select_get()])
     try:
         arm.data.pose_position = "REST"
         arm.hide_set(False)
+        # oculto no se puede seleccionar y saldría solo el esqueleto (otras sesiones esconden props para ver los suyos)
+        ob.hide_set(False)
         if bisel:
             bisel.segments = 3
         vl.update()
@@ -153,6 +171,7 @@ def exportar_prop(nombre, carpeta=SALIDA_PROPS, armature=ARMATURE):
             filepath=crudo, export_format="GLB", use_selection=True, export_apply=True,
             export_animations=False, export_skins=cfg["piel"], export_def_bones=cfg["piel"],
             export_morph=False, export_materials="EXPORT", export_yup=True,
+            export_image_format=cfg.get("formato", "AUTO") if cfg.get("imagenes", True) else "NONE",
             export_cameras=False, export_lights=False, export_extras=False,
             export_texcoords=cfg["piel"], export_normals=True, export_tangents=False,
             export_vertex_color="NONE",
@@ -160,6 +179,7 @@ def exportar_prop(nombre, carpeta=SALIDA_PROPS, armature=ARMATURE):
     finally:
         arm.data.pose_position = antes["pose"]
         arm.hide_set(antes["oculto"])
+        ob.hide_set(antes["prop_oculto"])
         if bisel:
             bisel.segments = antes["seg"]
         for o in vl.objects:

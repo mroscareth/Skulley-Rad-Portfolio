@@ -1,5 +1,7 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { prepararCordones } from './cordonesHoodie.js'
+export { pasoCordones } from './cordonesHoodie.js'
 
 // Props de Skulley hechos en Blender (Character/SkulleyRad.blend). Cada GLB trae
 // el prop en la pose de reposo, en las coordenadas del personaje: aquí se
@@ -10,7 +12,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 // (CharacterNormalPass solo entinta SkinnedMesh), los fundidos de opacidad y
 // el despiece (Player despieza los nodos Egg_*: por eso se llama Egg_Lentes).
 // Estado (cuáles van puestos) y URLs, en un módulo sin three
-export { URL_LENTES, URL_BOXERS, URL_CORRER, ACCESORIOS, ACCESORIOS_EVENT, getAccesorios, setAccesorio, mostrarAccesorios } from './accesoriosEstado.js'
+export { URL_LENTES, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_TENIS, URL_INFLADA, URL_BOTAS, URL_PANTALONES, URL_CORRER, ACCESORIOS, ACCESORIOS_EVENT, getAccesorios, setAccesorio, mostrarAccesorios, tapadoPorProp } from './accesoriosEstado.js'
 
 const MATERIALES_LENTES = {
   Lentes_Armazon: { color: 0x121212, roughness: 0.32, metalness: 0 },
@@ -261,4 +263,497 @@ export function ponerBoxers(escena, gltfBoxers) {
     ;(window.__boxers ||= []).push({ escena, sm })
   }
   return hechos
+}
+
+// ---------------------------------------------------------------------------
+// Chamarra de piel (Oscar, 2026-11-17): abierta, con solapas, tres picos de
+// tornillo en cada hombro, cierre y broches. Sale de scripts/skulley-anim/
+// chamarra.py (procedural). Va con los huesos del torso, el cuello y los
+// brazos (19); el GLB trae su propia lista de huesos y aquí se empata por
+// nombre con los del personaje. Tiene grosor (cara de afuera y forro), así que
+// sus materiales van de un solo lado. Con la chamarra, apartaManos abre los
+// brazos lo justo para que las mangas no se metan al costado.
+// ---------------------------------------------------------------------------
+
+const MATERIALES_CHAMARRA = {
+  // mate (Oscar): con 0.34 el brillo se veía de plástico
+  Chamarra_Piel: { color: 0x19191c, roughness: 0.68, metalness: 0 },
+  Chamarra_Forro: { color: 0x2a2220, roughness: 0.8, metalness: 0 },
+  // plateado de caricatura, como los remaches de los lentes (con metalness 1 salen negros)
+  Chamarra_Metal: { color: 0xd4d8de, roughness: 0.28, metalness: 0 },
+  // el estampado de la espalda (la imagen de Oscar): su textura viene en el GLB;
+  // es un cuadro y lo transparente se recorta (el pico se sale del círculo)
+  Chamarra_Estampado: { color: 0xffffff, roughness: 0.68, metalness: 0, alphaTest: 0.5 },
+  // el parche del pecho (la carita con copete de Oscar), igual: textura del GLB y recorte
+  Chamarra_Parche: { color: 0xffffff, roughness: 0.68, metalness: 0, alphaTest: 0.5 },
+}
+const ORDEN_CHAMARRA = ['Chamarra_Piel', 'Chamarra_Forro', 'Chamarra_Metal', 'Chamarra_Estampado', 'Chamarra_Parche']
+
+const CHAMARRA = { id: 'chamarra', malla: 'Egg_Chamarra', materiales: MATERIALES_CHAMARRA, orden: ORDEN_CHAMARRA, mapa: ['Chamarra_Estampado', 'Chamarra_Parche'] }
+
+/**
+ * Pone una prenda (chamarra, hoodie) en una escena del personaje recién clonada
+ * (en reposo y sin padre), como `cfg.malla`: una malla con un grupo por
+ * material (las partes del GLB con el mismo material se juntan). La posición de
+ * reposo sale del propio skinning del GLB, igual que los bóxers. `cfg.mapa`:
+ * materiales que conservan la textura del GLB (con su UV).
+ */
+function ponerPrenda(escena, gltf, cfg) {
+  const llave = `__${cfg.id}`
+  if (!escena || !gltf?.scene) return []
+  if (escena.userData[llave]) return escena.userData[llave]
+  const porNombre = {}
+  escena.traverse((o) => { if (o.isBone) porNombre[o.name] = o })
+  escena.updateMatrixWorld(true)
+  gltf.scene.updateMatrixWorld(true)
+  const raizInv = new THREE.Matrix4().copy(escena.matrixWorld).invert()
+  // huesos del .blend que el personaje no trae (prop_cadera de los pantalones): la prenda los arma aquí
+  if (cfg.huesos) cfg.huesos(porNombre, raizInv)
+  const huesos = []
+  const indiceDe = new Map()
+  const porMaterial = new Map()
+  const mapas = {}
+  const conUV = !!cfg.mapa
+  const v = new THREE.Vector3()
+  gltf.scene.traverse((o) => {
+    if (!o.isSkinnedMesh || !o.geometry) return
+    o.skeleton.update()
+    const g = o.geometry
+    const n = g.attributes.position.count
+    const pos = new Float32Array(n * 3)
+    for (let i = 0; i < n; i++) {
+      o.getVertexPosition(i, v)
+      v.applyMatrix4(o.matrixWorld)
+      pos[i * 3] = v.x; pos[i * 3 + 1] = v.y; pos[i * 3 + 2] = v.z
+    }
+    const si = g.attributes.skinIndex; const sw = g.attributes.skinWeight
+    const nombres = o.skeleton.bones.map((b) => b.name)
+    const ci = new Uint16Array(n * 4); const cw = new Float32Array(n * 4)
+    for (let i = 0; i < n; i++) {
+      let k = 0
+      for (let c = 0; c < 4; c++) {
+        const w = sw.getComponent(i, c)
+        const hueso = porNombre[nombres[si.getComponent(i, c)]]
+        if (w <= 1e-5 || !hueso) continue
+        let h = indiceDe.get(hueso)
+        if (h === undefined) { h = huesos.length; huesos.push(hueso); indiceDe.set(hueso, h) }
+        ci[i * 4 + k] = h; cw[i * 4 + k] = w; k++
+      }
+      let s = 0; for (let c = 0; c < 4; c++) s += cw[i * 4 + c]
+      if (s > 0) for (let c = 0; c < 4; c++) cw[i * 4 + c] /= s
+      else cw[i * 4] = 1
+    }
+    const ng = new THREE.BufferGeometry()
+    ng.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+    ng.setAttribute('normal', g.attributes.normal.clone().applyNormalMatrix(new THREE.Matrix3().getNormalMatrix(o.matrixWorld)))
+    if (conUV) ng.setAttribute('uv', g.attributes.uv ? g.attributes.uv.clone() : new THREE.BufferAttribute(new Float32Array(n * 2), 2))
+    ng.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(ci, 4))
+    ng.setAttribute('skinWeight', new THREE.Float32BufferAttribute(cw, 4))
+    if (g.index) ng.setIndex(g.index.clone())
+    const nombre = cfg.materiales[o.material?.name] ? o.material.name : cfg.orden[0]
+    if (cfg.mapa?.includes(nombre) && o.material?.map) mapas[nombre] = o.material.map
+    if (!porMaterial.has(nombre)) porMaterial.set(nombre, [])
+    porMaterial.get(nombre).push(ng)
+  })
+  if (!huesos.length) return []
+  const geos = []; const mats = []
+  for (const nombre of cfg.orden) {
+    const lista = porMaterial.get(nombre)
+    if (!lista) continue
+    const g = lista.length > 1 ? mergeGeometries(lista, false) : lista[0]
+    if (!g) continue
+    geos.push(g)
+    const m = new THREE.MeshStandardMaterial(cfg.materiales[nombre])
+    if (mapas[nombre]) m.map = mapas[nombre]
+    m.name = nombre
+    mats.push(m)
+  }
+  const geo = mergeGeometries(geos, true)
+  if (!geo) return []
+  const reposos = huesos.map((b) => new THREE.Matrix4().multiplyMatrices(raizInv, b.matrixWorld))
+  // huesos propios de la prenda (los cordones del hoodie), antes del esqueleto
+  const extra = cfg.preparar ? cfg.preparar(geo, mats.map((m) => m.name), huesos, reposos, porNombre, raizInv) : null
+  const esqueleto = new THREE.Skeleton(huesos, reposos.map((m) => m.clone().invert()))
+  const sm = new THREE.SkinnedMesh(geo, mats)
+  sm.name = cfg.malla
+  sm.userData.accesorio = cfg.id
+  if (extra) sm.userData.cordones = extra
+  sm.frustumCulled = false
+  escena.add(sm)
+  sm.updateMatrixWorld(true)
+  sm.bind(esqueleto, new THREE.Matrix4())
+  const hechos = [sm]
+  escena.userData[llave] = hechos
+  if (import.meta.env.DEV && typeof window !== 'undefined') {
+    ;(window[llave] ||= []).push({ escena, sm })
+  }
+  return hechos
+}
+
+/** La chamarra como `Egg_Chamarra` (las dos partes de piel del GLB se juntan). */
+export function ponerChamarra(escena, gltf) {
+  return ponerPrenda(escena, gltf, CHAMARRA)
+}
+
+/**
+ * Opciones de telaSuelta para la chamarra despiezada (Oscar: "que tampoco sea
+ * rígida, como los bóxers"). Simula solo la piel de afuera; el forro (a medio
+ * centímetro) y el metal (picos, dientes, broches) la siguen como piel. Las
+ * solapas, que en la piel de afuera no se tocan con el pecho, quedan amarradas
+ * a él (`pegar`). Nodos más grandes que los de los bóxers: la chamarra tiene 7
+ * veces sus vértices (medido: 507 nodos, 1.4 ms el paso y 2 ms escribir la
+ * malla, hasta que se duerme a los ~2.5 s; con las dos capas eran 5.4 ms).
+ */
+export function opcionesTelaChamarra(mesh) {
+  return opcionesTela(mesh, 'Chamarra_Piel')
+}
+
+function opcionesTela(mesh, material) {
+  const g = mesh?.geometry
+  if (!g?.index) return {}
+  const simula = new Uint8Array(g.attributes.position.count)
+  const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+  for (const gr of g.groups) {
+    if (mats[gr.materialIndex]?.name !== material) continue
+    for (let k = gr.start; k < gr.start + gr.count; k++) simula[g.index.getX(k)] = 1
+  }
+  return { simula, lado: 0.06, k: 5, pegar: 0.014 }
+}
+
+// ---------------------------------------------------------------------------
+// Hoodie (Oscar, 2026-11-17): negro, pegado al cuerpo, con resorte y puños
+// acanalados, capucha caída y cordones; SKULLEYRAD en SKULLEYGLYPH a lo largo
+// de las dos mangas. Sale de scripts/skulley-anim/hoodie.py. Como la chamarra:
+// 19 huesos del torso, el cuello y los brazos, con grosor (tela y forro), y
+// apartaManos abre los brazos para que las mangas no se metan al costado. La
+// tela de afuera trae la textura del GLB (negro con el texto); lo demás va de
+// color. La capucha va en su propio material para que la tela suelta la lleve
+// como piel y no cuente como costado del torso.
+// ---------------------------------------------------------------------------
+
+const MATERIALES_HOODIE = {
+  // el negro lo pone la textura (con el texto de las mangas)
+  Hoodie_Tela: { color: 0xffffff, roughness: 0.9, metalness: 0 },
+  Hoodie_Capucha: { color: 0x121214, roughness: 0.9, metalness: 0 },
+  Hoodie_Forro: { color: 0x26262b, roughness: 0.95, metalness: 0 },
+  Hoodie_Puno: { color: 0x0f0f11, roughness: 0.9, metalness: 0 },
+  Hoodie_Cordon: { color: 0x141416, roughness: 0.7, metalness: 0 },
+  Hoodie_Punta: { color: 0x5a5c62, roughness: 0.4, metalness: 0 },
+}
+const HOODIE = {
+  id: 'hoodie', malla: 'Egg_Hoodie', materiales: MATERIALES_HOODIE, mapa: ['Hoodie_Tela'],
+  // los cordones se mecen (cordonesHoodie.js): una cadena de huesos propios por cordón
+  preparar: prepararCordones,
+  orden: ['Hoodie_Tela', 'Hoodie_Capucha', 'Hoodie_Forro', 'Hoodie_Puno', 'Hoodie_Cordon', 'Hoodie_Punta'],
+}
+
+/** El hoodie como `Egg_Hoodie`. */
+export function ponerHoodie(escena, gltf) {
+  return ponerPrenda(escena, gltf, HOODIE)
+}
+
+/**
+ * Opciones de telaSuelta para el hoodie despiezado (Oscar: "es tela, que no sea
+ * rígida cuando el personaje se despieza"). Como la chamarra: simula la tela de
+ * afuera; el forro, la capucha, el resorte, los puños y los cordones la siguen
+ * como piel.
+ */
+export function opcionesTelaHoodie(mesh) {
+  return opcionesTela(mesh, 'Hoodie_Tela')
+}
+
+// ---------------------------------------------------------------------------
+// Chamarra inflada (Oscar, 2026-11-17): de plumas, amarilla, pegada al cuerpo
+// con gajos chicos y redondos, cuello de rollo, cierre negro y una fila de
+// picos de tela cyan (el del pelo) en el lado de afuera de cada manga. Sale de
+// scripts/skulley-anim/inflada.py. Como el hoodie: 19 huesos, tela y forro, y
+// apartaManos abre los brazos para que las mangas no se metan al costado. El
+// cuello va en su propio material (la tela suelta lo lleva como piel); los
+// picos siguen la tela en la base y son rígidos hacia la punta. La X magenta de
+// Oscar va grande en la espalda y chica en el pecho: rejillas pegadas a la tela
+// con la imagen del GLB, y lo transparente se recorta (como el estampado de la
+// chamarra).
+// ---------------------------------------------------------------------------
+
+const MATERIALES_INFLADA = {
+  Inflada_Tela: { color: 0xffcc1a, roughness: 0.6, metalness: 0 },
+  Inflada_Cuello: { color: 0xffcc1a, roughness: 0.6, metalness: 0 },
+  // casi el amarillo de la tela: en los pliegues de la axila y del codo se asoma
+  Inflada_Forro: { color: 0xe0b312, roughness: 0.8, metalness: 0 },
+  Inflada_Puno: { color: 0xffcc1a, roughness: 0.7, metalness: 0 },
+  Inflada_Cierre: { color: 0x141416, roughness: 0.5, metalness: 0 },
+  // el cyan del pelo por defecto (characterColors.js, hair); Oscar los quiso de ese azul
+  Inflada_Picos: { color: 0x00ebff, roughness: 0.9, metalness: 0 },
+  // la X: su textura viene en el GLB
+  Inflada_Estampado: { color: 0xffffff, roughness: 0.6, metalness: 0, alphaTest: 0.5 },
+}
+const INFLADA = {
+  id: 'inflada', malla: 'Egg_Inflada', materiales: MATERIALES_INFLADA, mapa: ['Inflada_Estampado'],
+  orden: ['Inflada_Tela', 'Inflada_Cuello', 'Inflada_Forro', 'Inflada_Puno', 'Inflada_Cierre', 'Inflada_Picos', 'Inflada_Estampado'],
+}
+
+/** La chamarra inflada como `Egg_Inflada`. */
+export function ponerInflada(escena, gltf) {
+  return ponerPrenda(escena, gltf, INFLADA)
+}
+
+/** Opciones de telaSuelta para la inflada despiezada: simula la tela de afuera; lo demás la sigue como piel. */
+export function opcionesTelaInflada(mesh) {
+  return opcionesTela(mesh, 'Inflada_Tela')
+}
+
+// ---------------------------------------------------------------------------
+// Tenis (Oscar, 2026-11-17): tipo Converse de bota, lona negra y suela crema
+// con línea negra. Salen de scripts/skulley-anim/tenis.py con la piel del pie y
+// la espinilla (foot, toes_01, leg_twist, leg_twist_2, leg_stretch). No
+// envuelven al pie (un bloque con dedos de 14 cm que los dejaba cuadrados):
+// tienen forma propia y el pie se oculta mientras los trae puestos, por eso
+// marcan Egg_Foot_L/R con `ocultaCon` (quien los pinta lo respeta, también en
+// sus contornos y en el despiece). El GLB trae los dos en una malla y aquí se
+// parten en Egg_TenisL y Egg_TenisR: el despiece tira una pieza por nodo Egg_*
+// y juntos caían como un solo cuerpo de pie a pie.
+// ---------------------------------------------------------------------------
+
+const MATERIALES_TENIS = {
+  Tenis_Lona: { color: 0x353538, roughness: 0.85, metalness: 0 },
+  Tenis_Forro: { color: 0x454549, roughness: 0.9, metalness: 0 },
+  Tenis_Suela: { color: 0xe7ddc5, roughness: 0.6, metalness: 0 },
+  Tenis_Agujetas: { color: 0xf0e8d7, roughness: 0.8, metalness: 0 },
+  // ojillos plateados de caricatura (con metalness 1 y sin reflejo salen negros)
+  Tenis_Metal: { color: 0xdddee1, roughness: 0.35, metalness: 0 },
+}
+const TENIS = {
+  id: 'tenis', malla: 'Egg_Tenis', materiales: MATERIALES_TENIS,
+  orden: ['Tenis_Lona', 'Tenis_Forro', 'Tenis_Suela', 'Tenis_Agujetas', 'Tenis_Metal'],
+}
+const PIES = /^Egg_Foot_[LR]$/
+// La tinta de los pliegues llenaba de líneas las agujetas y los ojillos y no se
+// veía el detalle (Oscar): no entran al buffer de normales (CharacterNormalPass).
+const SIN_TINTA_TENIS = ['Tenis_Agujetas', 'Tenis_Metal']
+
+/** Copia de una malla con solo los triángulos cuyo centro cumple `quedan(x, y, z)`. */
+function partirMalla(g, quedan) {
+  const pos = g.attributes.position
+  const idx = g.index
+  const mapa = new Int32Array(pos.count).fill(-1)
+  const viejos = []
+  const nuevo = []
+  const grupos = []
+  for (const gr of g.groups) {
+    const ini = nuevo.length
+    for (let k = gr.start; k < gr.start + gr.count; k += 3) {
+      const a = idx.getX(k), b = idx.getX(k + 1), c = idx.getX(k + 2)
+      const x = (pos.getX(a) + pos.getX(b) + pos.getX(c)) / 3
+      const y = (pos.getY(a) + pos.getY(b) + pos.getY(c)) / 3
+      const z = (pos.getZ(a) + pos.getZ(b) + pos.getZ(c)) / 3
+      if (!quedan(x, y, z)) continue
+      for (const v of [a, b, c]) {
+        if (mapa[v] < 0) { mapa[v] = viejos.length; viejos.push(v) }
+        nuevo.push(mapa[v])
+      }
+    }
+    if (nuevo.length > ini) grupos.push([ini, nuevo.length - ini, gr.materialIndex])
+  }
+  const ng = new THREE.BufferGeometry()
+  for (const [nombre, attr] of Object.entries(g.attributes)) {
+    const n = attr.itemSize
+    const arr = new attr.array.constructor(viejos.length * n)
+    for (let i = 0; i < viejos.length; i++) for (let c = 0; c < n; c++) arr[i * n + c] = attr.array[viejos[i] * n + c]
+    ng.setAttribute(nombre, new THREE.BufferAttribute(arr, n, attr.normalized))
+  }
+  ng.setIndex(nuevo)
+  for (const [s, n, m] of grupos) ng.addGroup(s, n, m)
+  return ng
+}
+
+/**
+ * Calzado (tenis, botas): el GLB trae el par en una malla y aquí se parte en
+ * `<malla>L` y `<malla>R`; los pies quedan marcados para ocultarse con él
+ * (`ocultaCon` junta los ids de todo el calzado que los tapa).
+ */
+function ponerCalzado(escena, gltf, cfg, sinTinta) {
+  const llave = `__${cfg.id}Par`
+  if (!escena) return []
+  if (escena.userData[llave]) return escena.userData[llave]
+  const [par] = ponerPrenda(escena, gltf, cfg)
+  if (!par) return []
+  // el izquierdo va en x > 0 (en las coordenadas del personaje)
+  const hechos = [[`${cfg.malla}L`, (x) => x > 0], [`${cfg.malla}R`, (x) => x <= 0]].map(([nombre, quedan]) => {
+    const sm = new THREE.SkinnedMesh(partirMalla(par.geometry, quedan), par.material)
+    sm.name = nombre
+    sm.userData.accesorio = cfg.id
+    sm.userData.sinTinta = sinTinta
+    sm.frustumCulled = false
+    escena.add(sm)
+    sm.updateMatrixWorld(true)
+    sm.bind(par.skeleton, new THREE.Matrix4())
+    return sm
+  })
+  escena.remove(par)
+  par.geometry.dispose()
+  escena.traverse((o) => {
+    if (!PIES.test(o.name)) return
+    o.traverse((h) => {
+      const antes = h.userData.ocultaCon
+      const ids = Array.isArray(antes) ? antes : antes ? [antes] : []
+      if (!ids.includes(cfg.id)) h.userData.ocultaCon = [...ids, cfg.id]
+    })
+  })
+  escena.userData[`__${cfg.id}`] = hechos
+  escena.userData[llave] = hechos
+  return hechos
+}
+
+/** Los tenis como `Egg_TenisL` y `Egg_TenisR`; los pies quedan marcados para ocultarse con ellos. */
+export function ponerTenis(escena, gltf) {
+  return ponerCalzado(escena, gltf, TENIS, SIN_TINTA_TENIS)
+}
+
+// ---------------------------------------------------------------------------
+// Botas (Oscar, 2026-11-18): tenis-bota futurista, azul con suela blanca,
+// calcetín gris carbón, lengüeta grande y dos correas con hebillas amarillas.
+// Salen de scripts/skulley-anim/botas.py con la piel del pie y la espinilla
+// (el frente dobla como bisagra en el tobillo: ver el script). Como los tenis:
+// el par se parte en izquierda y derecha y los pies se ocultan con ellas.
+// ---------------------------------------------------------------------------
+
+const MATERIALES_BOTAS = {
+  Botas_Azul: { color: 0x3045da, roughness: 0.55, metalness: 0 },
+  Botas_Cuello: { color: 0x292a2e, roughness: 0.75, metalness: 0 },
+  Botas_Suela: { color: 0xe7e7ea, roughness: 0.6, metalness: 0 },
+  Botas_Amarillo: { color: 0xf5ff00, roughness: 0.5, metalness: 0 },
+  Botas_Forro: { color: 0x38383c, roughness: 0.85, metalness: 0 },
+  Botas_Perforado: { color: 0x161f6f, roughness: 0.6, metalness: 0 },
+  Botas_Huella: { color: 0x959599, roughness: 0.7, metalness: 0 },
+}
+const BOTAS = {
+  id: 'botas', malla: 'Egg_Botas', materiales: MATERIALES_BOTAS,
+  orden: ['Botas_Azul', 'Botas_Cuello', 'Botas_Suela', 'Botas_Amarillo', 'Botas_Forro', 'Botas_Perforado', 'Botas_Huella'],
+}
+// los puntitos perforados y el dibujo de la suela se llenarían de tinta
+const SIN_TINTA_BOTAS = ['Botas_Perforado', 'Botas_Huella']
+
+/** Las botas como `Egg_BotasL` y `Egg_BotasR`; los pies quedan marcados para ocultarse con ellas. */
+export function ponerBotas(escena, gltf) {
+  return ponerCalzado(escena, gltf, BOTAS, SIN_TINTA_BOTAS)
+}
+
+// ---------------------------------------------------------------------------
+// Pantalones de mezclilla (Oscar, 2026-11-18): grises deslavados, rectos, rotos
+// de las rodillas con hilos blancos, la cintura pegada a la pelvis y dos vueltas
+// de rollo arriba de las botas. Salen de scripts/skulley-anim/pantalones.py con
+// la textura deslavada en el GLB (JPEG). Van con la pelvis (y su spine_01), los
+// muslos, las espinillas y prop_cadera: el hueso del .blend que gira la mitad
+// que el muslo, en la ingle, para que la tela no se aplaste al subir la pierna.
+// El personaje no lo trae; aquí es un hueso que calcula su matriz cada vez que
+// se actualiza la del muslo (HuesoMitad), así que Player, el retrato y el rig lo
+// tienen sin código por cuadro. Repartido mitad pelvis, mitad muslo (como los
+// bóxers en la GPU) la tela de la ingle se metía: con la rodilla arriba, la
+// mezcla lineal de dos giros corta por dentro del arco. Se excluyen con los
+// bóxers (no caben debajo).
+// ---------------------------------------------------------------------------
+
+const MATERIALES_PANTALONES = {
+  // el gris deslavado, las costuras, las bolsas y lo deshilachado del roto los pone la textura
+  Pantalones_Mezclilla: { color: 0xffffff, roughness: 0.85, metalness: 0 },
+  // el revés de la mezclilla: adentro y los rollos de la bastilla
+  Pantalones_Forro: { color: 0xb0b2b6, roughness: 0.9, metalness: 0 },
+  // canto del roto e hilos atravesados
+  Pantalones_Hilos: { color: 0xf0eee6, roughness: 0.9, metalness: 0 },
+  // botón y remaches, plateados de caricatura (con metalness 1 y sin reflejo salen negros)
+  Pantalones_Metal: { color: 0xd4d8de, roughness: 0.3, metalness: 0 },
+}
+
+const IDENTIDAD = new THREE.Quaternion()
+
+/**
+ * prop_cadera del .blend (Copy Transforms 0.5 del thigh_twist): cada vez que se
+ * actualiza, su matriz es la de la pelvis más la mitad del giro del muslo
+ * respecto a ella, alrededor de la articulación de la cadera. Su reposo es la
+ * identidad en el espacio de la escena del personaje (ponerPrenda le saca a
+ * cada hueso su reposo de matrixWorld). Va colgado del muslo para que se
+ * actualice después de él.
+ */
+class HuesoMitad extends THREE.Bone {
+  constructor(pelvis, muslo, raizInv) {
+    super()
+    // un clon (Object3D.clone llama al constructor sin nada) se queda como hueso normal
+    if (!pelvis || !muslo) return
+    this.pelvis = pelvis
+    this.muslo = muslo
+    this.invPelvis = new THREE.Matrix4().multiplyMatrices(raizInv, pelvis.matrixWorld).invert()
+    const reposoMuslo = new THREE.Matrix4().multiplyMatrices(raizInv, muslo.matrixWorld)
+    this.invMuslo = reposoMuslo.clone().invert()
+    this.pivote = new THREE.Vector3().setFromMatrixPosition(reposoMuslo)
+    this.matrixAutoUpdate = false
+    this._a = new THREE.Matrix4(); this._b = new THREE.Matrix4(); this._h = new THREE.Matrix4()
+    this._t = new THREE.Vector3(); this._s = new THREE.Vector3(); this._r = new THREE.Vector3()
+    this._q = new THREE.Quaternion()
+  }
+
+  calcular() {
+    // lo que se movieron la pelvis y el muslo desde el reposo (del reposo de la escena al mundo)
+    const sp = this._a.multiplyMatrices(this.pelvis.matrixWorld, this.invPelvis)
+    const sm = this._b.multiplyMatrices(this.muslo.matrixWorld, this.invMuslo)
+    // el muslo respecto a la pelvis, en el reposo de la escena: un giro alrededor de la cadera
+    const d = this._h.copy(sp).invert().multiply(sm)
+    d.decompose(this._t, this._q, this._s)
+    this._r.copy(this.pivote).applyMatrix4(d).sub(this.pivote).multiplyScalar(0.5)   // lo que se corrió la cadera, a la mitad
+    // (slerpQuaternions(IDENTIDAD, this._q) no: copia la identidad encima de this._q antes de mezclar)
+    this._q.slerp(IDENTIDAD, 0.5)
+    // h(x) = q½ (x − c) + c + r/2
+    d.makeRotationFromQuaternion(this._q)
+    this._t.copy(this.pivote).applyQuaternion(this._q).negate().add(this.pivote).add(this._r)
+    d.setPosition(this._t)
+    this.matrixWorld.multiplyMatrices(sp, d)
+  }
+
+  updateMatrixWorld(force) {
+    if (!this.pelvis) return super.updateMatrixWorld(force)
+    this.calcular()
+    for (const c of this.children) c.updateMatrixWorld(force)
+  }
+
+  updateWorldMatrix(padres, hijos) {
+    if (!this.pelvis) return super.updateWorldMatrix(padres, hijos)
+    if (padres && this.parent) this.parent.updateWorldMatrix(true, false)
+    this.calcular()
+    if (hijos) for (const c of this.children) c.updateWorldMatrix(false, true)
+  }
+}
+
+/** Arma prop_caderal y prop_caderar (los nombres que les deja GLTFLoader) colgados de cada muslo. */
+function huesosCadera(porNombre, raizInv) {
+  const pelvis = porNombre.rootx
+  if (!pelvis) return
+  for (const s of ['l', 'r']) {
+    const nombre = `prop_cadera${s}`
+    const muslo = porNombre[`thigh_twist${s}`]
+    if (porNombre[nombre] || !muslo) continue
+    const h = new HuesoMitad(pelvis, muslo, raizInv)
+    h.name = nombre
+    muslo.add(h)
+    h.calcular()
+    porNombre[nombre] = h
+  }
+}
+
+const PANTALONES = {
+  id: 'pantalones', malla: 'Egg_Pantalones', materiales: MATERIALES_PANTALONES, mapa: ['Pantalones_Mezclilla'],
+  huesos: huesosCadera,
+  orden: ['Pantalones_Mezclilla', 'Pantalones_Forro', 'Pantalones_Hilos', 'Pantalones_Metal'],
+}
+
+/** Los pantalones como `Egg_Pantalones`. */
+export function ponerPantalones(escena, gltf) {
+  return ponerPrenda(escena, gltf, PANTALONES)
+}
+
+/**
+ * Opciones de telaSuelta para los pantalones despiezados: como las prendas,
+ * simula la mezclilla de afuera; el revés, los rollos, la pretina, los hilos y
+ * el metal la siguen como piel.
+ */
+export function opcionesTelaPantalones(mesh) {
+  return opcionesTela(mesh, 'Pantalones_Mezclilla')
 }

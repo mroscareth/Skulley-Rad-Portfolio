@@ -51,9 +51,19 @@ const llave3 = (x, y, z) => x + y * 131072 + z * 17179869184   // 2^17, 2^34: ex
  * triángulos. La forma de reposo sale de ahí. Se arma por partes
  * (`avanza(ms)` regresa true al terminar y deja la tela en `tela`): son
  * ~10 ms y se reparten en los cuadros en que la pieza va volando.
+ *
+ * `opciones` (la chamarra; los bóxers van sin ellas):
+ *  - `lado`: tamaño de la rejilla de nodos (TELA.LADO).
+ *  - `simula`: por vértice, 1 si su tela simula; los triángulos con algún
+ *    vértice en 0 (el metal) no son tela y esos vértices siguen a los nodos
+ *    más cercanos como piel.
+ *  - `k`: nodos que sigue cada vértice (TELA.PIEL_K).
+ *  - `pegar`: dos nodos que en reposo están a menos de esto quedan amarrados
+ *    aunque la malla no los una (la piel y el forro, la solapa encima del
+ *    pecho): sin eso cada capa caía por su lado.
  */
-export function crearConstructorTela(pos, indice) {
-  const gen = construirTela(pos, indice)
+export function crearConstructorTela(pos, indice, opciones = {}) {
+  const gen = construirTela(pos, indice, opciones)
   const c = {
     listo: false,
     tela: null,
@@ -71,14 +81,16 @@ export function crearConstructorTela(pos, indice) {
 }
 
 /** La tela de una vez (para Node). */
-export function crearTela(pos, indice) {
-  const c = crearConstructorTela(pos, indice)
+export function crearTela(pos, indice, opciones = {}) {
+  const c = crearConstructorTela(pos, indice, opciones)
   c.avanza()
   return c.tela
 }
 
-function* construirTela(pos, indice) {
+function* construirTela(pos, indice, opciones = {}) {
   const nV = pos.length / 3
+  const simula = opciones.simula || null
+  const triSimula = (t) => !simula || (simula[indice[t * 3]] && simula[indice[t * 3 + 1]] && simula[indice[t * 3 + 2]])
   // soldar: los vértices repetidos en las costuras son uno solo
   let x0 = Infinity, y0 = Infinity, z0 = Infinity, ext = 0
   for (let i = 0; i < nV * 3; i += 3) { x0 = Math.min(x0, pos[i]); y0 = Math.min(y0, pos[i + 1]); z0 = Math.min(z0, pos[i + 2]) }
@@ -96,19 +108,22 @@ function* construirTela(pos, indice) {
   const sp = new Float64Array(nS * 3)
   for (let i = 0; i < nV; i++) { const s = soldado[i] * 3; sp[s] = pos[i * 3]; sp[s + 1] = pos[i * 3 + 1]; sp[s + 2] = pos[i * 3 + 2] }
   yield
-  // aristas entre soldados
+  // aristas entre soldados (solo de los triángulos que son tela)
   const tri = indice.length / 3
   const aristas = []
+  const usado = new Uint8Array(nS)
   for (let t = 0; t < tri; t++) {
+    if (!triSimula(t)) continue
     for (let e = 0; e < 3; e++) {
       const a = soldado[indice[t * 3 + e]], b = soldado[indice[t * 3 + (e + 1) % 3]]
+      usado[a] = 1
       if (a !== b) aristas.push(a, b)
     }
   }
   yield
   // racimos: los soldados de cada celda, separados por si no se tocan
   // (dos capas que pasan cerca no se vuelven un nodo)
-  const L = TELA.LADO
+  const L = opciones.lado || TELA.LADO
   const celda = new Float64Array(nS)
   for (let s = 0; s < nS; s++) celda[s] = llave3(Math.floor((sp[s * 3] - x0) / L), Math.floor((sp[s * 3 + 1] - y0) / L), Math.floor((sp[s * 3 + 2] - z0) / L))
   const padre = Int32Array.from({ length: nS }, (_, i) => i)
@@ -119,17 +134,18 @@ function* construirTela(pos, indice) {
     const ra = raiz(a), rb = raiz(b)
     if (ra !== rb) padre[ra] = rb
   }
-  const nodoDe = new Int32Array(nS)
+  const nodoDe = new Int32Array(nS).fill(-1)
   const ids = new Map()
   let N = 0
   for (let s = 0; s < nS; s++) {
+    if (!usado[s]) continue
     const r = raiz(s)
     let id = ids.get(r)
     if (id === undefined) { id = N++; ids.set(r, id) }
     nodoDe[s] = id
   }
   const xr = new Float64Array(N * 3), cuenta = new Float64Array(N)
-  for (let s = 0; s < nS; s++) { const n = nodoDe[s]; xr[n * 3] += sp[s * 3]; xr[n * 3 + 1] += sp[s * 3 + 1]; xr[n * 3 + 2] += sp[s * 3 + 2]; cuenta[n]++ }
+  for (let s = 0; s < nS; s++) { const n = nodoDe[s]; if (n < 0) continue; xr[n * 3] += sp[s * 3]; xr[n * 3 + 1] += sp[s * 3 + 1]; xr[n * 3 + 2] += sp[s * 3 + 2]; cuenta[n]++ }
   for (let n = 0; n < N; n++) { xr[n * 3] /= cuenta[n]; xr[n * 3 + 1] /= cuenta[n]; xr[n * 3 + 2] /= cuenta[n] }
   yield
   // vecinos entre nodos (por las aristas de la malla)
@@ -157,14 +173,67 @@ function* construirTela(pos, indice) {
       if (cual > a && mejor < -0.5) B.push(a, cual, dr(a, cual))
     }
   }
+  yield
+  // Capas encimadas (forro, solapas): amarradas a la distancia de reposo, y
+  // vecinas para el giro y la piel. Rejilla de celdas de `pegar`.
+  const pegar = opciones.pegar || 0
+  // rejilla de los nodos (para pegar capas y para la piel de lo que no simula)
+  const rejilla = (lado) => {
+    const m = new Map()
+    for (let n = 0; n < N; n++) {
+      const k = llave3(Math.floor((xr[n * 3] - x0) / lado) + 2, Math.floor((xr[n * 3 + 1] - y0) / lado) + 2, Math.floor((xr[n * 3 + 2] - z0) / lado) + 2)
+      let l = m.get(k)
+      if (!l) m.set(k, (l = []))
+      l.push(n)
+    }
+    return m
+  }
+  if (pegar > 0) {
+    const m = rejilla(pegar)
+    const p2 = pegar * pegar
+    for (let a = 0; a < N; a++) {
+      const cx = Math.floor((xr[a * 3] - x0) / pegar) + 2, cy = Math.floor((xr[a * 3 + 1] - y0) / pegar) + 2, cz = Math.floor((xr[a * 3 + 2] - z0) / pegar) + 2
+      for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) for (let oz = -1; oz <= 1; oz++) {
+        const l = m.get(llave3(cx + ox, cy + oy, cz + oz))
+        if (!l) continue
+        for (const b of l) {
+          if (b <= a || vec[a].has(b)) continue
+          const d2 = (xr[a * 3] - xr[b * 3]) ** 2 + (xr[a * 3 + 1] - xr[b * 3 + 1]) ** 2 + (xr[a * 3 + 2] - xr[b * 3 + 2]) ** 2
+          if (d2 >= p2) continue
+          E.push(a, b, Math.sqrt(d2))
+          vec[a].add(b); vec[b].add(a)
+        }
+      }
+    }
+  }
   const vecinos = vec.map((s) => Int32Array.from(s))
+  // lo que no simula (el metal) sigue al nodo más cercano y a sus vecinos
+  const cercano = (() => {
+    if (!simula) return null
+    const m = rejilla(L)
+    return (px, py, pz) => {
+      const cx = Math.floor((px - x0) / L) + 2, cy = Math.floor((py - y0) / L) + 2, cz = Math.floor((pz - z0) / L) + 2
+      let mejor = -1, dmin = Infinity
+      for (let r = 1; r <= 4 && mejor < 0; r++) {
+        for (let ox = -r; ox <= r; ox++) for (let oy = -r; oy <= r; oy++) for (let oz = -r; oz <= r; oz++) {
+          const l = m.get(llave3(cx + ox, cy + oy, cz + oz))
+          if (!l) continue
+          for (const n of l) {
+            const d = (px - xr[n * 3]) ** 2 + (py - xr[n * 3 + 1]) ** 2 + (pz - xr[n * 3 + 2]) ** 2
+            if (d < dmin) { dmin = d; mejor = n }
+          }
+        }
+      }
+      return mejor < 0 ? 0 : mejor
+    }
+  })()
   yield
   // Cada vértice sigue a los nodos de su vecindad (su nodo y dos vueltas de
   // vecinos) a menos de PIEL_R, con un peso suave que llega a cero en la
   // orilla: así dos vértices de junto siguen casi a los mismos nodos y no se
   // abren los triángulos. Lo que guarda es su distancia al centro pesado de
   // esos nodos, que es chica, y la gira con el giro promedio de ellos.
-  const K = TELA.PIEL_K
+  const K = opciones.k || TELA.PIEL_K
   const R2 = (TELA.PIEL_R * L) ** 2
   const anillo = new Array(N)
   const anilloDe = (n) => {
@@ -177,8 +246,9 @@ function* construirTela(pos, indice) {
   const candN = new Int32Array(256), candD = new Float64Array(256)
   for (let i = 0; i < nV; i++) {
     if ((i & 255) === 255) yield
-    const n0 = nodoDe[soldado[i]]
     const px = pos[i * 3], py = pos[i * 3 + 1], pz = pos[i * 3 + 2]
+    let n0 = nodoDe[soldado[i]]
+    if (n0 < 0) n0 = cercano ? cercano(px, py, pz) : 0
     const an = anilloDe(n0)
     let m = 0
     for (let k = 0; k < an.length && m < 256; k++) {
@@ -207,7 +277,7 @@ function* construirTela(pos, indice) {
   }
   const media = suma / Math.max(1, cuantas)
   return {
-    N, xr, vecinos,
+    N, K, xr, vecinos,
     x: new Float64Array(N * 3), v: new Float64Array(N * 3), prev: new Float64Array(N * 3), q: new Float64Array(N * 4),
     aristas: Float64Array.from(E), doblez: Float64Array.from(B),
     piel, pesos, offs,
@@ -395,7 +465,7 @@ function girosDeNodos(tela) {
 export function escribirTela(tela, out, piso) {
   girosDeNodos(tela)
   const { x, q, piel, pesos, offs } = tela
-  const K = TELA.PIEL_K
+  const K = tela.K || TELA.PIEL_K
   const nV = out.length / 3
   const suelo = piso + 0.0005
   for (let i = 0; i < nV; i++) {

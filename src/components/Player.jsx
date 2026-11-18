@@ -29,7 +29,7 @@ import {
   LASER_ARM_YAW, laserReachFor,
 } from '../lib/laserPose.js'
 import { applyCharacterColorsToScene, getCharacterColors, CHARACTER_COLOR_EVENT, EYES_ORB_ONLY } from '../lib/characterColors.js'
-import { URL_LENTES, URL_BOXERS, URL_CORRER, ponerLentes, ponerBoxers, getAccesorios, ACCESORIOS_EVENT } from '../lib/accesorios.js'
+import { URL_LENTES, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_TENIS, URL_INFLADA, URL_BOTAS, URL_PANTALONES, URL_CORRER, ponerLentes, ponerBoxers, ponerChamarra, ponerHoodie, ponerTenis, ponerInflada, ponerBotas, ponerPantalones, opcionesTelaChamarra, opcionesTelaHoodie, opcionesTelaInflada, opcionesTelaPantalones, pasoCordones, getAccesorios, tapadoPorProp, ACCESORIOS_EVENT } from '../lib/accesorios.js'
 import { telaDe } from '../lib/telaProp.js'
 import { crearApartaManos } from '../lib/apartaManos.js'
 import { crearConstructorTela, colocarTela, pasoTela as pasoTelaSuelta, escribirTela, bajoDe } from '../lib/telaSuelta.js'
@@ -214,6 +214,12 @@ export default function Player({
   // Lentes y carrera, hechos en Character/SkulleyRad.blend (mismo esqueleto).
   const lentesGltf = useGLTF(URL_LENTES, true)
   const boxersGltf = useGLTF(URL_BOXERS, true)
+  const chamarraGltf = useGLTF(URL_CHAMARRA, true)
+  const hoodieGltf = useGLTF(URL_HOODIE, true)
+  const tenisGltf = useGLTF(URL_TENIS, true)
+  const infladaGltf = useGLTF(URL_INFLADA, true)
+  const botasGltf = useGLTF(URL_BOTAS, true)
+  const pantalonesGltf = useGLTF(URL_PANTALONES, true)
   const correrGltf = useGLTF(URL_CORRER, true)
   // Detect GPU compressed-texture support once per renderer
   useEffect(() => { detectKTX2Support(gl) }, [gl])
@@ -236,14 +242,21 @@ export default function Player({
       const b = s.userData.__boxers?.[0]
       if (b) telaDe(b)
     } catch (e) { if (import.meta.env.DEV) console.warn('[boxers]', e) }
-    // Con los bóxers, las manos se abren para no atravesarlos (se mide en reposo).
+    try { ponerChamarra(s, chamarraGltf) } catch (e) { if (import.meta.env.DEV) console.warn('[chamarra]', e) }
+    try { ponerHoodie(s, hoodieGltf) } catch (e) { if (import.meta.env.DEV) console.warn('[hoodie]', e) }
+    try { ponerTenis(s, tenisGltf) } catch (e) { if (import.meta.env.DEV) console.warn('[tenis]', e) }
+    try { ponerInflada(s, infladaGltf) } catch (e) { if (import.meta.env.DEV) console.warn('[inflada]', e) }
+    try { ponerBotas(s, botasGltf) } catch (e) { if (import.meta.env.DEV) console.warn('[botas]', e) }
+    try { ponerPantalones(s, pantalonesGltf) } catch (e) { if (import.meta.env.DEV) console.warn('[pantalones]', e) }
+    // Con los bóxers (o los pantalones), las manos se abren para no atravesarlos; con la chamarra, el
+    // hoodie o la inflada, los brazos, para que las mangas no se metan al costado (se mide en reposo).
     try {
       s.updateMatrixWorld(true)
       const raizInv = new THREE.Matrix4().copy(s.matrixWorld).invert()
       s.userData.apartaManos = crearApartaManos(s, (b) => new THREE.Matrix4().multiplyMatrices(raizInv, b.matrixWorld))
     } catch { }
     return s
-  }, [originalScene, lentesGltf, boxersGltf])
+  }, [originalScene, lentesGltf, boxersGltf, chamarraGltf, hoodieGltf, tenisGltf, infladaGltf, botasGltf, pantalonesGltf])
 
   // CRITICAL: Clone animation clips per scene swap. Three.js AnimationClips cache
   // PropertyBinding objects that reference specific skeleton nodes. When the scene
@@ -960,8 +973,11 @@ export default function Player({
         if (obj.material) {
           // Hide/show outline meshes based on opacity
           if (obj.name && obj.name.endsWith('_outline')) {
-            // Los contornos de los props los prende actualizarProps (Customize decide)
-            if (!obj.userData?.accesorio) obj.visible = opacity > 0.01
+            // Los contornos de los props los prende actualizarProps (Customize decide),
+            // y también los de lo que un prop tapa mientras va puesto (los pies con los tenis)
+            if (!obj.userData?.accesorio && !tapadoPorProp(obj, accesoriosRef.current)) {
+              obj.visible = opacity > 0.01
+            }
             return
           }
           // Mismo trato para el mesh de pupilas (ver flag en el clonado de
@@ -1020,18 +1036,35 @@ export default function Player({
     window.addEventListener(ACCESORIOS_EVENT, on)
     return () => window.removeEventListener(ACCESORIOS_EVENT, on)
   }, [])
-  const propsRef = useRef({ escena: null, mallas: [], cuadros: 0 })
+  const propsRef = useRef({ escena: null, mallas: [], ocultos: [], cuadros: 0 })
   const actualizarProps = () => {
     const pr = propsRef.current
     if (pr.escena !== scene || pr.cuadros++ % 30 === 0) {
       pr.escena = scene
       pr.mallas = []
-      try { scene?.traverse((o) => { if (o.userData?.accesorio) pr.mallas.push(o) }) } catch { }
+      pr.ocultos = []
+      try {
+        scene?.traverse((o) => {
+          if (o.userData?.accesorio) pr.mallas.push(o)
+          else if (o.userData?.ocultaCon) pr.ocultos.push(o)
+        })
+      } catch { }
+    }
+    const op = lastAppliedOpacityRef.current
+    const estado = accesoriosRef.current
+    // Lo que un prop tapa (los pies con los tenis) se oculta mientras va puesto.
+    // Solo se regresa lo que se ocultó aquí: lo demás lo manejan sus dueños.
+    for (let i = 0; i < pr.ocultos.length; i++) {
+      const o = pr.ocultos[i]
+      if (tapadoPorProp(o, estado)) {
+        if (o.visible) { o.visible = false; o.userData.__ocultoPorProp = true }
+      } else if (o.userData.__ocultoPorProp) {
+        o.userData.__ocultoPorProp = false
+        o.visible = o.name.endsWith('_outline') ? (op < 0 || op > 0.01) : true
+      }
     }
     if (!pr.mallas.length) return
-    const op = lastAppliedOpacityRef.current
     const libre = !orbActiveRef.current && !showOrbRef.current && !disassembleActiveRef.current && (op < 0 || op > 0.01)
-    const estado = accesoriosRef.current
     for (let i = 0; i < pr.mallas.length; i++) {
       const m = pr.mallas[i]
       m.visible = libre && !!estado[m.userData.accesorio]
@@ -1041,9 +1074,20 @@ export default function Player({
   // (patada, láser), cuando los huesos ya están donde se van a dibujar.
   const pasoTela = (dt) => {
     const mallas = propsRef.current.mallas
-    let conBoxers = false
-    for (let i = 0; i < mallas.length; i++) if (mallas[i].userData.accesorio === 'boxers' && mallas[i].visible) conBoxers = true
-    try { scene?.userData.apartaManos?.aplicar(dt, conBoxers) } catch (e) { if (import.meta.env.DEV) console.warn('[manos]', e) }
+    let conBoxers = false, conChamarra = false, conHoodie = false, conInflada = false, conPantalones = false
+    for (let i = 0; i < mallas.length; i++) {
+      if (!mallas[i].visible) continue
+      if (mallas[i].userData.accesorio === 'boxers') conBoxers = true
+      else if (mallas[i].userData.accesorio === 'chamarra') conChamarra = true
+      else if (mallas[i].userData.accesorio === 'hoodie') conHoodie = true
+      else if (mallas[i].userData.accesorio === 'inflada') conInflada = true
+      else if (mallas[i].userData.accesorio === 'pantalones') conPantalones = true
+    }
+    try { scene?.userData.apartaManos?.aplicar(dt, { boxers: conBoxers, pantalones: conPantalones, chamarra: conChamarra, hoodie: conHoodie, inflada: conInflada }) } catch (e) { if (import.meta.env.DEV) console.warn('[manos]', e) }
+    // los cordones del hoodie se mecen (con los brazos ya donde van)
+    for (let i = 0; i < mallas.length; i++) {
+      if (mallas[i].userData.cordones) try { pasoCordones(mallas[i], dt) } catch (e) { if (import.meta.env.DEV) console.warn('[cordones]', e) }
+    }
     for (let i = 0; i < mallas.length; i++) {
       const m = mallas[i]
       if (!m.userData.tela) continue
@@ -2033,9 +2077,19 @@ export default function Player({
       it.tela = null
       it.telaInicio = null
       it.mallaTela = it.esTela && mallas.length === 1 && mallas[0].geometry.index ? mallas[0] : null
-      it.telaConstructor = it.mallaTela ? crearConstructorTela(pos, it.mallaTela.geometry.index.array) : null
-      // la tela se usa a los 80 ms: se arma ya (unos ms dentro del golpe)
-      if (it.telaConstructor) it.telaConstructor.avanza()
+      // la chamarra, el hoodie, la inflada y los pantalones son prendas: simulan su tela de afuera y lo demás la sigue como piel
+      const opcionesPrenda = it.esTela === 'chamarra' ? opcionesTelaChamarra : it.esTela === 'hoodie' ? opcionesTelaHoodie
+        : it.esTela === 'inflada' ? opcionesTelaInflada : it.esTela === 'pantalones' ? opcionesTelaPantalones : null
+      it.telaConstructor = it.mallaTela
+        ? crearConstructorTela(pos, it.mallaTela.geometry.index.array, opcionesPrenda ? opcionesPrenda(it.mallaTela) : undefined)
+        : null
+      // la de los bóxers se usa a los 80 ms: se arma ya (unos ms dentro del
+      // golpe); la de una prenda son ~65 ms: se arma por partes mientras
+      // vuela (4 ms por cuadro) y se vuelve tela cuando está lista
+      if (it.telaConstructor) {
+        if (opcionesPrenda) { it.telaConstructor.presupuesto = 4; it.telaConstructor.avanza(1) }
+        else it.telaConstructor.avanza()
+      }
     }
     disassembleRef.current.fisicaMs = performance.now() - t0
     disassembleRef.current.fisicaJuntar = tJ
@@ -2147,6 +2201,8 @@ export default function Player({
         if (n.endsWith('_outline')) return
         // Un prop apagado en Customize no cae (Egg_Lentes prendido sí: cae solo)
         if (o.userData?.accesorio && !accesoriosRef.current[o.userData.accesorio]) return
+        // ni lo que un prop puesto tapa (con los tenis, los pies no caen: caen los tenis)
+        if (tapadoPorProp(o, accesoriosRef.current)) return
         // Include Egg_* body pieces AND Skull_* cranium/face pieces — the head
         // (skull, hair, facial bones) is authored as separate Skull_* meshes,
         // not under any Egg_* tag. Without this the head vanishes.
@@ -2529,8 +2585,8 @@ export default function Player({
           releasePos: null,
           impulseV: null,
           impulseW: null,
-          // los bóxers caen como tela (telaSuelta.js)
-          esTela: obj.userData?.accesorio === 'boxers',
+          // los bóxers, la chamarra, el hoodie, la inflada y los pantalones caen como tela (telaSuelta.js)
+          esTela: ['boxers', 'chamarra', 'hoodie', 'inflada', 'pantalones'].includes(obj.userData?.accesorio) ? obj.userData.accesorio : false,
         }
         pieces.push(data)
       }
@@ -3800,6 +3856,8 @@ export default function Player({
               bajo: it.mesh.position.y + bajo - piso,
               fuera: fueraDelApoyo(c, piso) / c.desc.tam,
               golpes: c.golpes,
+              // las prendas: si van a ser tela y cómo va su armado
+              ...(it.esTela ? { esTela: it.esTela, mallaTela: !!it.mallaTela, telaLista: it.telaConstructor ? it.telaConstructor.listo : null } : {}),
             }
           }),
         }
@@ -5620,8 +5678,10 @@ export default function Player({
             }
           }
         }
-        // y con lo que sobre, la tela de los bóxers
-        if (telaPendiente && performance.now() < limite) telaPendiente.avanza(limite - performance.now())
+        // y con lo que sobre, la tela de los bóxers (la de la chamarra trae su presupuesto)
+        if (telaPendiente && (performance.now() < limite || telaPendiente.presupuesto)) {
+          telaPendiente.avanza(Math.max(limite - performance.now(), telaPendiente.presupuesto || 0))
+        }
         for (let i = 0; i < pieces.length; i += 1) {
           const it = pieces[i]
           const c = it.cuerpo
@@ -5674,7 +5734,7 @@ export default function Player({
           // Los bóxers son tela desde que el rayo se los lleva (ya pasado el
           // empujón, que llega a it.v / it.w en el cuadro siguiente al golpe):
           // sin la cadera adentro no tienen por qué guardar su forma.
-          if (it.telaConstructor && (c.tocando || dis.t > 0.08)) {
+          if (it.telaConstructor && (c.tocando || dis.t > 0.08) && (it.telaConstructor.listo || !it.telaConstructor.presupuesto)) {
             it.telaConstructor.avanza()
             const tela = it.telaConstructor.tela
             colocarTela(tela, c.R, c.q, origen, c.v, c.w, c.p)
@@ -7110,6 +7170,11 @@ export default function Player({
         if (original.userData?.accesorio) {
           outlineMesh.userData.accesorio = original.userData.accesorio
           depthMesh.userData.accesorio = original.userData.accesorio
+        }
+        // el pie se oculta con los tenis, y su contorno con él
+        if (original.userData?.ocultaCon) {
+          outlineMesh.userData.ocultaCon = original.userData.ocultaCon
+          depthMesh.userData.ocultaCon = original.userData.ocultaCon
         }
 
         // Add as sibling of the original (inherits transformations automatically)

@@ -3,6 +3,9 @@ import { useThree, useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { characterNormalTexture } from '../../lib/toonInkBuffer.js'
 
+// Grupos que no entran al buffer de normales (three no dibuja un material invisible).
+const SIN_TINTA = new THREE.MeshBasicMaterial({ visible: false })
+
 // Renderiza SOLO los meshes del personaje a un render target con normales
 // geométricas (MeshNormalMaterial, respeta skinning). EdgeInk (PostFX) lee esta
 // textura para entintar los creases del personaje sin tocar el resto de la
@@ -47,10 +50,25 @@ export default function CharacterNormalPass({ playerRef, enabled = true, target 
   }, [fbo, gl, size, resolutionScale])
   useEffect(() => () => { try { fbo.dispose() } catch { } }, [fbo])
 
-  // Materiales normales por-mesh (cada SkinnedMesh compila su skinning).
+  // Materiales normales por-mesh (cada SkinnedMesh compila su skinning). Una
+  // malla con `userData.sinTinta` (nombres de material) deja fuera esos grupos:
+  // las agujetas de los tenis se llenaban de líneas y no se veía el detalle
+  // (Oscar); sin ellas en el buffer, debajo queda la lengüeta, lisa.
   const normalMats = useRef(new Map())
+  const normalDe = (o) => {
+    let nm = normalMats.current.get(o)
+    if (nm) return nm
+    nm = new THREE.MeshNormalMaterial()
+    const sin = o.userData?.sinTinta
+    if (sin && Array.isArray(o.material)) {
+      const una = nm
+      nm = o.material.map((m) => (sin.includes(m?.name) ? SIN_TINTA : una))
+    }
+    normalMats.current.set(o, nm)
+    return nm
+  }
   useEffect(() => () => {
-    try { normalMats.current.forEach((m) => m.dispose()) } catch { }
+    try { normalMats.current.forEach((m) => { for (const x of [].concat(m)) if (x !== SIN_TINTA) x.dispose() }) } catch { }
     normalMats.current.clear()
   }, [])
 
@@ -87,10 +105,8 @@ export default function CharacterNormalPass({ playerRef, enabled = true, target 
       const restore = []
       root.traverse((o) => {
         if (!o.isSkinnedMesh) return
-        let nm = normalMats.current.get(o)
-        if (!nm) { nm = new THREE.MeshNormalMaterial(); normalMats.current.set(o, nm) }
         restore.push([o, o.material])
-        o.material = nm
+        o.material = normalDe(o)
       })
       // targetScene=scene → usa el render-state/luces real (los normal mats son
       // light-independent, pero así gl.compile nunca tropieza con un Group como
@@ -154,10 +170,8 @@ export default function CharacterNormalPass({ playerRef, enabled = true, target 
       const effOpacity = mat0 && typeof mat0.opacity === 'number' ? mat0.opacity : 1
       const isBody = !isOutline && effOpacity > 0.1 && (allMeshes || o.isSkinnedMesh || isPiece)
       if (isBody) {
-        let nm = normalMats.current.get(o)
-        if (!nm) { nm = new THREE.MeshNormalMaterial(); normalMats.current.set(o, nm) }
         restore.push([o, 'mat', o.material])
-        o.material = nm
+        o.material = normalDe(o)
       } else {
         restore.push([o, 'vis', o.visible])
         o.visible = false
