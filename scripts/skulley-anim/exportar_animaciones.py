@@ -137,6 +137,10 @@ PROPS = {
     "Botas": dict(archivo="botas", piel=True, imagenes=False),
     # los pantalones de mezclilla (pantalones.py), con su textura deslavada en JPEG (con ruido, en PNG pesa ~2 MB)
     "Pantalones": dict(archivo="pantalones", piel=True, imagenes=True, formato="JPEG"),
+    # las dos muñequeras de picos en un objeto (munequeras.py), rígidas en forearm_twist; el sitio las parte en dos
+    "Munequeras": dict(archivo="munequeras", piel=True, imagenes=False),
+    # el beanie (beanie.py), todo en head.x, con sus dos imágenes: las costillas del tejido y la etiqueta
+    "Beanie": dict(archivo="beanie", piel=True, imagenes=True),
 }
 SALIDA_PROPS = os.path.join(REPO, "public", "props")
 

@@ -12,7 +12,7 @@ export { pasoCordones } from './cordonesHoodie.js'
 // (CharacterNormalPass solo entinta SkinnedMesh), los fundidos de opacidad y
 // el despiece (Player despieza los nodos Egg_*: por eso se llama Egg_Lentes).
 // Estado (cuáles van puestos) y URLs, en un módulo sin three
-export { URL_LENTES, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_TENIS, URL_INFLADA, URL_BOTAS, URL_PANTALONES, URL_CORRER, ACCESORIOS, ACCESORIOS_EVENT, getAccesorios, setAccesorio, mostrarAccesorios, tapadoPorProp } from './accesoriosEstado.js'
+export { URL_LENTES, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_TENIS, URL_INFLADA, URL_BOTAS, URL_PANTALONES, URL_MUNEQUERAS, URL_BEANIE, URL_CORRER, ACCESORIOS, ACCESORIOS_EVENT, getAccesorios, setAccesorio, mostrarAccesorios, tapadoPorProp } from './accesoriosEstado.js'
 
 const MATERIALES_LENTES = {
   Lentes_Armazon: { color: 0x121212, roughness: 0.32, metalness: 0 },
@@ -569,9 +569,10 @@ function partirMalla(g, quedan) {
 /**
  * Calzado (tenis, botas): el GLB trae el par en una malla y aquí se parte en
  * `<malla>L` y `<malla>R`; los pies quedan marcados para ocultarse con él
- * (`ocultaCon` junta los ids de todo el calzado que los tapa).
+ * (`ocultaCon` junta los ids de todo el calzado que los tapa). `tapa`: qué
+ * piezas del cuerpo oculta (las muñequeras no ocultan nada).
  */
-function ponerCalzado(escena, gltf, cfg, sinTinta) {
+function ponerCalzado(escena, gltf, cfg, sinTinta, tapa = PIES) {
   const llave = `__${cfg.id}Par`
   if (!escena) return []
   if (escena.userData[llave]) return escena.userData[llave]
@@ -591,8 +592,8 @@ function ponerCalzado(escena, gltf, cfg, sinTinta) {
   })
   escena.remove(par)
   par.geometry.dispose()
-  escena.traverse((o) => {
-    if (!PIES.test(o.name)) return
+  if (tapa) escena.traverse((o) => {
+    if (!tapa.test(o.name)) return
     o.traverse((h) => {
       const antes = h.userData.ocultaCon
       const ids = Array.isArray(antes) ? antes : antes ? [antes] : []
@@ -636,6 +637,39 @@ const SIN_TINTA_BOTAS = ['Botas_Perforado', 'Botas_Huella']
 /** Las botas como `Egg_BotasL` y `Egg_BotasR`; los pies quedan marcados para ocultarse con ellas. */
 export function ponerBotas(escena, gltf) {
   return ponerCalzado(escena, gltf, BOTAS, SIN_TINTA_BOTAS)
+}
+
+// ---------------------------------------------------------------------------
+// Muñequeras de picos (Oscar, 2026-11-18): aro negro grueso en segmentos, con
+// picos triangulares planos del lado del dorso y del meñique (el cuerpo solo se
+// acerca al antebrazo por la palma y el pulgar), escalón y tornillo en cada
+// pico, cinchos y la correa tejida por dentro. Salen de scripts/skulley-anim/
+// munequeras.py, rígidas: todo su peso en forearm_twist, que gira con la
+// muñeca sin doblarse. Su hueco libra la manga de la chamarra; el puño del
+// hoodie y el de la inflada no caben (se excluyen). Como el calzado, el par se
+// parte en Egg_MunequeraL y Egg_MunequeraR para que el despiece tire dos piezas.
+// ---------------------------------------------------------------------------
+
+const MATERIALES_MUNEQUERAS = {
+  Munequera_Placa: { color: 0x202024, roughness: 0.45, metalness: 0 },
+  Munequera_Correa: { color: 0x34343a, roughness: 0.9, metalness: 0 },
+  Munequera_Pico: { color: 0x27272c, roughness: 0.4, metalness: 0 },
+  // el escalón de cada pico, un poco más claro para que se lea la placa encima
+  Munequera_Escalon: { color: 0x44444d, roughness: 0.25, metalness: 0 },
+  // tornillos plateados de caricatura (con metalness 1 y sin reflejo salen negros)
+  Munequera_Metal: { color: 0xd4d8de, roughness: 0.3, metalness: 0 },
+  Munequera_Cincho: { color: 0x121214, roughness: 0.6, metalness: 0 },
+}
+const MUNEQUERAS = {
+  id: 'munequeras', malla: 'Egg_Munequera', materiales: MATERIALES_MUNEQUERAS,
+  orden: ['Munequera_Placa', 'Munequera_Correa', 'Munequera_Pico', 'Munequera_Escalon', 'Munequera_Metal', 'Munequera_Cincho'],
+}
+// los tornillos y los cinchos son chiquitos: la tinta de los pliegues los llenaría de negro
+const SIN_TINTA_MUNEQUERAS = ['Munequera_Metal', 'Munequera_Cincho']
+
+/** Las muñequeras como `Egg_MunequeraL` y `Egg_MunequeraR` (no ocultan nada del cuerpo). */
+export function ponerMunequeras(escena, gltf) {
+  return ponerCalzado(escena, gltf, MUNEQUERAS, SIN_TINTA_MUNEQUERAS, null)
 }
 
 // ---------------------------------------------------------------------------
@@ -756,4 +790,47 @@ export function ponerPantalones(escena, gltf) {
  */
 export function opcionesTelaPantalones(mesh) {
   return opcionesTela(mesh, 'Pantalones_Mezclilla')
+}
+
+// ---------------------------------------------------------------------------
+// Beanie (Oscar, 2026-11-18): largo, de tejido negro, con la copa aguada que
+// cae hacia atrás, el dobladillo enrollado y una etiqueta blanca con
+// SKULLEYRAD en SKULLEYGLYPH. Sale de scripts/skulley-anim/beanie.py, todo en
+// head.x: va rígido con la cabeza, igual que el cráneo y los lentes, así que lo
+// que libra en reposo libra en cualquier animación. Las costillas del tejido y
+// la etiqueta son texturas del GLB. El mohawk no cabe: se oculta mientras va
+// puesto (Oscar escogió esconderlo), con `ocultaCon` en la malla del pelo, como
+// los pies con los tenis; con la skin Inferno, el pelo escondido no arde.
+// ---------------------------------------------------------------------------
+
+const MATERIALES_BEANIE = {
+  // el negro y las costillas los pone la textura
+  Beanie_Tejido: { color: 0xffffff, roughness: 0.95, metalness: 0 },
+  Beanie_Dobladillo: { color: 0xffffff, roughness: 0.95, metalness: 0 },
+  Beanie_Etiqueta: { color: 0xffffff, roughness: 0.8, metalness: 0 },
+}
+const BEANIE = {
+  id: 'beanie', malla: 'Egg_Beanie', materiales: MATERIALES_BEANIE,
+  mapa: ['Beanie_Tejido', 'Beanie_Dobladillo', 'Beanie_Etiqueta'],
+  orden: ['Beanie_Tejido', 'Beanie_Dobladillo', 'Beanie_Etiqueta'],
+}
+
+/** El beanie como `Egg_Beanie`; la malla del pelo (material Hair) queda marcada para ocultarse con él. */
+export function ponerBeanie(escena, gltf) {
+  const hechos = ponerPrenda(escena, gltf, BEANIE)
+  if (!hechos.length) return hechos
+  escena.traverse((o) => {
+    if (!o.isMesh || o.userData?.accesorio) return
+    const mats = Array.isArray(o.material) ? o.material : [o.material]
+    if (!mats.some((m) => /^Hair$/i.test(m?.name || ''))) return
+    const antes = o.userData.ocultaCon
+    const ids = Array.isArray(antes) ? antes : antes ? [antes] : []
+    if (!ids.includes('beanie')) o.userData.ocultaCon = [...ids, 'beanie']
+  })
+  return hechos
+}
+
+/** Opciones de telaSuelta para el beanie despiezado: simula la copa; el dobladillo y la etiqueta la siguen como piel. */
+export function opcionesTelaBeanie(mesh) {
+  return opcionesTela(mesh, 'Beanie_Tejido')
 }

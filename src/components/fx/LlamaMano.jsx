@@ -917,7 +917,8 @@ export default function LlamaMano({ raiz, disparoRef = null, fuente = 'mano' }) 
       }
     }
     const orbe = st.orbe
-    let activa = !!orbe && visibleSusPadres(orbe) && (!esPelo || getCurrentSkinMode() === MODO_INFERNO)
+    // el pelo escondido por un prop (el beanie: Player y el rig marcan __ocultoPorProp) no arde
+    let activa = !!orbe && visibleSusPadres(orbe) && (!esPelo || (getCurrentSkinMode() === MODO_INFERNO && !orbe.userData.__ocultoPorProp))
     let R = 0
     if (activa) {
       if (esPelo) {

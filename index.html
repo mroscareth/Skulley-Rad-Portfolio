@@ -4,6 +4,56 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script>
+    // Solo en local (Oscar, 2026-11-18): las pestañas que abren los agentes en
+    // segundo plano no suenan. Con la pestaña oculta, o con localStorage
+    // skulley_mudo = '1', todo el audio va a una ganancia en 0 y los <audio> /
+    // <video> se callan; al verse regresa (salvo con skulley_mudo).
+    (function () {
+      try {
+        if (!/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) return
+        var forzado = localStorage.getItem('skulley_mudo') === '1'
+        var mudo = function () { return forzado || document.hidden }
+        var ganancias = [], medios = new Set()
+        var AC = window.AudioContext || window.webkitAudioContext
+        if (AC) {
+          window.AudioContext = window.webkitAudioContext = class extends AC {
+            constructor(o) {
+              super(o)
+              var g = this.createGain()
+              g.gain.value = mudo() ? 0 : 1
+              g.connect(this.destination)
+              Object.defineProperty(this, 'destination', { value: g })
+              ganancias.push(g)
+            }
+          }
+        }
+        var P = HTMLMediaElement.prototype
+        var desc = Object.getOwnPropertyDescriptor(P, 'muted')
+        var aplica = function (el) { desc.set.call(el, !!el.__quiereMudo || mudo()) }
+        Object.defineProperty(P, 'muted', {
+          configurable: true,
+          get: function () { return this.__quiereMudo === undefined ? desc.get.call(this) : this.__quiereMudo },
+          set: function (v) { this.__quiereMudo = !!v; medios.add(this); aplica(this) },
+        })
+        var play = P.play
+        P.play = function () {
+          if (this.__quiereMudo === undefined) this.__quiereMudo = desc.get.call(this)
+          medios.add(this); aplica(this)
+          return play.apply(this, arguments)
+        }
+        if (window.speechSynthesis) {
+          var habla = speechSynthesis.speak.bind(speechSynthesis)
+          speechSynthesis.speak = function (u) { if (!mudo()) habla(u) }
+        }
+        document.addEventListener('visibilitychange', function () {
+          var m = mudo()
+          ganancias.forEach(function (g) { g.gain.value = m ? 0 : 1 })
+          medios.forEach(aplica)
+        })
+      } catch (e) { }
+    })()
+  </script>
 
   <!-- =====================================================
          SEO CORE TAGS - SERP OPTIMIZED

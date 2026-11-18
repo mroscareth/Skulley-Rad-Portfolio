@@ -11,6 +11,8 @@ export const URL_TENIS = `${import.meta.env.BASE_URL}props/tenis.glb`
 export const URL_INFLADA = `${import.meta.env.BASE_URL}props/inflada.glb`
 export const URL_BOTAS = `${import.meta.env.BASE_URL}props/botas.glb`
 export const URL_PANTALONES = `${import.meta.env.BASE_URL}props/pantalones.glb`
+export const URL_MUNEQUERAS = `${import.meta.env.BASE_URL}props/munequeras.glb`
+export const URL_BEANIE = `${import.meta.env.BASE_URL}props/beanie.glb`
 // Clips nuevos del mismo .blend (scripts/skulley-anim/exportar_animaciones.py)
 export const URL_CORRER = `${import.meta.env.BASE_URL}animaciones/correr.glb`
 
@@ -23,16 +25,20 @@ export const ACCESORIOS = [
   { id: 'inflada', es: 'Inflada', en: 'Puffer' },
   { id: 'tenis', es: 'Tenis', en: 'Sneakers' },
   { id: 'botas', es: 'Botas', en: 'Boots' },
+  { id: 'munequeras', es: 'Muñequeras', en: 'Spiked cuffs' },
+  { id: 'beanie', es: 'Beanie', en: 'Beanie' },
 ]
 export const ACCESORIOS_EVENT = 'accesorios-cambiaron'
 const LLAVE = 'skulley_accesorios'
 // Los bóxers son broma: se descubren, no salen puestos
-const PRENDIDOS_DE_INICIO = { lentes: true, boxers: false, pantalones: false, chamarra: false, hoodie: false, inflada: false, tenis: false, botas: false }
+const PRENDIDOS_DE_INICIO = { lentes: true, boxers: false, pantalones: false, chamarra: false, hoodie: false, inflada: false, tenis: false, botas: false, munequeras: false, beanie: false }
 // La chamarra, el hoodie y la inflada se encimaban (una adentro de la otra): ponerse una quita las otras.
 // Igual los tenis y las botas: los dos van en los pies. Y los bóxers y los pantalones: los bóxers son más
-// anchos y bajan casi a la rodilla, no caben debajo.
+// anchos y bajan casi a la rodilla, no caben debajo. Las muñequeras solo libran la manga de la chamarra: el
+// puño del hoodie y el de la inflada no caben en su hueco (Oscar escogió el aro grueso, 2026-11-18).
 const SE_EXCLUYEN = {
-  chamarra: ['hoodie', 'inflada'], hoodie: ['chamarra', 'inflada'], inflada: ['chamarra', 'hoodie'],
+  chamarra: ['hoodie', 'inflada'], hoodie: ['chamarra', 'inflada', 'munequeras'], inflada: ['chamarra', 'hoodie', 'munequeras'],
+  munequeras: ['hoodie', 'inflada'],
   tenis: ['botas'], botas: ['tenis'],
   boxers: ['pantalones'], pantalones: ['boxers'],
 }
@@ -53,7 +59,7 @@ export function setAccesorio(id, prendido) {
   return next
 }
 
-/** Si va puesto lo que tapa a `o` (`userData.ocultaCon`: un id o varios; los pies, con los tenis o con las botas). */
+/** Si va puesto lo que tapa a `o` (`userData.ocultaCon`: un id o varios; los pies, con los tenis o con las botas; el pelo, con el beanie). */
 export function tapadoPorProp(o, estado) {
   const c = o?.userData?.ocultaCon
   if (!c) return false

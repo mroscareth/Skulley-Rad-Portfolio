@@ -57,6 +57,28 @@ const MANGA = {
 // y 21° el derecho, en el idle 3° y 6° y corriendo 3° en cuatro cuadros (hoodie.py, apertura_necesaria).
 // La inflada (2026-11-17) igual: caminando 18° y 21°, en el idle 3° y 15° y corriendo 3° (inflada.py).
 
+// Las muñequeras de picos (2026-11-18). Llevan picos en toda la vuelta (Oscar), y el cuerpo pasa por el
+// lado de la palma y del pulgar a ~10 cm del eje del antebrazo caminando: sin ropa también hay que abrir.
+// Contra el cuerpo se mide al revés que las mangas: puntos reales de las piezas del cuerpo (tórax, pelvis y
+// piernas) contra el perfil de la muñequera en el marco de forearm_twist (el radio
+// más lejano del aro y de los picos por ángulo, sacado de su malla), y sale hacia afuera del eje. Con ropa,
+// su orilla de afuera (aro y picos) se mide además contra el volumen de los bóxers o de los pantalones, como
+// las manos, y contra el costado de la chamarra hasta la bastilla (z 61–73 cm cruzaba caminando; el costado
+// de las mangas empieza en 0.70 m). Lo que pedía en Blender, en revisar_munequeras.py (apertura_necesaria).
+const MUNEQUERA = {
+  costadoY: [0.55, 1.22],  // costado de la prenda que se mide contra la muñequera (m)
+  nCostado: 360,
+  rMin: 0.085,             // de su orilla de afuera: más lejos que esto del eje del antebrazo (m)
+  sectores: 36,            // una muestra por sector y tercio (la más lejana del eje)
+  bins: 180,               // perfil: radio más lejano por ángulo alrededor del eje (2° cada uno)
+  margen: 0.015,           // el cuerpo se queda a 1.5 cm: la apertura va unos cuadros atrás (con 1.2, a 144 Hz se metía 3 mm)
+  // tórax, pelvis y piernas (la cabeza y los pies no le quedan cerca)
+  huesosCuerpo: /^(spine|root|thigh|leg|neck)/,
+  rejilla: 0.005,          // vértices del cuerpo a menos de esto cuentan como uno (m)
+  racimo: 0.03,            // tamaño de los racimos con que se descartan (m)
+  tope: 0.5,               // lo más que abren (rad)
+}
+
 /** Muestras de una prenda (chamarra, hoodie) para el apartado: por lado, manga que mira al cuerpo y costado del torso. */
 function muestrasPrenda(escena, id, material) {
   let sm = null
@@ -113,9 +135,159 @@ function muestrasPrenda(escena, id, material) {
       manga.push(i)
     }
     manga = espaciar(manga, MANGA.nManga).map(muestra)
-    lados[lado] = { torso, manga }
+    let costado = []
+    for (const i of piel) {
+      const x = pos.getX(i) * s, y = pos.getY(i)
+      if (x >= MANGA.torsoX && y >= MUNEQUERA.costadoY[0] && y <= MUNEQUERA.costadoY[1] && brazo(i) <= MANGA.torsoMax) costado.push(i)
+    }
+    costado = espaciar(costado, MUNEQUERA.nCostado).map(muestra)
+    lados[lado] = { torso, manga, costado }
   }
   return { sm, huesos, lados, M: huesos.map(() => new THREE.Matrix4()) }
+}
+
+/**
+ * El marco de un hueso en reposo sin su escala: el esqueleto de character.glb va en otras unidades que la
+ * escena (×100), y en su marco tal cual un margen de 6 mm salía de 60 cm. Con este, las medidas quedan en
+ * metros de la escena. `post` lleva del reposo del hueso a este marco: en cada cuadro, hueso · post.
+ */
+function marcoSinEscala(reposo) {
+  const t = new THREE.Vector3(), q = new THREE.Quaternion(), e = new THREE.Vector3()
+  reposo.decompose(t, q, e)
+  const marco = new THREE.Matrix4().compose(t, q, new THREE.Vector3(1, 1, 1))
+  return { inv: marco.clone().invert(), post: reposo.clone().invert().multiply(marco) }
+}
+
+/**
+ * Muestras de la orilla de afuera de una muñequera (aro y picos): en el marco del hueso forearm_twist en
+ * reposo, por sector alrededor del eje y tercio a lo largo de él, el vértice más lejano del eje.
+ */
+function muestrasMunequera(escena, s, B, reposoDe) {
+  let sm = null
+  const nombre = `Egg_Munequera${s.toUpperCase()}`
+  escena.traverse((o) => { if (!sm && o.isSkinnedMesh && o.name === nombre) sm = o })
+  const hueso = B[`forearm_twist${s}`]
+  if (!sm || !hueso) return null
+  const { inv } = marcoSinEscala(reposoDe(hueso))
+  const pos = sm.geometry.attributes.position
+  const p = new THREE.Vector3()
+  const loc = []
+  let y0 = Infinity, y1 = -Infinity
+  for (let i = 0; i < pos.count; i++) {
+    p.fromBufferAttribute(pos, i).applyMatrix4(inv)
+    loc.push([p.y, Math.hypot(p.x, p.z), Math.atan2(p.z, p.x)])
+    y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y)
+  }
+  const mejor = new Map()
+  for (let i = 0; i < loc.length; i++) {
+    const [y, r, a] = loc[i]
+    if (r < MUNEQUERA.rMin) continue
+    const sec = Math.min(MUNEQUERA.sectores - 1, Math.floor((a + Math.PI) / (2 * Math.PI) * MUNEQUERA.sectores))
+    const ter = Math.min(2, Math.floor((y - y0) / Math.max(1e-6, y1 - y0) * 3))
+    const k = sec * 3 + ter
+    const m = mejor.get(k)
+    if (!m || r > loc[m][1]) mejor.set(k, i)
+  }
+  return { malla: sm, idx: [...mejor.values()] }
+}
+
+/**
+ * Perfil de una muñequera en el marco de forearm_twist en reposo: el radio más lejano del eje por ángulo,
+ * del aro (lo que está en las caras de las placas) y de los picos (lo que sale más allá del aro), con el
+ * rango a lo largo del eje de cada uno. Cada ángulo toma el máximo de sus vecinos.
+ */
+function perfilMunequera(escena, s, B, reposoDe) {
+  let sm = null
+  const nombre = `Egg_Munequera${s.toUpperCase()}`
+  escena.traverse((o) => { if (!sm && o.isSkinnedMesh && o.name === nombre) sm = o })
+  const hueso = B[`forearm_twist${s}`]
+  if (!sm || !hueso) return null
+  const { inv, post } = marcoSinEscala(reposoDe(hueso))
+  const pos = sm.geometry.attributes.position
+  const N = MUNEQUERA.bins
+  const p = new THREE.Vector3()
+  const loc = []
+  let y0 = Infinity, y1 = -Infinity
+  for (let i = 0; i < pos.count; i++) {
+    p.fromBufferAttribute(pos, i).applyMatrix4(inv)
+    const r = Math.hypot(p.x, p.z)
+    const b = Math.min(N - 1, Math.floor((Math.atan2(p.z, p.x) + Math.PI) / (2 * Math.PI) * N))
+    loc.push([p.y, r, b])
+    y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y)
+  }
+  const placa = (y1 - y0) * 0.3
+  const aro = new Float32Array(N), pico = new Float32Array(N)
+  for (const [y, r, b] of loc) if (y < y0 + placa || y > y1 - placa) aro[b] = Math.max(aro[b], r)
+  let ys0 = Infinity, ys1 = -Infinity, rmax = 0
+  for (const [y, r, b] of loc) {
+    rmax = Math.max(rmax, r)
+    if (r > aro[b] + 0.002) { pico[b] = Math.max(pico[b], r); ys0 = Math.min(ys0, y); ys1 = Math.max(ys1, y) }
+  }
+  const dilata = (a) => Float32Array.from(a, (_, k) => Math.max(a[(k + N - 1) % N], a[k], a[(k + 1) % N]))
+  return {
+    hueso, post, aro: dilata(aro), pico: dilata(pico), y0, y1, ys0, ys1, N,
+    centro: new THREE.Vector3(0, (y0 + y1) / 2, 0), radio: Math.hypot(rmax, (y1 - y0) / 2),
+  }
+}
+
+/**
+ * Puntos de las piezas del cuerpo (sin brazos ni props), cada uno pegado a su hueso dominante: en cada
+ * cuadro, hueso · posición en su reposo. Son todos los vértices (los repetidos a menos de `rejilla`, uno):
+ * con una muestra la punta de un pico, que es angosta, se colaba entre puntos hasta 1.7 cm. Por hueso, en
+ * racimos de `racimo` con su esfera, para descartar sin revisar sus puntos lo que queda lejos.
+ */
+function muestrasCuerpo(escena, reposoDe) {
+  const mallas = []
+  escena.traverse((o) => {
+    if (!o.isSkinnedMesh || o.userData?.accesorio || /_outline$/.test(o.name || '') || !o.geometry?.attributes?.skinIndex) return
+    mallas.push(o)
+  })
+  const raizInv = new THREE.Matrix4().copy(escena.matrixWorld).invert()
+  const porHueso = new Map()
+  const p = new THREE.Vector3()
+  const R = MUNEQUERA.rejilla, C = MUNEQUERA.racimo
+  for (const m of mallas) {
+    const si = m.geometry.attributes.skinIndex, sw = m.geometry.attributes.skinWeight
+    for (let i = 0; i < si.count; i++) {
+      let mejor = 0, w = -1
+      for (let c = 0; c < 4; c++) { const ww = sw.getComponent(i, c); if (ww > w) { w = ww; mejor = si.getComponent(i, c) } }
+      const b = m.skeleton.bones[mejor]
+      if (!b || !MUNEQUERA.huesosCuerpo.test(b.name)) continue
+      if (!porHueso.has(b)) porHueso.set(b, { hueso: b, ...marcoSinEscala(reposoDe(b)), celdas: new Map() })
+      const g = porHueso.get(b)
+      m.getVertexPosition(i, p).applyMatrix4(m.matrixWorld).applyMatrix4(raizInv).applyMatrix4(g.inv)
+      if (!Number.isFinite(p.x)) continue
+      const llave = `${Math.round(p.x / R)},${Math.round(p.y / R)},${Math.round(p.z / R)}`
+      if (!g.celdas.has(llave)) g.celdas.set(llave, [p.x, p.y, p.z])
+    }
+  }
+  const grupos = []
+  for (const g of porHueso.values()) {
+    const porRacimo = new Map()
+    for (const q of g.celdas.values()) {
+      const llave = `${Math.floor(q[0] / C)},${Math.floor(q[1] / C)},${Math.floor(q[2] / C)}`
+      if (!porRacimo.has(llave)) porRacimo.set(llave, [])
+      porRacimo.get(llave).push(q)
+    }
+    const local = [], racimos = []
+    const centro = new THREE.Vector3(), cr = new THREE.Vector3()
+    let n = 0
+    for (const lista of porRacimo.values()) {
+      cr.set(0, 0, 0)
+      for (const q of lista) { cr.x += q[0]; cr.y += q[1]; cr.z += q[2] }
+      cr.multiplyScalar(1 / lista.length)
+      let r = 0
+      for (const q of lista) r = Math.max(r, Math.hypot(q[0] - cr.x, q[1] - cr.y, q[2] - cr.z))
+      racimos.push(cr.x, cr.y, cr.z, r, local.length, local.length + lista.length * 3)
+      for (const q of lista) { local.push(q[0], q[1], q[2]); centro.x += q[0]; centro.y += q[1]; centro.z += q[2]; n++ }
+    }
+    if (!n) continue
+    centro.multiplyScalar(1 / n)
+    let radio = 0
+    for (let k = 0; k < racimos.length; k += 6) radio = Math.max(radio, Math.hypot(racimos[k] - centro.x, racimos[k + 1] - centro.y, racimos[k + 2] - centro.z) + racimos[k + 3])
+    grupos.push({ hueso: g.hueso, post: g.post, local: Float32Array.from(local), racimos: Float32Array.from(racimos), centro, radio })
+  }
+  return grupos
 }
 
 export function crearApartaManos(escena, reposoDe) {
@@ -165,6 +337,12 @@ export function crearApartaManos(escena, reposoDe) {
     })
     return { s, brazo: B[`arm_stretch${s}`], puntos, vertices, crudo: new THREE.Quaternion(), rv: new THREE.Vector3(), sostiene: new THREE.Vector3(), necesita: 0, tieneCrudo: false }
   })
+
+  for (const lado of lados) {
+    lado.munequera = muestrasMunequera(escena, lado.s, B, reposoDe)
+    lado.perfil = perfilMunequera(escena, lado.s, B, reposoDe)
+  }
+  const cuerpo = lados.some((l) => l.perfil) ? muestrasCuerpo(escena, reposoDe) : []
 
   const prendas = {
     chamarra: muestrasPrenda(escena, 'chamarra', 'Chamarra_Piel'),
@@ -319,6 +497,154 @@ export function crearApartaManos(escena, reposoDe) {
     return peor
   }
 
+  // Lo más que se mete la orilla de una muñequera en el costado de una prenda, hasta la bastilla (mundo),
+  // y hacia dónde salir: como la manga, contra la muestra del costado más cercana, a lo largo de su normal.
+  const cp = [], cn = [], mp2 = [], cercanos = []
+  const honduraMunequera = (prenda, lado, esc, salida, punto) => {
+    const lista = prenda.lados[lado.s].costado
+    if (!lista?.length || !lado.munequera) return 0
+    // primero la muñequera y su caja: del costado solo cuenta lo que cae cerca de ella
+    const { malla, idx } = lado.munequera
+    while (mp2.length < idx.length) mp2.push(new THREE.Vector3())
+    const cerca = MANGA.cerca * esc
+    cajaMin.set(Infinity, Infinity, Infinity); cajaMax.set(-Infinity, -Infinity, -Infinity)
+    for (let k = 0; k < idx.length; k++) {
+      malla.getVertexPosition(idx[k], mp2[k]).applyMatrix4(malla.matrixWorld)
+      cajaMin.min(mp2[k]); cajaMax.max(mp2[k])
+    }
+    cajaMin.subScalar(cerca); cajaMax.addScalar(cerca)
+    const { huesos, M: Ms } = prenda
+    const bi = prenda.sm.skeleton.boneInverses
+    for (let k = 0; k < huesos.length; k++) Ms[k].multiplyMatrices(huesos[k].matrixWorld, bi[k])
+    while (cp.length < lista.length) { cp.push(new THREE.Vector3()); cn.push(new THREE.Vector3()) }
+    cercanos.length = 0
+    for (let k = 0; k < lista.length; k++) {
+      const c = piel(prenda, lista[k], cp[k], null)
+      if (c.x < cajaMin.x || c.y < cajaMin.y || c.z < cajaMin.z || c.x > cajaMax.x || c.y > cajaMax.y || c.z > cajaMax.z) continue
+      piel(prenda, lista[k], cp[k], cn[k])
+      cercanos.push(k)
+    }
+    if (!cercanos.length) return 0
+    const cerca2 = cerca * cerca, margen = MANGA.margen * esc
+    let peor = 0
+    for (let k = 0; k < idx.length; k++) {
+      const pm = mp2[k]
+      let mejor = -1, dmin = cerca2
+      for (let q2 = 0; q2 < cercanos.length; q2++) {
+        const j = cercanos[q2]
+        const d = pm.distanceToSquared(cp[j])
+        if (d < dmin) { dmin = d; mejor = j }
+      }
+      if (mejor < 0) continue
+      const h = margen - u.subVectors(pm, cp[mejor]).dot(cn[mejor])
+      if (h > peor) { peor = h; salida.copy(cn[mejor]); punto.copy(pm) }
+    }
+    return peor
+  }
+
+  // Lo más que se mete el cuerpo en el perfil de una muñequera (mundo) y hacia dónde salir: del punto del
+  // cuerpo hacia el eje del antebrazo, en el plano del aro.
+  const fw = new THREE.Matrix4(), bw = new THREE.Matrix4(), invHueso = new THREE.Matrix4()
+  const cc = new THREE.Vector3(), gc = new THREE.Vector3(), pw = new THREE.Vector3(), pl = new THREE.Vector3()
+  const honduraCuerpo = (lado, esc, salida, punto) => {
+    const pf = lado.perfil
+    if (!pf || !cuerpo.length) return 0
+    fw.multiplyMatrices(pf.hueso.matrixWorld, pf.post)
+    invHueso.copy(fw).invert()
+    cc.copy(pf.centro).applyMatrix4(fw)
+    const m = MUNEQUERA.margen
+    let peor = 0
+    for (const g of cuerpo) {
+      bw.multiplyMatrices(g.hueso.matrixWorld, g.post)
+      gc.copy(g.centro).applyMatrix4(bw)
+      if (gc.distanceTo(cc) > (g.radio + pf.radio + m) * esc) continue
+      const L = g.local, Rc = g.racimos
+      for (let c = 0; c < Rc.length; c += 6) {
+       gc.set(Rc[c], Rc[c + 1], Rc[c + 2]).applyMatrix4(bw)
+       if (gc.distanceTo(cc) > (Rc[c + 3] + pf.radio + m) * esc) continue
+       for (let k = Rc[c + 4]; k < Rc[c + 5]; k += 3) {
+        pw.set(L[k], L[k + 1], L[k + 2]).applyMatrix4(bw)
+        pl.copy(pw).applyMatrix4(invHueso)
+        const y = pl.y
+        if (y < pf.y0 - m || y > pf.y1 + m) continue
+        const r = Math.hypot(pl.x, pl.z)
+        const b = Math.min(pf.N - 1, Math.floor((Math.atan2(pl.z, pl.x) + Math.PI) / (2 * Math.PI) * pf.N))
+        let lim = pf.aro[b]
+        if (y > pf.ys0 - m && y < pf.ys1 + m) lim = Math.max(lim, pf.pico[b])
+        const d = (lim + m - r) * esc
+        if (lim > 0 && d > peor && r > 1e-6) {
+          peor = d
+          salida.set(-pl.x / r, 0, -pl.z / r).transformDirection(fw)
+          punto.copy(pw)
+        }
+       }
+      }
+    }
+    return peor
+  }
+
+  // La apertura de las muñequeras va aparte y encima de la de las mangas y las manos: un solo ángulo por
+  // brazo, abriéndolo desde el hombro en el plano del frente del torso (como lo mide revisar_munequeras.py
+  // en Blender). Metidas en el giro de siempre, cada contacto pedía un eje distinto (el pico contra la
+  // cadera, la manga contra el costado) y lo sostenido cambiaba de dirección: con la chamarra brincaba
+  // hasta 3.7° de un cuadro a otro. Con un ángulo, sostener y suavizar es como en las manos.
+  const pechoReposoInv = reposoDe(B.spine_03x || B.rootx).invert()
+  const frente = new THREE.Vector3(), mq = new THREE.Vector3(), muN = new THREE.Vector3(), muP = new THREE.Vector3()
+  const qBase = new THREE.Quaternion(), mPecho = new THREE.Matrix4()
+  const pruebaMunequera = (lado, esc, puestas, vol) => {
+    let peor = 0
+    if (vol && lado.munequera) {
+      const { malla, idx } = lado.munequera
+      for (let k = 0; k < idx.length; k++) {
+        malla.getVertexPosition(idx[k], p).applyMatrix4(malla.matrixWorld)
+        const d = hondura(p, 0, esc, n, vol)
+        if (d > peor) { peor = d; muN.copy(n); muP.copy(p) }
+      }
+    }
+    for (const prenda of puestas) {
+      const d = honduraMunequera(prenda, lado, esc, n, p)
+      if (d > peor) { peor = d; muN.copy(n); muP.copy(p) }
+    }
+    const d = honduraCuerpo(lado, esc, n, p)
+    if (d > peor) { peor = d; muN.copy(n); muP.copy(p) }
+    return peor
+  }
+  const abrirMas = (lado, ang) => {
+    const br = lado.brazo
+    br.quaternion.copy(qBase)
+    if (Math.abs(ang) > 1e-7) {
+      br.parent.getWorldQuaternion(qp)
+      qa.setFromAxisAngle(frente, ang)
+      qw.copy(qp).multiply(br.quaternion).premultiply(qa)
+      br.quaternion.copy(qp.invert()).multiply(qw)
+    }
+    br.updateMatrixWorld(true)
+  }
+  const aperturaMunequera = (lado, esc, puestas, vol, decae, abre) => {
+    // el frente del torso en mundo (en reposo, +z de la escena) y hacia qué lado abre cada brazo
+    const pecho = B.spine_03x || B.rootx
+    mPecho.multiplyMatrices(pecho.matrixWorld, pechoReposoInv)
+    frente.set(0, 0, 1).transformDirection(mPecho)
+    const signo = lado.s === 'l' ? 1 : -1
+    qBase.copy(lado.brazo.quaternion)
+    hombro.setFromMatrixPosition(lado.brazo.matrixWorld)
+    let a = 0
+    for (let it = 0; it < ITER; it++) {
+      abrirMas(lado, a * signo)
+      const peor = pruebaMunequera(lado, esc, puestas, vol)
+      if (peor <= 1e-5) break
+      // abrir un radián mueve el punto en frente × (punto − hombro): lo que de eso va hacia afuera
+      mq.subVectors(muP, hombro)
+      const palanca = u.crossVectors(frente, mq).multiplyScalar(signo).dot(muN)
+      if (palanca < 0.02 * esc) break
+      a = Math.min(MUNEQUERA.tope, a + peor / palanca)
+    }
+    lado.abdPide = a
+    lado.abdSost = Math.max((lado.abdSost || 0) * decae, a)
+    lado.abd = (lado.abd || 0) + (lado.abdSost - (lado.abd || 0)) * abre
+    abrirMas(lado, lado.abd * signo)
+  }
+
   // Gira el brazo en mundo (rotación vector rv, en el espacio del padre del brazo).
   const girar = (lado, rv) => {
     const br = lado.brazo
@@ -337,6 +663,8 @@ export function crearApartaManos(escena, reposoDe) {
 
   return {
     lados,
+    // puntos del cuerpo contra los que se miden las muñequeras (para revisar en Node o en desarrollo)
+    cuerpo,
     chamarra: prendas.chamarra,
     hoodie: prendas.hoodie,
     inflada: prendas.inflada,
@@ -353,19 +681,21 @@ export function crearApartaManos(escena, reposoDe) {
       for (const l of lados) {
         l.tieneCrudo = false
         l.rv.set(0, 0, 0); l.sostiene.set(0, 0, 0); l.necesita = 0; l.previa = null
+        l.abd = 0; l.abdSost = 0; l.abdPide = 0
       }
     },
-    // que: { boxers, pantalones, chamarra, hoodie, inflada } (true = va puesta); un booleano solo es los bóxers
+    // que: { boxers, pantalones, chamarra, hoodie, inflada, munequeras } (true = va puesta); un booleano solo es los bóxers
     aplicar(dt, que) {
       const objeto = typeof que === 'object' && que
       let conBoxers = objeto ? !!que.boxers : !!que
       let conPantalones = objeto ? !!que.pantalones : false
+      let conMunequeras = objeto ? !!que.munequeras : false
       let puestas = []
       if (objeto) {
         for (const id of ['chamarra', 'hoodie', 'inflada']) if (que[id] && prendas[id]) puestas.push(prendas[id])
       }
       // window.__sinApartar (desarrollo): sin la capa, para medir contra qué se compara
-      if (import.meta.env.DEV && typeof window !== 'undefined' && window.__sinApartar) { conBoxers = false; conPantalones = false; puestas = [] }
+      if (import.meta.env.DEV && typeof window !== 'undefined' && window.__sinApartar) { conBoxers = false; conPantalones = false; conMunequeras = false; puestas = [] }
       // las manos contra un volumen: el de los bóxers o, si no, el de los pantalones (se excluyen)
       const vol = conBoxers ? VOL_BOXERS : conPantalones ? VOL_PANTALONES : null
       conBoxers = !!vol
@@ -432,6 +762,9 @@ export function crearApartaManos(escena, reposoDe) {
         lado.rv.lerp(lado.sostiene, abre)
         girar(lado, lado.rv)
         lado.necesita = necesita.length()
+        // y encima, lo que pidan las muñequeras
+        if (conMunequeras && lado.perfil) aperturaMunequera(lado, esc, puestas, vol, decae, abre)
+        else { lado.abd = 0; lado.abdSost = 0; lado.abdPide = 0 }
       }
     },
   }

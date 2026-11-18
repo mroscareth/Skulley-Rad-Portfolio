@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react'
-import { ArrowPathIcon, ArrowLeftIcon, ComputerDesktopIcon } from '@heroicons/react/24/solid'
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { ArrowPathIcon, ArrowLeftIcon, ComputerDesktopIcon, SwatchIcon } from '@heroicons/react/24/solid'
 
 // Dado (heroicons no tiene dice) — representa randomness para el botón Randomize.
 function DiceIcon({ className }) {
@@ -155,7 +155,27 @@ function PantalonesIcon({ className }) {
   )
 }
 
-export const ICONOS_PROP = { lentes: LentesIcon, boxers: BoxersIcon, pantalones: PantalonesIcon, chamarra: ChamarraIcon, hoodie: HoodieIcon, tenis: TenisIcon, inflada: InfladaIcon, botas: BotasIcon }
+// Muñequera de frente (el aro con su hueco y los picos del lado de afuera, cada uno con su tornillo) para el botón del prop.
+function MunequerasIcon({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="currentColor" fillRule="evenodd" aria-hidden="true">
+      <path d="M16 9.2a8.4 8.4 0 1 0 0 16.8a8.4 8.4 0 1 0 0-16.8zM16 12.7a4.9 4.9 0 1 1 0 9.8a4.9 4.9 0 1 1 0-9.8z" />
+      <path d="M23.8 18.1L29.3 12.7 21.7 12.2zM21.9 12.4L22 4.7 16.2 9.8zM16.5 9.8L11.1 4.3 10.6 11.9zM10.8 11.7L3.1 11.6 8.2 17.4zM8.2 17.1L2.7 22.5 10.3 23zM26.25 14.18a.85.85 0 1 0-1.7 0 .85.85 0 1 0 1.7 0zM21.08 8.54a.85.85 0 1 0-1.7 0 .85.85 0 1 0 1.7 0zM13.43 8.2a.85.85 0 1 0-1.7 0 .85.85 0 1 0 1.7 0zM7.79 13.37a.85.85 0 1 0-1.7 0 .85.85 0 1 0 1.7 0zM7.45 21.02a.85.85 0 1 0-1.7 0 .85.85 0 1 0 1.7 0z" />
+    </svg>
+  )
+}
+
+// Beanie largo de lado (la copa aguada que cae hacia atrás, el dobladillo acanalado y su etiqueta) para el botón del prop.
+function BeanieIcon({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="currentColor" fillRule="evenodd" aria-hidden="true">
+      <path d="M6.4 17.6C6.4 10.4 10.4 5 16.6 5c4.8 0 8.6 2.4 11 6.2 1.6 2.6 1.4 5.2-.4 6.4z" />
+      <path d="M5.4 18.8h21.2c.8 0 1.4.6 1.4 1.4v4.4c0 .8-.6 1.4-1.4 1.4H5.4c-.8 0-1.4-.6-1.4-1.4v-4.4c0-.8.6-1.4 1.4-1.4zM7.6 20.2h.9v4.4h-.9zM10.2 20.2h.9v4.4h-.9zM12.8 20.2h.9v4.4h-.9zM15.4 20.2h.9v4.4h-.9zM18.4 20.6h5.4v3.4h-5.4z" />
+    </svg>
+  )
+}
+
+export const ICONOS_PROP = { lentes: LentesIcon, boxers: BoxersIcon, pantalones: PantalonesIcon, chamarra: ChamarraIcon, hoodie: HoodieIcon, tenis: TenisIcon, inflada: InfladaIcon, botas: BotasIcon, munequeras: MunequerasIcon, beanie: BeanieIcon }
 
 // Íconos de las partes del cuerpo (pestaña Props).
 function CabezaIcon({ className }) {
@@ -206,7 +226,7 @@ const PARTES = [
   { id: 'piernas', es: 'Piernas', en: 'Legs', Icono: PiernasIcon },
   { id: 'pies', es: 'Pies', en: 'Feet', Icono: PiesIcon },
 ]
-const PARTE_DE = { lentes: 'cabeza', chamarra: 'torso', hoodie: 'torso', inflada: 'torso', boxers: 'piernas', pantalones: 'piernas', tenis: 'pies', botas: 'pies' }
+const PARTE_DE = { lentes: 'cabeza', chamarra: 'torso', hoodie: 'torso', inflada: 'torso', boxers: 'piernas', pantalones: 'piernas', tenis: 'pies', botas: 'pies', munequeras: 'munecas', beanie: 'cabeza' }
 const parteDe = (a) => a.parte || PARTE_DE[a.id] || 'torso'
 
 function useAccesorios() {
@@ -229,7 +249,7 @@ function SelectorPartes({ lang, parte, onParte, estado, enFila = false }) {
         const nombre = lang === 'es' ? p.es : p.en
         const conAlgo = ACCESORIOS.some((a) => parteDe(a) === p.id && estado[a.id])
         return (
-          <div key={p.id} className="flex flex-col items-center">
+          <div key={p.id} className="cc-pieza flex flex-col items-center">
             <button
               type="button"
               onClick={() => { if (activa) return; try { playSfx('click', { volume: 1.0 }) } catch { }; onParte(p.id) }}
@@ -255,7 +275,7 @@ function PropsDeParte({ lang, parte, estado, setEstado, enFila = false }) {
   const lista = ACCESORIOS.filter((a) => parteDe(a) === parte)
   if (!lista.length) {
     return (
-      <p className={`text-[11px] leading-snug opacity-55 text-center ${enFila ? '' : 'w-28'}`}>
+      <p className={`cc-pieza text-[11px] leading-snug opacity-55 text-center ${enFila ? '' : 'w-28'}`}>
         {lang === 'es' ? 'Aún no hay nada aquí.' : 'Nothing here yet.'}
       </p>
     )
@@ -268,7 +288,7 @@ function PropsDeParte({ lang, parte, estado, setEstado, enFila = false }) {
         const accion = puesto ? (lang === 'es' ? `Quitar ${a.es.toLowerCase()}` : `Remove ${a.en.toLowerCase()}`) : (lang === 'es' ? `Poner ${a.es.toLowerCase()}` : `Wear ${a.en.toLowerCase()}`)
         const Icono = ICONOS_PROP[a.id] || LentesIcon
         return (
-          <div key={a.id} className="flex flex-col items-center">
+          <div key={a.id} className="cc-pieza flex flex-col items-center">
             <button
               type="button"
               onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setEstado(setAccesorio(a.id, !puesto)) }}
@@ -292,12 +312,31 @@ function PropsDeParte({ lang, parte, estado, setEstado, enFila = false }) {
 // escoge por partes y cada parte es una pestaña. Para agregar una, va aquí y
 // en el panel de abajo.
 const PESTANAS = [
-  { id: 'skins', es: 'Skins', en: 'Skins' },
-  { id: 'props', es: 'Props', en: 'Props' },
+  { id: 'skins', es: 'Skins', en: 'Skins', Icono: SwatchIcon },
+  { id: 'props', es: 'Props', en: 'Props', Icono: TorsoIcon },
 ]
 
-function Pestanas({ pestana, onPestana, lang, centradas = false }) {
+// `enBarra`: dentro de la barra de abajo de escritorio, como segmentos de la
+// cápsula; la puesta en blanco plano, como la herramienta elegida del wallpaper.
+// El blanco es una sola pieza que se desliza a la pestaña puesta, medida del
+// botón (cambia con el idioma y con la fuente al cargar).
+function Pestanas({ pestana, onPestana, lang, centradas = false, enBarra = false }) {
   const idDe = (id) => `cc-pestana-${id}`
+  const listaRef = useRef(null)
+  const [marca, setMarca] = useState(null)
+  useLayoutEffect(() => {
+    if (!enBarra) return undefined
+    const lista = listaRef.current
+    if (!lista) return undefined
+    const medir = () => {
+      const b = lista.querySelector('[aria-selected="true"]')
+      if (b) setMarca((m) => ({ x: b.offsetLeft, w: b.offsetWidth, anima: m != null }))
+    }
+    medir()
+    const ro = new ResizeObserver(medir)
+    lista.querySelectorAll('[role="tab"]').forEach((b) => ro.observe(b))
+    return () => ro.disconnect()
+  }, [enBarra, pestana, lang])
   const onKeyDown = (e) => {
     const i = PESTANAS.findIndex((p) => p.id === pestana)
     let n = null
@@ -311,7 +350,14 @@ function Pestanas({ pestana, onPestana, lang, centradas = false }) {
     document.getElementById(idDe(PESTANAS[n].id))?.focus()
   }
   return (
-    <div role="tablist" aria-label={lang === 'es' ? 'Guardarropa' : 'Wardrobe'} onKeyDown={onKeyDown} className={`flex gap-1.5 ${centradas ? 'justify-center' : ''}`}>
+    <div ref={listaRef} role="tablist" aria-label={lang === 'es' ? 'Guardarropa' : 'Wardrobe'} onKeyDown={onKeyDown} className={`relative flex gap-1.5 ${centradas ? 'justify-center' : ''}`}>
+      {enBarra && marca && (
+        <span
+          className="cc-marca absolute top-0 left-0 h-full rounded-full bg-white"
+          style={{ width: marca.w, transform: `translateX(${marca.x}px)`, transition: marca.anima ? undefined : 'none' }}
+          aria-hidden="true"
+        />
+      )}
       {PESTANAS.map((p) => {
         const activa = p.id === pestana
         return (
@@ -325,8 +371,11 @@ function Pestanas({ pestana, onPestana, lang, centradas = false }) {
             tabIndex={activa ? 0 : -1}
             onClick={() => { if (activa) return; try { playSfx('click', { volume: 1.0 }) } catch { }; onPestana(p.id) }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.6 }) } catch { } }}
-            className="shop-chip h-9 px-4 text-[10px] whitespace-nowrap bg-black/35 backdrop-blur-md [text-shadow:none]"
+            className={enBarra
+              ? `relative h-11 px-5 flex items-center gap-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] whitespace-nowrap transition-colors duration-300 ${activa ? 'text-black' : 'text-white/75 hover:text-white'}`
+              : 'shop-chip h-9 px-4 text-[10px] whitespace-nowrap bg-black/35 backdrop-blur-md [text-shadow:none]'}
           >
+            {enBarra && <p.Icono className="w-4 h-4" aria-hidden="true" />}
             {lang === 'es' ? p.es : p.en}
           </button>
         )
@@ -338,6 +387,17 @@ function Pestanas({ pestana, onPestana, lang, centradas = false }) {
 // La columna de colores va a la derecha y Skulley a la izquierda: el selector
 // se abre hacia el hueco que queda entre los dos, no encima de los otros colores.
 const LADOS_COLUMNA = ['left', 'bottom', 'top', 'right']
+// El fondo vive en la barra de abajo: su selector se abre hacia arriba.
+const LADOS_BARRA = ['top', 'left', 'right', 'bottom']
+
+// Tiempos del cambio entre Skins y Props (ms): la salida, la entrada con su
+// rebote, lo que se recorre cada pieza de la ola y cuánto espera la columna de
+// la derecha. Van al CSS como variables (`varsCoreo`), así que viven solo aquí.
+const CORE = { SALE: 220, SALE_PASO: 20, ENTRA: 620, ENTRA_PASO: 42, DERECHA: 140, FUNDE_SALE: 160, FUNDE_ENTRA: 200 }
+const varsCoreo = {
+  '--cc-sale': `${CORE.SALE}ms`, '--cc-sale-paso': `${CORE.SALE_PASO}ms`,
+  '--cc-entra': `${CORE.ENTRA}ms`, '--cc-entra-paso': `${CORE.ENTRA_PASO}ms`,
+}
 
 // Panel de personalización de color del personaje (lado derecho de la pantalla;
 // la cámara del mundo se posa al frente con el personaje a la izquierda, ver
@@ -366,6 +426,15 @@ export default function CharacterCustomizer({
   const { t, lang } = useLanguage()
   const [colors, setColors] = useState(() => getCharacterColors())
   const [pestana, setPestana] = useState('skins')
+  // La que se ve. Al cambiar de pestaña primero salen en ola las piezas de la
+  // que se ve y, ya ida la última, entran las de la otra (Oscar, 2026-11-18:
+  // "que entren y salgan majestuosamente"; el relevo no corta lo que vuela).
+  const [mostrada, setMostrada] = useState('skins')
+  const [fase, setFase] = useState(null)
+  const coreoRef = useRef(null)
+  const mostradaRef = useRef('skins')
+  const faseRef = useRef(null)
+  const tiemposRef = useRef([])
   const [parte, setParte] = useState('cabeza')
   const [estadoProps, setEstadoProps] = useAccesorios()
   // Keys de color editables según la skin: registry override (ej. void = [],
@@ -373,6 +442,57 @@ export default function CharacterCustomizer({
   const isBase = activeSkinId === 'base'
   const activeSkin = skins.find((s) => s.id === activeSkinId)
   const editableKeys = activeSkin?.editableColors ?? (isBase ? ['eyes', 'head', 'hair', 'orb'] : ['eyes', 'orb'])
+
+  // Lo que dura cada fase con las piezas de esa pestaña (la columna que más trae).
+  const duracion = (f, p) => {
+    const menos = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    if (menos) return f === 'sale' ? CORE.FUNDE_SALE : CORE.FUNDE_ENTRA
+    let n = 0
+    coreoRef.current?.querySelectorAll(`[data-coreo="${p}"]`).forEach((r) => { n = Math.max(n, r.querySelectorAll('.cc-pieza').length) })
+    const k = Math.max(0, n - 1)
+    return f === 'sale' ? CORE.SALE + k * CORE.SALE_PASO : CORE.DERECHA + CORE.ENTRA + k * CORE.ENTRA_PASO
+  }
+  useEffect(() => {
+    const ts = tiemposRef.current
+    ts.forEach(clearTimeout)
+    ts.length = 0
+    const ponFase = (f) => { faseRef.current = f; setFase(f) }
+    const muestra = (p) => { mostradaRef.current = p; setMostrada(p) }
+    // Cada fase arranca desde como se ve cada pieza en ese instante: si se
+    // cambia de pestaña a media entrada (o se regresa a media salida), las que
+    // aún no llegaban no se asoman antes de irse, ni las que seguían ahí se
+    // apagan de golpe antes de volver a entrar (Oscar).
+    const piezasDe = (p) => coreoRef.current?.querySelectorAll(`[data-coreo="${p}"] .cc-pieza`) || []
+    const congela = (p, sufijo) => piezasDe(p).forEach((el) => {
+      const cs = getComputedStyle(el)
+      el.style.setProperty(`--de-o${sufijo}`, cs.opacity)
+      el.style.setProperty(`--de-t${sufijo}`, cs.transform)
+    })
+    const entra = (p, desdeAhi) => {
+      if (desdeAhi) congela(p, '-e')
+      else piezasDe(p).forEach((el) => { el.style.removeProperty('--de-o-e'); el.style.removeProperty('--de-t-e') })
+      muestra(p)
+      ponFase('entra')
+      ts.push(setTimeout(() => ponFase(null), duracion('entra', p)))
+    }
+    if (pestana === mostradaRef.current) {
+      // regresó a la que se ve a media salida: que vuelva a entrar
+      if (faseRef.current === 'sale') entra(pestana, true)
+      return
+    }
+    if (compact || !open) { muestra(pestana); ponFase(null); return }
+    congela(mostradaRef.current, '')
+    ponFase('sale')
+    ts.push(setTimeout(() => entra(pestana), duracion('sale', mostradaRef.current)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pestana])
+  useEffect(() => () => tiemposRef.current.forEach(clearTimeout), [])
+  // El orden de cada pieza en su columna (el retraso de la ola).
+  useLayoutEffect(() => {
+    coreoRef.current?.querySelectorAll('[data-coreo]').forEach((r) => {
+      r.querySelectorAll('.cc-pieza').forEach((el, i) => el.style.setProperty('--i', i))
+    })
+  })
 
   // Re-sync inputs if the store changes elsewhere (e.g. reset, otra pestaña).
   useEffect(() => {
@@ -455,16 +575,18 @@ export default function CharacterCustomizer({
         <ArrowLeftIcon className="w-4 h-4" />
         {lang === 'es' ? 'Salir' : 'Exit'}
       </button>
-      {/* El fondo, en el mismo vidrio de Salir. */}
-      <div className={`cc-fondo h-11 md:h-12 pl-1.5 md:pl-2 pr-4 flex items-center rounded-full bg-black/40 backdrop-blur-md border border-white/[0.16] shadow-elev-sm ${open ? 'pointer-events-auto' : 'pointer-events-none'}`} inert={!open || undefined}>
-        <ColorWell label={t('customizer.wallBg')} value={fondo} onChange={onFondo} />
-      </div>
+      {/* El fondo, en el mismo vidrio de Salir (en escritorio va en la barra de abajo). */}
+      {compact && (
+        <div className={`cc-fondo h-11 md:h-12 pl-1.5 md:pl-2 pr-4 flex items-center rounded-full bg-black/40 backdrop-blur-md border border-white/[0.16] shadow-elev-sm ${open ? 'pointer-events-auto' : 'pointer-events-none'}`} inert={!open || undefined}>
+          <ColorWell label={t('customizer.wallBg')} value={fondo} onChange={onFondo} />
+        </div>
+      )}
       </div>
 
       {/* Stage centrado y acotado (max-w) → los controles flanquean CERCA del
           personaje en pantallas anchas, en vez de tirarse a las orillas. */}
       <div className="absolute inset-0 flex justify-center px-3 md:px-6">
-        <div className="relative w-full max-w-4xl h-full">
+        <div ref={coreoRef} style={varsCoreo} className="relative w-full max-w-4xl h-full">
 
       {/* GUARDARROPA — pestañas (skins, props) y lo de la pestaña. Desktop:
           columna flotante izquierda. Mobile: carousel abajo (drag nativo +
@@ -476,10 +598,10 @@ export default function CharacterCustomizer({
           <div className="mb-2"><Pestanas pestana={pestana} onPestana={setPestana} lang={lang} centradas /></div>
           {/* minmax(0, 1fr): el carrusel no ensancha la columna (los props se iban a la derecha) */}
           <div className="grid grid-cols-[minmax(0,1fr)]">
-            <div id="cc-panel-skins" role="tabpanel" aria-labelledby="cc-pestana-skins" className={`[grid-area:1/1] self-end ${pestana === 'skins' ? '' : 'invisible'}`} inert={pestana !== 'skins' || undefined}>
+            <div id="cc-panel-skins" role="tabpanel" aria-labelledby="cc-pestana-skins" className={`[grid-area:1/1] self-end ${mostrada === 'skins' ? '' : 'invisible'}`} data-oculta={mostrada !== 'skins' || undefined} inert={mostrada !== 'skins' || undefined}>
               {skins.length > 0 && <SkinCarousel skins={skins} lang={lang} renderChip={(s) => renderSkinChip(s, true)} />}
             </div>
-            <div id="cc-panel-props" role="tabpanel" aria-labelledby="cc-pestana-props" className={`[grid-area:1/1] self-end pb-1 flex flex-col gap-3 ${pestana === 'props' ? '' : 'invisible'}`} inert={pestana !== 'props' || undefined}>
+            <div id="cc-panel-props" role="tabpanel" aria-labelledby="cc-pestana-props" className={`[grid-area:1/1] self-end pb-1 flex flex-col gap-3 ${mostrada === 'props' ? '' : 'invisible'}`} data-oculta={mostrada !== 'props' || undefined} inert={mostrada !== 'props' || undefined}>
               <PropsDeParte lang={lang} parte={parte} estado={estadoProps} setEstado={setEstadoProps} enFila />
               <SelectorPartes lang={lang} parte={parte} onParte={setParte} estado={estadoProps} enFila />
             </div>
@@ -487,14 +609,13 @@ export default function CharacterCustomizer({
         </div>
       ) : (
         <div className={`absolute left-0 top-1/2 -translate-y-1/2 text-white [text-shadow:0_1px_5px_rgba(0,0,0,0.9)] transition-all duration-300 ${open ? 'opacity-100 translate-x-0 pointer-events-auto' : 'opacity-0 -translate-x-6 pointer-events-none'}`}>
-          <div className="mb-3"><Pestanas pestana={pestana} onPestana={setPestana} lang={lang} /></div>
           <div className="grid">
-            <div id="cc-panel-skins" role="tabpanel" aria-labelledby="cc-pestana-skins" className={`[grid-area:1/1] self-start ${pestana === 'skins' ? '' : 'invisible'}`} inert={pestana !== 'skins' || undefined}>
+            <div id="cc-panel-skins" role="tabpanel" aria-labelledby="cc-pestana-skins" data-coreo="skins" data-fase={mostrada === 'skins' ? fase || undefined : undefined} className={`[grid-area:1/1] self-start ${mostrada === 'skins' ? '' : 'invisible'}`} data-oculta={mostrada !== 'skins' || undefined} inert={mostrada !== 'skins' || undefined}>
               <div className="grid grid-cols-2 gap-2.5 md:gap-3">
-                {skins.map((s) => renderSkinChip(s, false))}
+                {skins.map((s) => <div key={s.id} className="cc-pieza">{renderSkinChip(s, false)}</div>)}
               </div>
             </div>
-            <div id="cc-panel-props" role="tabpanel" aria-labelledby="cc-pestana-props" className={`[grid-area:1/1] self-start ${pestana === 'props' ? '' : 'invisible'}`} inert={pestana !== 'props' || undefined}>
+            <div id="cc-panel-props" role="tabpanel" aria-labelledby="cc-pestana-props" data-coreo="props" data-fase={mostrada === 'props' ? fase || undefined : undefined} className={`[grid-area:1/1] self-start ${mostrada === 'props' ? '' : 'invisible'}`} data-oculta={mostrada !== 'props' || undefined} inert={mostrada !== 'props' || undefined}>
               <SelectorPartes lang={lang} parte={parte} onParte={setParte} estado={estadoProps} />
             </div>
           </div>
@@ -505,10 +626,14 @@ export default function CharacterCustomizer({
           los colores (Oscar). En compacto van abajo, con las partes. */}
       {!compact && (
         <div
-          className={`absolute right-0 top-1/2 -translate-y-1/2 text-white [text-shadow:0_1px_5px_rgba(0,0,0,0.9)] transition-all duration-300 ${open && pestana === 'props' ? 'opacity-100 translate-x-0 pointer-events-auto' : 'opacity-0 translate-x-6 pointer-events-none'}`}
-          inert={!open || pestana !== 'props' || undefined}
+          data-coreo="props"
+          data-fase={mostrada === 'props' ? fase || undefined : undefined}
+          data-oculta={mostrada !== 'props' || undefined}
+          style={{ '--cc-base': `${CORE.DERECHA}ms`, visibility: mostrada === 'props' ? undefined : 'hidden' }}
+          className={`absolute right-0 top-1/2 -translate-y-1/2 text-white [text-shadow:0_1px_5px_rgba(0,0,0,0.9)] transition-[opacity,transform] duration-300 ${open ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-6'} ${open && mostrada === 'props' ? 'pointer-events-auto' : 'pointer-events-none'}`}
+          inert={!open || mostrada !== 'props' || undefined}
         >
-          <h3 className="text-[11px] font-bold uppercase tracking-widest opacity-80 mb-2 text-center">
+          <h3 className="cc-pieza text-[11px] font-bold uppercase tracking-widest opacity-80 mb-2 text-center">
             {(() => { const p = PARTES.find((x) => x.id === parte); return lang === 'es' ? p?.es : p?.en })()}
           </h3>
           <PropsDeParte lang={lang} parte={parte} estado={estadoProps} setEstado={setEstadoProps} />
@@ -518,21 +643,27 @@ export default function CharacterCustomizer({
       {/* COLORES + acciones — flotando a la DERECHA. Solo con la pestaña de
           skins: los colores son del cuerpo, no de los props (Oscar). */}
       <div
-        className={`absolute right-0 top-1/2 -translate-y-1/2 text-white [text-shadow:0_1px_5px_rgba(0,0,0,0.9)] transition-all duration-300 ${open && pestana === 'skins' ? 'opacity-100 translate-x-0 pointer-events-auto' : 'opacity-0 translate-x-6 pointer-events-none'}`}
-        inert={!open || pestana !== 'skins' || undefined}
+        data-coreo={compact ? undefined : 'skins'}
+        data-fase={!compact && mostrada === 'skins' ? fase || undefined : undefined}
+        data-oculta={mostrada !== 'skins' || undefined}
+        style={{ '--cc-base': `${CORE.DERECHA}ms`, visibility: mostrada === 'skins' ? undefined : 'hidden' }}
+        className={`absolute right-0 top-1/2 -translate-y-1/2 text-white [text-shadow:0_1px_5px_rgba(0,0,0,0.9)] transition-[opacity,transform] duration-300 ${open ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-6'} ${open && mostrada === 'skins' ? 'pointer-events-auto' : 'pointer-events-none'}`}
+        inert={!open || mostrada !== 'skins' || undefined}
       >
         {editableKeys.length > 0 ? (
           <>
-            <h3 className="text-[11px] font-bold uppercase tracking-widest opacity-80 mb-2 text-center">{lang === 'es' ? 'Color' : 'Color'}</h3>
+            <h3 className="cc-pieza text-[11px] font-bold uppercase tracking-widest opacity-80 mb-2 text-center">{lang === 'es' ? 'Color' : 'Color'}</h3>
             <div className="flex flex-col items-center gap-3">
-              {activeSkin?.variantesFuego && <SelectorFuego skinId={activeSkinId} lang={lang} />}
+              {activeSkin?.variantesFuego && <div className="cc-pieza"><SelectorFuego skinId={activeSkinId} lang={lang} /></div>}
               {visibleRows.map((row) => (
-                <ColorWell key={row.key} label={row.label} value={colors[row.key]} onChange={(v) => update(row.key, v)} lados={LADOS_COLUMNA} />
+                <div key={row.key} className="cc-pieza">
+                  <ColorWell label={row.label} value={colors[row.key]} onChange={(v) => update(row.key, v)} lados={LADOS_COLUMNA} />
+                </div>
               ))}
             </div>
             {/* Reset + Randomize (solo Custom) — botones circulares flotantes.
                 Randomize es la acción de color y va al final (DESIGN.md §4.6). */}
-            <div className="mt-4 flex justify-center gap-2">
+            <div className="cc-pieza mt-4 flex justify-center gap-2">
               <button
                 type="button"
                 onClick={onReset}
@@ -558,23 +689,38 @@ export default function CharacterCustomizer({
             </div>
           </>
         ) : (
-          <p className="text-[11px] leading-snug opacity-55 w-28 text-center">
+          <p className="cc-pieza text-[11px] leading-snug opacity-55 w-28 text-center">
             {lang === 'es' ? 'Esta skin no es personalizable.' : "This skin isn't customizable."}
           </p>
         )}
       </div>
-      {/* Wallpaper 4K, al centro y abajo de Skulley: no se mueve con la skin. */}
-      {!compact && onWallpaper && (
-        <button
-          type="button"
-          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; onWallpaper() }}
-          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-          className={`shop-btn shop-btn--primary absolute left-1/2 -translate-x-1/2 bottom-6 md:bottom-10 h-11 px-5 gap-2 text-[13px] transition-all duration-300 ${open ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-6 pointer-events-none'}`}
-          tabIndex={open ? 0 : -1}
+      {/* La barra de abajo (Oscar, 2026-11-18): una sola cápsula al centro con lo
+          que cambia la interfaz entera: las pestañas, el fondo y el wallpaper. */}
+      {!compact && (
+        <div
+          className={`cc-barra absolute left-1/2 -translate-x-1/2 bottom-6 md:bottom-10 w-max flex items-center gap-1.5 p-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/[0.16] text-white transition-all duration-300 ${open ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-6 pointer-events-none'}`}
+          inert={!open || undefined}
         >
-          <ComputerDesktopIcon className="w-4 h-4" aria-hidden="true" />
-          {t('customizer.wallpaper')}
-        </button>
+          <Pestanas pestana={pestana} onPestana={setPestana} lang={lang} enBarra />
+          <span className="w-px h-6 mx-1.5 bg-white/15" aria-hidden="true" />
+          <div className="cc-fondo h-11 pl-1 pr-3 flex items-center">
+            <ColorWell label={t('customizer.wallBg')} value={fondo} onChange={onFondo} lados={LADOS_BARRA} />
+          </div>
+          {onWallpaper && (
+            <>
+              <span className="w-px h-6 mx-1.5 bg-white/15" aria-hidden="true" />
+              <button
+                type="button"
+                onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; onWallpaper() }}
+                onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+                className="shop-btn shop-btn--primary h-11 px-5 gap-2 text-[13px] whitespace-nowrap"
+              >
+                <ComputerDesktopIcon className="w-4 h-4" aria-hidden="true" />
+                {t('customizer.wallpaper')}
+              </button>
+            </>
+          )}
+        </div>
       )}
         </div>
       </div>

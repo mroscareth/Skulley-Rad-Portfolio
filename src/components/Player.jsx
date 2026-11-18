@@ -29,7 +29,7 @@ import {
   LASER_ARM_YAW, laserReachFor,
 } from '../lib/laserPose.js'
 import { applyCharacterColorsToScene, getCharacterColors, CHARACTER_COLOR_EVENT, EYES_ORB_ONLY } from '../lib/characterColors.js'
-import { URL_LENTES, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_TENIS, URL_INFLADA, URL_BOTAS, URL_PANTALONES, URL_CORRER, ponerLentes, ponerBoxers, ponerChamarra, ponerHoodie, ponerTenis, ponerInflada, ponerBotas, ponerPantalones, opcionesTelaChamarra, opcionesTelaHoodie, opcionesTelaInflada, opcionesTelaPantalones, pasoCordones, getAccesorios, tapadoPorProp, ACCESORIOS_EVENT } from '../lib/accesorios.js'
+import { URL_LENTES, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_TENIS, URL_INFLADA, URL_BOTAS, URL_PANTALONES, URL_MUNEQUERAS, URL_BEANIE, URL_CORRER, ponerLentes, ponerBoxers, ponerChamarra, ponerHoodie, ponerTenis, ponerInflada, ponerBotas, ponerPantalones, ponerMunequeras, ponerBeanie, opcionesTelaChamarra, opcionesTelaHoodie, opcionesTelaInflada, opcionesTelaPantalones, opcionesTelaBeanie, pasoCordones, getAccesorios, tapadoPorProp, ACCESORIOS_EVENT } from '../lib/accesorios.js'
 import { telaDe } from '../lib/telaProp.js'
 import { crearApartaManos } from '../lib/apartaManos.js'
 import { crearConstructorTela, colocarTela, pasoTela as pasoTelaSuelta, escribirTela, normalesDeMalla, bajoDe } from '../lib/telaSuelta.js'
@@ -232,6 +232,8 @@ export default function Player({
   const infladaGltf = useGLTF(URL_INFLADA, true)
   const botasGltf = useGLTF(URL_BOTAS, true)
   const pantalonesGltf = useGLTF(URL_PANTALONES, true)
+  const munequerasGltf = useGLTF(URL_MUNEQUERAS, true)
+  const beanieGltf = useGLTF(URL_BEANIE, true)
   const correrGltf = useGLTF(URL_CORRER, true)
   // Detect GPU compressed-texture support once per renderer
   useEffect(() => { detectKTX2Support(gl) }, [gl])
@@ -260,6 +262,8 @@ export default function Player({
     try { ponerInflada(s, infladaGltf) } catch (e) { if (import.meta.env.DEV) console.warn('[inflada]', e) }
     try { ponerBotas(s, botasGltf) } catch (e) { if (import.meta.env.DEV) console.warn('[botas]', e) }
     try { ponerPantalones(s, pantalonesGltf) } catch (e) { if (import.meta.env.DEV) console.warn('[pantalones]', e) }
+    try { ponerMunequeras(s, munequerasGltf) } catch (e) { if (import.meta.env.DEV) console.warn('[munequeras]', e) }
+    try { ponerBeanie(s, beanieGltf) } catch (e) { if (import.meta.env.DEV) console.warn('[beanie]', e) }
     // Con los bóxers (o los pantalones), las manos se abren para no atravesarlos; con la chamarra, el
     // hoodie o la inflada, los brazos, para que las mangas no se metan al costado (se mide en reposo).
     try {
@@ -268,7 +272,7 @@ export default function Player({
       s.userData.apartaManos = crearApartaManos(s, (b) => new THREE.Matrix4().multiplyMatrices(raizInv, b.matrixWorld))
     } catch { }
     return s
-  }, [originalScene, lentesGltf, boxersGltf, chamarraGltf, hoodieGltf, tenisGltf, infladaGltf, botasGltf, pantalonesGltf])
+  }, [originalScene, lentesGltf, boxersGltf, chamarraGltf, hoodieGltf, tenisGltf, infladaGltf, botasGltf, pantalonesGltf, munequerasGltf, beanieGltf])
 
   // CRITICAL: Clone animation clips per scene swap. Three.js AnimationClips cache
   // PropertyBinding objects that reference specific skeleton nodes. When the scene
@@ -1086,7 +1090,7 @@ export default function Player({
   // (patada, láser), cuando los huesos ya están donde se van a dibujar.
   const pasoTela = (dt) => {
     const mallas = propsRef.current.mallas
-    let conBoxers = false, conChamarra = false, conHoodie = false, conInflada = false, conPantalones = false
+    let conBoxers = false, conChamarra = false, conHoodie = false, conInflada = false, conPantalones = false, conMunequeras = false
     for (let i = 0; i < mallas.length; i++) {
       if (!mallas[i].visible) continue
       if (mallas[i].userData.accesorio === 'boxers') conBoxers = true
@@ -1094,8 +1098,9 @@ export default function Player({
       else if (mallas[i].userData.accesorio === 'hoodie') conHoodie = true
       else if (mallas[i].userData.accesorio === 'inflada') conInflada = true
       else if (mallas[i].userData.accesorio === 'pantalones') conPantalones = true
+      else if (mallas[i].userData.accesorio === 'munequeras') conMunequeras = true
     }
-    try { scene?.userData.apartaManos?.aplicar(dt, { boxers: conBoxers, pantalones: conPantalones, chamarra: conChamarra, hoodie: conHoodie, inflada: conInflada }) } catch (e) { if (import.meta.env.DEV) console.warn('[manos]', e) }
+    try { scene?.userData.apartaManos?.aplicar(dt, { boxers: conBoxers, pantalones: conPantalones, chamarra: conChamarra, hoodie: conHoodie, inflada: conInflada, munequeras: conMunequeras }) } catch (e) { if (import.meta.env.DEV) console.warn('[manos]', e) }
     // los cordones del hoodie se mecen (con los brazos ya donde van)
     for (let i = 0; i < mallas.length; i++) {
       if (mallas[i].userData.cordones) try { pasoCordones(mallas[i], dt) } catch (e) { if (import.meta.env.DEV) console.warn('[cordones]', e) }
@@ -2141,7 +2146,8 @@ export default function Player({
       it.mallaTela = it.esTela && mallas.length === 1 && mallas[0].geometry.index ? mallas[0] : null
       // la chamarra, el hoodie, la inflada y los pantalones son prendas: simulan su tela de afuera y lo demás la sigue como piel
       const opcionesPrenda = it.esTela === 'chamarra' ? opcionesTelaChamarra : it.esTela === 'hoodie' ? opcionesTelaHoodie
-        : it.esTela === 'inflada' ? opcionesTelaInflada : it.esTela === 'pantalones' ? opcionesTelaPantalones : null
+        : it.esTela === 'inflada' ? opcionesTelaInflada : it.esTela === 'pantalones' ? opcionesTelaPantalones
+          : it.esTela === 'beanie' ? opcionesTelaBeanie : null
       it.telaConstructor = it.mallaTela
         ? crearConstructorTela(pos, it.mallaTela.geometry.index.array, opcionesPrenda ? opcionesPrenda(it.mallaTela) : undefined)
         : null
@@ -2657,8 +2663,8 @@ export default function Player({
           releasePos: null,
           impulseV: null,
           impulseW: null,
-          // los bóxers, la chamarra, el hoodie, la inflada y los pantalones caen como tela (telaSuelta.js)
-          esTela: ['boxers', 'chamarra', 'hoodie', 'inflada', 'pantalones'].includes(obj.userData?.accesorio) ? obj.userData.accesorio : false,
+          // los bóxers, la chamarra, el hoodie, la inflada, los pantalones y el beanie caen como tela (telaSuelta.js)
+          esTela: ['boxers', 'chamarra', 'hoodie', 'inflada', 'pantalones', 'beanie'].includes(obj.userData?.accesorio) ? obj.userData.accesorio : false,
         }
         pieces.push(data)
       }

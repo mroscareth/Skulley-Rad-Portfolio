@@ -13,7 +13,7 @@ import PortraitGlobo from './PortraitGlobo.jsx'
 import { applyToonBanding } from '../lib/toonBanding.js'
 import { compileAsyncSafe } from '../lib/compileAsyncSafe.js'
 import { applyCharacterColorsToScene, getCharacterColors, CHARACTER_COLOR_EVENT, EYES_ORB_ONLY } from '../lib/characterColors.js'
-import { URL_LENTES, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_INFLADA, URL_PANTALONES, ponerLentes, ponerBoxers, ponerChamarra, ponerHoodie, ponerInflada, ponerPantalones, mostrarAccesorios, getAccesorios, ACCESORIOS_EVENT } from '../lib/accesorios.js'
+import { URL_LENTES, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_INFLADA, URL_PANTALONES, URL_MUNEQUERAS, URL_BEANIE, ponerLentes, ponerBoxers, ponerChamarra, ponerHoodie, ponerInflada, ponerPantalones, ponerMunequeras, ponerBeanie, mostrarAccesorios, getAccesorios, tapadoPorProp, ACCESORIOS_EVENT } from '../lib/accesorios.js'
 import { crearApartaManos } from '../lib/apartaManos.js'
 import { applyCharacterSkinShader, materialTakesSkin, skinLineColor, SKIN_LINE_COLOR_EVENT, getSkinForcedColors } from '../lib/skinShaders.js'
 import CharacterNormalPass from './fx/CharacterNormalPass.jsx'
@@ -107,6 +107,8 @@ function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
   const hoodieGltf = useGLTF(URL_HOODIE, true)
   const infladaGltf = useGLTF(URL_INFLADA, true)
   const pantalonesGltf = useGLTF(URL_PANTALONES, true)
+  const munequerasGltf = useGLTF(URL_MUNEQUERAS, true)
+  const beanieGltf = useGLTF(URL_BEANIE, true)
   // Detect GPU compressed-texture support once per renderer
   useEffect(() => { detectKTX2Support(gl) }, [gl])
   // Load gold model WITHOUT KTX2 (re-exported with standard JPEG textures)
@@ -163,6 +165,8 @@ function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
     try { ponerHoodie(clone, hoodieGltf) } catch { }
     try { ponerInflada(clone, infladaGltf) } catch { }
     try { ponerPantalones(clone, pantalonesGltf) } catch { }
+    try { ponerMunequeras(clone, munequerasGltf) } catch { }
+    try { ponerBeanie(clone, beanieGltf) } catch { }
     // Las mangas de la chamarra, el hoodie y la inflada (y las manos con los bóxers o los pantalones) se apartan igual que en Player
     try {
       clone.updateMatrixWorld(true)
@@ -170,11 +174,19 @@ function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
       clone.userData.apartaManos = crearApartaManos(clone, (b) => new THREE.Matrix4().multiplyMatrices(raizInv, b.matrixWorld))
     } catch { }
     return clone
-  }, [activeScene, lentesGltf, boxersGltf, chamarraGltf, hoodieGltf, infladaGltf, pantalonesGltf])
+  }, [activeScene, lentesGltf, boxersGltf, chamarraGltf, hoodieGltf, infladaGltf, pantalonesGltf, munequerasGltf, beanieGltf])
 
-  // Los props que se prenden y apagan en Customize
+  // Los props que se prenden y apagan en Customize, y lo que tapan (el pelo con el beanie)
   useEffect(() => {
-    const aplicar = (e) => mostrarAccesorios(cloned, e?.detail || getAccesorios())
+    const aplicar = (e) => {
+      const estado = e?.detail || getAccesorios()
+      mostrarAccesorios(cloned, estado)
+      cloned.traverse((o) => {
+        if (!o.userData?.ocultaCon) return
+        if (tapadoPorProp(o, estado)) { o.visible = false; o.userData.__ocultoPorProp = true }
+        else if (o.userData.__ocultoPorProp) { o.visible = true; o.userData.__ocultoPorProp = false }
+      })
+    }
     aplicar()
     window.addEventListener(ACCESORIOS_EVENT, aplicar)
     return () => window.removeEventListener(ACCESORIOS_EVENT, aplicar)
@@ -262,10 +274,10 @@ function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
     if (!manos) return
     if (!propsPuestosRef.current) {
       const l = []
-      cloned.traverse((o) => { if (['boxers', 'pantalones', 'chamarra', 'hoodie', 'inflada'].includes(o.userData?.accesorio)) l.push(o) })
+      cloned.traverse((o) => { if (['boxers', 'pantalones', 'chamarra', 'hoodie', 'inflada', 'munequeras'].includes(o.userData?.accesorio)) l.push(o) })
       propsPuestosRef.current = l
     }
-    const puestos = { boxers: false, pantalones: false, chamarra: false, hoodie: false, inflada: false }
+    const puestos = { boxers: false, pantalones: false, chamarra: false, hoodie: false, inflada: false, munequeras: false }
     for (const o of propsPuestosRef.current) if (o.visible) puestos[o.userData.accesorio] = true
     try { manos.aplicar(Math.min(Math.max(delta || 0, 0), 0.1), puestos) } catch { }
   })

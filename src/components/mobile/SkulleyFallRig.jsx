@@ -27,7 +27,7 @@ import { RUNE_FONT_FAMILY_BOLD } from '../../lib/installRuneFont.js'
 import { registrarCabeza } from '../../lib/cabezaEnPantalla.js'
 import { instalarPrepaso } from '../../lib/prepasoProfundidad.js'
 import LlamaMano from '../fx/LlamaMano.jsx'
-import { URL_LENTES, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_TENIS, URL_INFLADA, URL_BOTAS, URL_PANTALONES, ponerLentes, ponerBoxers, ponerChamarra, ponerHoodie, ponerTenis, ponerInflada, ponerBotas, ponerPantalones, pasoCordones, getAccesorios, tapadoPorProp, ACCESORIOS_EVENT } from '../../lib/accesorios.js'
+import { URL_LENTES, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_TENIS, URL_INFLADA, URL_BOTAS, URL_PANTALONES, URL_MUNEQUERAS, URL_BEANIE, ponerLentes, ponerBoxers, ponerChamarra, ponerHoodie, ponerTenis, ponerInflada, ponerBotas, ponerPantalones, ponerMunequeras, ponerBeanie, pasoCordones, getAccesorios, tapadoPorProp, ACCESORIOS_EVENT } from '../../lib/accesorios.js'
 import { telaDe } from '../../lib/telaProp.js'
 import { crearApartaManos } from '../../lib/apartaManos.js'
 import { armarLentesArticulados, ponerPiezasLentes } from '../../lib/lentesArticulados.js'
@@ -1128,6 +1128,8 @@ useGLTF.preload(URL_HOODIE, true)
 useGLTF.preload(URL_TENIS, true)
 useGLTF.preload(URL_INFLADA, true)
 useGLTF.preload(URL_BOTAS, true)
+useGLTF.preload(URL_MUNEQUERAS, true)
+useGLTF.preload(URL_BEANIE, true)
 // Cuadros con Skulley en pantalla antes de preparar lo que solo usa la historia
 // (el numerito y PrecompilaDesarme): primero que salga él.
 const ESPERA_TRAS_SKULLEY = 20
@@ -1162,6 +1164,8 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
   const infladaGltf = useGLTF(URL_INFLADA, true)
   const botasGltf = useGLTF(URL_BOTAS, true)
   const pantalonesGltf = useGLTF(URL_PANTALONES, true)
+  const munequerasGltf = useGLTF(URL_MUNEQUERAS, true)
+  const beanieGltf = useGLTF(URL_BEANIE, true)
 
   const cloned = useMemo(() => {
     const clone = SkeletonUtils.clone(scene)
@@ -1179,6 +1183,8 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     try { ponerInflada(clone, infladaGltf) } catch (e) { if (import.meta.env.DEV) console.warn('[inflada]', e) }
     try { ponerBotas(clone, botasGltf) } catch (e) { if (import.meta.env.DEV) console.warn('[botas]', e) }
     try { ponerPantalones(clone, pantalonesGltf) } catch (e) { if (import.meta.env.DEV) console.warn('[pantalones]', e) }
+    try { ponerMunequeras(clone, munequerasGltf) } catch (e) { if (import.meta.env.DEV) console.warn('[munequeras]', e) }
+    try { ponerBeanie(clone, beanieGltf) } catch (e) { if (import.meta.env.DEV) console.warn('[beanie]', e) }
     try {
       clone.updateMatrixWorld(true)
       const raizInv = new THREE.Matrix4().copy(clone.matrixWorld).invert()
@@ -1190,7 +1196,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     const puestos = getAccesorios()
     clone.traverse((o) => {
       if (o.userData?.accesorio) o.visible = !!puestos[o.userData.accesorio]
-      // lo que un prop tapa (los pies con los tenis), al revés
+      // lo que un prop tapa (los pies con los tenis, el pelo con el beanie), al revés
       else if (tapadoPorProp(o, puestos)) { o.visible = false; o.userData.__ocultoPorProp = true }
     })
 
@@ -1241,7 +1247,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
       obj.material = Array.isArray(obj.material) ? out : out[0]
     })
     return clone
-  }, [scene, lentesGltf, boxersGltf, chamarraGltf, hoodieGltf, tenisGltf, infladaGltf, botasGltf, pantalonesGltf])
+  }, [scene, lentesGltf, boxersGltf, chamarraGltf, hoodieGltf, tenisGltf, infladaGltf, botasGltf, pantalonesGltf, munequerasGltf, beanieGltf])
 
   // Las manos se apartan de los bóxers sobre la pose de cada cuadro: antes
   // del mixer regresan a lo que él dejó (registrado antes de useAnimations).
@@ -2437,11 +2443,12 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     const conHoodie = vivo && pr.mallas.some((m) => m.userData.accesorio === 'hoodie' && m.visible)
     const conInflada = vivo && pr.mallas.some((m) => m.userData.accesorio === 'inflada' && m.visible)
     const conPantalones = vivo && pr.mallas.some((m) => m.userData.accesorio === 'pantalones' && m.visible)
+    const conMunequeras = vivo && pr.mallas.some((m) => m.userData.accesorio === 'munequeras' && m.visible)
     const manos = cloned.userData.apartaManos
     const dt = Math.min(Math.max(delta || 0, 0), 0.1)
     try {
       if (!pr.mostrar) manos?.soltar()
-      else manos?.aplicar(dt, { boxers: conBoxers, pantalones: conPantalones, chamarra: conChamarra, hoodie: conHoodie, inflada: conInflada })
+      else manos?.aplicar(dt, { boxers: conBoxers, pantalones: conPantalones, chamarra: conChamarra, hoodie: conHoodie, inflada: conInflada, munequeras: conMunequeras })
     } catch { }
     // los cordones del hoodie se mecen (con los brazos ya donde van)
     for (const m of pr.mallas) if (m.userData.cordones) try { pasoCordones(m, dt, vivo) } catch { }

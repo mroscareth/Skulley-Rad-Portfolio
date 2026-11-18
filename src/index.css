@@ -4579,6 +4579,69 @@ div:has(> #privy-dialog-backdrop) {
   opacity: 1;
 }
 
+/* En la barra de abajo de Customize, con las mayúsculas de sus pestañas. */
+.cc-barra .color-well__label {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+/* El blanco de la pestaña puesta se desliza a la otra. */
+.cc-marca {
+  transition: transform 520ms cubic-bezier(0.16, 1, 0.3, 1), width 520ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Con alto contraste el sistema quita los fondos: la marca va con borde. */
+@media (forced-colors: active) {
+  .cc-marca { border: 2px solid Highlight; }
+}
+
+/* Cambio entre Skins y Props (Oscar, 2026-11-18): las piezas de la columna que
+   se va se encogen y bajan en ola; ya idas, las de la otra suben con un rebote,
+   también en ola, la columna derecha un poco después (--cc-base). Los tiempos
+   los pone CharacterCustomizer (CORE). */
+[data-fase='sale'] .cc-pieza {
+  animation: cc-pieza-sale var(--cc-sale) cubic-bezier(0.4, 0, 0.2, 1) calc(var(--i, 0) * var(--cc-sale-paso)) both;
+}
+
+[data-fase='entra'] .cc-pieza {
+  animation: cc-pieza-entra var(--cc-entra) cubic-bezier(0.34, 1.56, 0.64, 1) calc(var(--cc-base, 0ms) + var(--i, 0) * var(--cc-entra-paso)) both;
+}
+
+/* Lo que deja de verse se va en el acto. `visibility` se hereda, pero un hijo
+   con transition-all (los círculos de color, los chips) lo anima y seguía
+   visible lo que durara su transición: Oscar veía regresar los colores sin
+   sus nombres justo al cambiar a Props. */
+[data-oculta],
+[data-oculta] * {
+  transition: none !important;
+}
+
+/* Cada fase parte de como se veía la pieza al empezar (--de-o / --de-t, los
+   pone CharacterCustomizer); sin ellos, de la pose de siempre. La entrada
+   termina en el estilo propio de la pieza (el título va a 80 %). */
+@keyframes cc-pieza-sale {
+  from { opacity: var(--de-o, 1); transform: var(--de-t, none); }
+  to { opacity: 0; transform: translateY(16px) scale(0.6); }
+}
+
+@keyframes cc-pieza-entra {
+  from { opacity: var(--de-o-e, 0); transform: var(--de-t-e, translateY(28px) scale(0.6)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cc-marca { transition: none; }
+  [data-fase='sale'] .cc-pieza { animation: cc-pieza-funde-sale 160ms linear both; }
+  [data-fase='entra'] .cc-pieza { animation: cc-pieza-funde-entra 200ms linear both; }
+}
+
+@keyframes cc-pieza-funde-sale {
+  to { opacity: 0; }
+}
+
+@keyframes cc-pieza-funde-entra {
+  from { opacity: 0; }
+}
+
 .dwp {
   position: fixed;
   inset: 0;
