@@ -157,7 +157,7 @@ function handlePost(): void
  * PUT — Update track metadata or reorder
  * 
  * Body JSON:
- *   { "index": 0, "title": "...", "artist": "...", "vinylColor": "blue" }
+ *   { "index": 0, "title": "...", "artist": "...", "vinylColor": "blue", "enabled": false }
  *   or
  *   { "reorder": [2, 0, 1, 3, ...] }  — array of old indices in new order
  *   or
@@ -220,6 +220,16 @@ function handlePut(): void
             $color = trim($data['vinylColor']);
             if (in_array($color, allowedColors(), true) || preg_match('/^#[0-9a-fA-F]{6}$/', $color)) {
                 $tracks[$idx]['vinylColor'] = $color;
+            }
+        }
+        // Apagada = sigue en la lista y en el servidor, pero el reproductor no la toca.
+        // Sin la llave cuenta como encendida (los manifests de antes no la traen).
+        if (array_key_exists('enabled', $data)) {
+            if ($data['enabled'] === false) {
+                $tracks[$idx]['enabled'] = false;
+            }
+            else {
+                unset($tracks[$idx]['enabled']);
             }
         }
 

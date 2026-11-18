@@ -76,8 +76,9 @@ const API_ERRORS = {
 
 const RULES = [
     'La primera de la lista es la que suena primero en el sitio; las demás siguen en este orden.',
+    'Apaga “En el sitio” para sacar una canción del reproductor sin borrarla. Se queda aquí y la puedes volver a prender cuando quieras.',
     'Al tocar un disco escuchas sus primeros 10 segundos.',
-    'Los cambios se guardan solos: el orden, el color y cuál va primero. No hay botón de guardar.',
+    'Los cambios se guardan solos: el orden, el color, cuál va primero y cuáles suenan. No hay botón de guardar.',
     'Las canciones nuevas se agregan al final de la lista.',
     'Formatos: MP3, OGG, WAV o FLAC. Mejor MP3: pesa menos y carga más rápido.',
     'Eliminar una canción también borra su archivo del servidor. No se puede deshacer.',
@@ -193,7 +194,7 @@ function ColorSwatches({ value, onPick, idPrefix }) {
 /**
  * Sortable track row
  */
-function SortableTrackCard({ track, index, onDelete, onSetFirst, onColorChange, onPlay, isPlaying, isDeleting }) {
+function SortableTrackCard({ track, index, isFirst, onDelete, onSetFirst, onColorChange, onToggle, onPlay, isPlaying, isDeleting }) {
     const {
         attributes,
         listeners,
@@ -213,6 +214,8 @@ function SortableTrackCard({ track, index, onDelete, onSetFirst, onColorChange, 
     const [showColorPicker, setShowColorPicker] = useState(false)
     const title = track.title || 'Sin título'
     const color = track.vinylColor || 'red'
+    const enabled = track.enabled !== false
+    const switchId = `track-${index}-enabled`
 
     return (
         <div
@@ -238,7 +241,9 @@ function SortableTrackCard({ track, index, onDelete, onSetFirst, onColorChange, 
                         aria-label={isPlaying ? `Pausar ${title}` : `Escuchar 10 segundos de ${title}`}
                         data-tip={isPlaying ? 'Pausar' : 'Escuchar'}
                     >
-                        <MiniVinyl color={color} size={56} playing={isPlaying} />
+                        <span className={`block transition-opacity ${enabled ? '' : 'opacity-40'}`}>
+                            <MiniVinyl color={color} size={56} playing={isPlaying} />
+                        </span>
                         <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 transition-opacity group-hover/vinyl:opacity-100 group-focus-visible/vinyl:opacity-100">
                             {isPlaying
                                 ? <PauseIcon className="w-5 h-5 text-white" aria-hidden />
@@ -248,10 +253,11 @@ function SortableTrackCard({ track, index, onDelete, onSetFirst, onColorChange, 
                     </button>
 
                     <div className="min-w-0 flex-1">
-                        <h2 className="a-item__title">{title}</h2>
+                        <h2 className={`a-item__title transition-opacity ${enabled ? '' : 'opacity-50'}`}>{title}</h2>
                         <p className="a-item__meta">
                             <span className="min-w-0 truncate">{track.artist || 'Sin artista'}</span>
                             <span>Disco {colorName(track.vinylColor)}</span>
+                            {!enabled && <span>No suena en el sitio</span>}
                         </p>
                     </div>
                 </div>
@@ -288,12 +294,32 @@ function SortableTrackCard({ track, index, onDelete, onSetFirst, onColorChange, 
                                 style={{ backgroundColor: resolvePalette(track.vinylColor).c1 }}
                             />
                         </button>
-                        {index === 0 ? (
+                        {/* El label entero prende y apaga (un <button> se puede etiquetar). */}
+                        <label
+                            htmlFor={switchId}
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-11 sm:h-10 flex items-center gap-2 px-1 cursor-pointer select-none text-sm text-white/70"
+                            data-tip={enabled ? 'Sacarla del reproductor del sitio' : 'Que vuelva a sonar en el sitio'}
+                        >
+                            <button
+                                id={switchId}
+                                type="button"
+                                role="switch"
+                                aria-checked={enabled}
+                                aria-label={`${title} en el sitio`}
+                                onClick={(e) => { e.stopPropagation(); onToggle(!enabled) }}
+                                // Espacio y Enter son del interruptor, no del arrastre de la tarjeta.
+                                onKeyDown={(e) => e.stopPropagation()}
+                                className={`a-switch ${FOCUS_RING}`}
+                            />
+                            En el sitio
+                        </label>
+                        {isFirst ? (
                             <span className="a-badge a-badge--accent">
                                 <PlayIcon className="w-3 h-3" aria-hidden />
                                 Suena primero
                             </span>
-                        ) : (
+                        ) : enabled && (
                             <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); onSetFirst() }}
@@ -673,6 +699,27 @@ export default function MusicEditor({ onBack }) {
         }
     }
 
+    const handleToggle = async (index, enabled) => {
+        setTracks((prev) => prev.map((t, i) => i === index ? { ...t, enabled } : t))
+
+        try {
+            const res = await fetch(API_URL, {
+                method: 'PUT',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ index, enabled }),
+            })
+            const data = await res.json()
+            if (!data.ok) {
+                alert(API_ERRORS[data.error] || 'No se pudo guardar el cambio. Intenta de nuevo.')
+                fetchTracks()
+            }
+        } catch {
+            alert('No hay conexión con el servidor. Intenta de nuevo.')
+            fetchTracks()
+        }
+    }
+
     const handleDragEnd = async (event) => {
         const { active, over } = event
         if (active.id !== over?.id) {
@@ -698,6 +745,9 @@ export default function MusicEditor({ onBack }) {
             }
         }
     }
+
+    // Las apagadas no suenan: la primera que suena es la primera encendida.
+    const firstEnabled = tracks.findIndex((t) => t.enabled !== false)
 
     const handleUpload = (newTrack) => {
         setTracks((prev) => [...prev, newTrack])
@@ -812,9 +862,11 @@ export default function MusicEditor({ onBack }) {
                                         key={`track-${index}`}
                                         track={track}
                                         index={index}
+                                        isFirst={index === firstEnabled}
                                         onDelete={() => handleDelete(index)}
                                         onSetFirst={() => handleSetFirst(index)}
                                         onColorChange={(color) => handleColorChange(index, color)}
+                                        onToggle={(enabled) => handleToggle(index, enabled)}
                                         onPlay={() => handlePlay(index)}
                                         isPlaying={playingIndex === index}
                                         isDeleting={deleting === index}

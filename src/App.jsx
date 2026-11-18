@@ -2498,8 +2498,9 @@ function SiteApp() {
         try {
           const res = await fetch(`${import.meta.env.BASE_URL}songs/manifest.json`, { cache: 'no-cache' })
           const json = await res.json()
-          let arr = Array.isArray(json) ? json.slice() : []
-          // Manifest order is managed by the CMS Music Editor (set first / drag reorder)
+          // Manifest order is managed by the CMS Music Editor (set first / drag reorder).
+          // Las que se apagan en el CMS (enabled: false) siguen en el manifest pero no suenan.
+          const arr = Array.isArray(json) ? json.filter((t) => t && t.enabled !== false) : []
           if (!canceled) setTracks(arr)
         } catch {
           if (!canceled) setTracks([])

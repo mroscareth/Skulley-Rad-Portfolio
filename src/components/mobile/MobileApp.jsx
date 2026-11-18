@@ -130,7 +130,8 @@ export default function MobileApp() {
     let vivo = true
     fetch(`${import.meta.env.BASE_URL}songs/manifest.json`, { cache: 'no-cache' })
       .then((r) => r.json())
-      .then((json) => { if (vivo) setTracks(Array.isArray(json) ? json : []) })
+      // Las apagadas en el CMS (enabled: false) no suenan.
+      .then((json) => { if (vivo) setTracks(Array.isArray(json) ? json.filter((t) => t && t.enabled !== false) : []) })
       .catch(() => { })
     return () => { vivo = false }
   }, [])
