@@ -493,6 +493,31 @@ export function escribirTela(tela, out, piso) {
   return out
 }
 
+/** Las normales de una malla con índice (`out`, xyz): las mismas que
+ *  computeVertexNormals de three (la suma de las caras por su área,
+ *  normalizada), pero sobre los arreglos directo. La de three pasa por
+ *  getX / setXYZ en cada vértice de cada triángulo: con la chamarra eran 6 ms
+ *  por cuadro mientras cae. */
+export function normalesDeMalla(pos, indice, out) {
+  out.fill(0)
+  for (let t = 0; t < indice.length; t += 3) {
+    const a = indice[t] * 3, b = indice[t + 1] * 3, c = indice[t + 2] * 3
+    const bx = pos[b], by = pos[b + 1], bz = pos[b + 2]
+    const cbx = pos[c] - bx, cby = pos[c + 1] - by, cbz = pos[c + 2] - bz
+    const abx = pos[a] - bx, aby = pos[a + 1] - by, abz = pos[a + 2] - bz
+    const nx = cby * abz - cbz * aby, ny = cbz * abx - cbx * abz, nz = cbx * aby - cby * abx
+    out[a] += nx; out[a + 1] += ny; out[a + 2] += nz
+    out[b] += nx; out[b + 1] += ny; out[b + 2] += nz
+    out[c] += nx; out[c + 1] += ny; out[c + 2] += nz
+  }
+  for (let i = 0; i < out.length; i += 3) {
+    const x = out[i], y = out[i + 1], z = out[i + 2]
+    const l = Math.sqrt(x * x + y * y + z * z)
+    if (l > 0) { out[i] = x / l; out[i + 1] = y / l; out[i + 2] = z / l }
+  }
+  return out
+}
+
 /** Lo más bajo de unos vértices (xyz). */
 export function bajoDe(arr) {
   let min = Infinity

@@ -32,7 +32,7 @@ import { applyCharacterColorsToScene, getCharacterColors, CHARACTER_COLOR_EVENT,
 import { URL_LENTES, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_TENIS, URL_INFLADA, URL_BOTAS, URL_PANTALONES, URL_CORRER, ponerLentes, ponerBoxers, ponerChamarra, ponerHoodie, ponerTenis, ponerInflada, ponerBotas, ponerPantalones, opcionesTelaChamarra, opcionesTelaHoodie, opcionesTelaInflada, opcionesTelaPantalones, pasoCordones, getAccesorios, tapadoPorProp, ACCESORIOS_EVENT } from '../lib/accesorios.js'
 import { telaDe } from '../lib/telaProp.js'
 import { crearApartaManos } from '../lib/apartaManos.js'
-import { crearConstructorTela, colocarTela, pasoTela as pasoTelaSuelta, escribirTela, bajoDe } from '../lib/telaSuelta.js'
+import { crearConstructorTela, colocarTela, pasoTela as pasoTelaSuelta, escribirTela, normalesDeMalla, bajoDe } from '../lib/telaSuelta.js'
 import { describirPieza, crearPieza, crearBuscadorApoyos, ponerApoyos, ponerCeldas, colocarPieza, pasoPieza, origenDePieza, despertar, asentar, fueraDelApoyo, masBajo, bajoEnPose } from '../lib/caidaPiezas.js'
 
 // Clip de correr: ciclo de 20 cuadros en su lugar. Se mezcla con el walk
@@ -97,6 +97,18 @@ function dampAngleWrapped(current, target, lambda, dt) {
 // viaja como las demás piezas y la forma se infla desde el montón arrugado,
 // pasándose un poco antes de quedar (Oscar: "se inflan o toman la forma que
 // deben"). Al final queda idéntica a la malla de antes del despiece.
+// Las mismas normales de computeVertexNormals, sin su costo: la tela suelta las
+// recalcula en cada cuadro que se mueve (con hoodie y pantalones juntos eran
+// 12 ms por cuadro) y cada pieza del despiece al hornearse.
+function normalesRapidas(g) {
+  const pa = g.attributes.position, na = g.attributes.normal
+  if (g.index && pa && !pa.isInterleavedBufferAttribute && pa.array instanceof Float32Array
+    && na && !na.isInterleavedBufferAttribute && na.array instanceof Float32Array && na.array.length === pa.array.length) {
+    normalesDeMalla(pa.array, g.index.array, na.array)
+    na.needsUpdate = true
+  } else g.computeVertexNormals()
+}
+
 function rearmarTela(it, tEase, a, piso, alPiso) {
   const g = it.mallaTela.geometry
   const arr = g.attributes.position.array
@@ -136,7 +148,7 @@ function rearmarTela(it, tEase, a, piso, alPiso) {
     arr[i + 2] = cz + sz + (mz - sz) * inflar
   }
   g.attributes.position.needsUpdate = true
-  g.computeVertexNormals()
+  normalesRapidas(g)
 }
 
 /**
@@ -1321,7 +1333,11 @@ export default function Player({
     }
   }, [])
 
-  const bakeSkinnedGeometry = useCallback((skinnedMesh) => {
+  // `opciones.marco`: matriz que se aplica al final (la misma pasada, en vez
+  // de un applyMatrix4 aparte); `opciones.normales: false` deja las normales
+  // en cero para quien las recalcula; `opciones.cajas: false` no calcula las
+  // cajas (quien llama las saca ya en su lugar).
+  const bakeSkinnedGeometry = useCallback((skinnedMesh, opciones = {}) => {
     const srcGeo = skinnedMesh.geometry
     const srcPos = srcGeo.attributes?.position
     if (!srcPos) return srcGeo.clone()
@@ -1345,9 +1361,51 @@ export default function Player({
           : null)
     try { skinnedMesh.skeleton?.update?.() } catch { }
     try { skinnedMesh.updateMatrixWorld(true) } catch { }
-    const mw = skinnedMesh.matrixWorld
+    const mw = opciones.marco ? new THREE.Matrix4().multiplyMatrices(opciones.marco, skinnedMesh.matrixWorld) : skinnedMesh.matrixWorld
     const tmpV = new THREE.Vector3()
-    if (applyBone) {
+    const sk = skinnedMesh.skeleton
+    const sIdx = srcGeo.attributes.skinIndex, sW = srcGeo.attributes.skinWeight
+    if (skinnedMesh.isSkinnedMesh && sk && sIdx && sW) {
+      // Lo mismo que applyBoneTransform de three seguido de matrixWorld, pero
+      // con la matriz de cada hueso armada una vez y no en cada peso de cada
+      // vértice: hornear las piezas era casi todo el cuadro del golpe.
+      const huesos = sk.bones, inv = sk.boneInverses
+      const C = new Float64Array(huesos.length * 12)
+      const m = new THREE.Matrix4()
+      for (let b = 0; b < huesos.length; b += 1) {
+        if (!huesos[b] || !inv[b]) continue
+        const e = m.multiplyMatrices(huesos[b].matrixWorld, inv[b]).multiply(skinnedMesh.bindMatrix).elements
+        const o = b * 12
+        C[o] = e[0]; C[o + 1] = e[4]; C[o + 2] = e[8]; C[o + 3] = e[12]
+        C[o + 4] = e[1]; C[o + 5] = e[5]; C[o + 6] = e[9]; C[o + 7] = e[13]
+        C[o + 8] = e[2]; C[o + 9] = e[6]; C[o + 10] = e[10]; C[o + 11] = e[14]
+      }
+      const f = m.multiplyMatrices(mw, skinnedMesh.bindMatrixInverse).elements
+      const suma = (i, w, b, x, y, z, s) => {
+        const o = b * 12
+        s[0] += w * (C[o] * x + C[o + 1] * y + C[o + 2] * z + C[o + 3])
+        s[1] += w * (C[o + 4] * x + C[o + 5] * y + C[o + 6] * z + C[o + 7])
+        s[2] += w * (C[o + 8] * x + C[o + 9] * y + C[o + 10] * z + C[o + 11])
+      }
+      const s = [0, 0, 0]
+      for (let i = 0; i < count; i += 1) {
+        const x = srcPos.getX(i), y = srcPos.getY(i), z = srcPos.getZ(i)
+        s[0] = 0; s[1] = 0; s[2] = 0
+        let w = sW.getX(i)
+        if (w !== 0) suma(i, w, sIdx.getX(i), x, y, z, s)
+        w = sW.getY(i)
+        if (w !== 0) suma(i, w, sIdx.getY(i), x, y, z, s)
+        w = sW.getZ(i)
+        if (w !== 0) suma(i, w, sIdx.getZ(i), x, y, z, s)
+        w = sW.getW(i)
+        if (w !== 0) suma(i, w, sIdx.getW(i), x, y, z, s)
+        const sx = s[0], sy = s[1], sz = s[2]
+        const d = 1 / (f[3] * sx + f[7] * sy + f[11] * sz + f[15])
+        floatArr[i * 3 + 0] = (f[0] * sx + f[4] * sy + f[8] * sz + f[12]) * d
+        floatArr[i * 3 + 1] = (f[1] * sx + f[5] * sy + f[9] * sz + f[13]) * d
+        floatArr[i * 3 + 2] = (f[2] * sx + f[6] * sy + f[10] * sz + f[14]) * d
+      }
+    } else if (applyBone) {
       for (let i = 0; i < count; i += 1) {
         // fromBufferAttribute on a normalized Int16 attribute returns the
         // denormalized [-1, 1] float value — correct input for skinning math.
@@ -1373,7 +1431,9 @@ export default function Player({
     // dark patches; transforming the source normals by the same matrixWorld
     // rotation (no scale/translation) keeps the smooth look.
     const srcNormal = srcGeo.attributes?.normal
-    if (srcNormal) {
+    if (opciones.normales === false) {
+      geo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(count * 3), 3, false))
+    } else if (srcNormal) {
       const normalArr = new Float32Array(count * 3)
       const normalAttr = new THREE.BufferAttribute(normalArr, 3, false)
       // Rotation-only matrix from mw (discards translation + scale).
@@ -1391,8 +1451,10 @@ export default function Player({
       try { geo.computeVertexNormals() } catch { }
     }
 
-    try { geo.computeBoundingSphere() } catch { }
-    try { geo.computeBoundingBox() } catch { }
+    if (opciones.cajas !== false) {
+      try { geo.computeBoundingSphere() } catch { }
+      try { geo.computeBoundingBox() } catch { }
+    }
     return geo
   }, [])
 
@@ -2098,6 +2160,9 @@ export default function Player({
   }, [])
 
   const startDisassemble = useCallback((opts = {}) => {
+    // (desarrollo) window.__despieceGolpe: lo que tarda el cuadro del golpe, por
+    // partes; window.__despieceMs: los cuadros de la caída (total y el peor)
+    const medGolpe = import.meta.env.DEV ? { t0: performance.now(), hornear: {} } : null
     // Reset reason
     try {
       // @ts-ignore
@@ -2346,21 +2411,28 @@ export default function Player({
           try {
             try { skinnedTarget.skeleton?.update?.() } catch { }
             try { skinnedTarget.updateMatrixWorld(true) } catch { }
-            const baked = bakeSkinnedGeometry(skinnedTarget)
-            try { baked.applyMatrix4(parentInv) } catch { }
+            const tHorno = medGolpe ? performance.now() : 0
+            // en el marco de parentInv desde la misma pasada; las normales y
+            // las cajas, una sola vez al final (antes se recorría cada malla
+            // unas diez veces: applyMatrix4, translate y cinco cajas)
+            const baked = bakeSkinnedGeometry(skinnedTarget, { marco: parentInv, normales: false, cajas: false })
             try { baked.computeBoundingBox() } catch { }
-            try { baked.computeBoundingSphere() } catch { }
             // Shift geometry so the mesh's position represents its center —
             // important for natural rotation under angular velocity.
             const pieceCenter = new THREE.Vector3()
             try { baked.boundingBox?.getCenter?.(pieceCenter) } catch { }
             if (!Number.isFinite(pieceCenter.x)) pieceCenter.set(0, 0, 0)
             try {
-              baked.translate(-pieceCenter.x, -pieceCenter.y, -pieceCenter.z)
-              baked.computeBoundingBox()
+              const pa = baked.attributes.position.array
+              const cx = pieceCenter.x, cy = pieceCenter.y, cz = pieceCenter.z
+              for (let k = 0; k < pa.length; k += 3) { pa[k] -= cx; pa[k + 1] -= cy; pa[k + 2] -= cz }
+              baked.attributes.position.needsUpdate = true
+              baked.boundingBox.min.sub(pieceCenter)
+              baked.boundingBox.max.sub(pieceCenter)
               baked.computeBoundingSphere()
-              baked.computeVertexNormals()
+              normalesRapidas(baked)
             } catch { }
+            if (medGolpe) medGolpe.hornear[obj.name] = +(performance.now() - tHorno).toFixed(1)
 
             const srcMat = Array.isArray(skinnedTarget.material) ? skinnedTarget.material[0] : skinnedTarget.material
             let rigidMat
@@ -3124,7 +3196,15 @@ export default function Player({
         }
       } catch { }
 
+      const tFisica = medGolpe ? performance.now() : 0
       prepararFisicaPiezas(pieces)
+      if (medGolpe) {
+        medGolpe.antesDeFisica = +(tFisica - medGolpe.t0).toFixed(1)
+        medGolpe.fisica = +(performance.now() - tFisica).toFixed(1)
+        medGolpe.total = +(performance.now() - medGolpe.t0).toFixed(1)
+        window.__despieceGolpe = medGolpe
+        window.__despieceMs = { cuadros: 0, peor: 0 }
+      }
       disassembleActiveRef.current = true
       disassembleRef.current.phase = 'fall'
       disassembleRef.current.t = 0
@@ -3888,6 +3968,7 @@ export default function Player({
       masBajo,
       escena: () => scene,
       piezas: () => disassembleRef.current.pieces,
+      hornear: (m, o) => bakeSkinnedGeometry(m, o),
     }
     return () => { try { delete window.__caidaPiezas } catch { } }
   }, [scene])
@@ -5648,6 +5729,8 @@ export default function Player({
       const origen = tmpRef.current.disOrigen || (tmpRef.current.disOrigen = [0, 0, 0])
 
       if (dis.phase === 'fall') {
+        const medCaida = import.meta.env.DEV ? window.__despieceMs : null
+        const tCaida = medCaida ? performance.now() : 0
         // Los apoyos de verdad, unos 2 ms por cuadro (todos juntos eran 25 ms
         // en el cuadro del golpe); primero la que va a llegar antes al piso.
         let pendientes = null
@@ -5715,7 +5798,7 @@ export default function Player({
               const g = it.mallaTela.geometry
               escribirTela(it.tela, g.attributes.position.array, piso)
               g.attributes.position.needsUpdate = true
-              g.computeVertexNormals()
+              normalesRapidas(g)
             }
             continue
           }
@@ -5744,7 +5827,7 @@ export default function Player({
             const g = it.mallaTela.geometry
             escribirTela(tela, g.attributes.position.array, piso)
             g.attributes.position.needsUpdate = true
-            g.computeVertexNormals()
+            normalesRapidas(g)
             continue
           }
           it.mesh.position.set(origen[0], origen[1], origen[2])
@@ -5763,6 +5846,10 @@ export default function Player({
             it.v.set(0, 0, 0)
             it.w.set(0, 0, 0)
           }
+        }
+        if (medCaida) {
+          const ms = performance.now() - tCaida
+          medCaida.cuadros++; medCaida.total = (medCaida.total || 0) + ms; medCaida.peor = Math.max(medCaida.peor, ms)
         }
       } else if (dis.phase === 'assemble') {
         const a = THREE.MathUtils.clamp(dis.t / Math.max(1e-3, dis.assembleS), 0, 1)
