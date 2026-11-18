@@ -10,11 +10,12 @@ Todo en las coordenadas del armature (cm, z arriba, -y al frente). Va completo c
 igual que el cráneo y los lentes: lo que libra en reposo libra en cualquier cuadro de cualquier animación
 (revisar_beanie.py lo mide igual, cuadro por cuadro).
 
-Forma: un campo de distancia. El cráneo (la malla Head de Egg_Head) con una holgura, más un volumen de
-cápsulas que hace la copa aguada que cae hacia atrás, unidos con una unión suave. La copa se recorre con
-rayos desde un centro dentro de la cabeza (en cada rayo, el último cruce: la superficie es una sola capa,
-sin pliegues que se crucen), con el polo en la punta de lo que cae: ahí se juntan las costillas del tejido,
-como en un gorro de verdad. Abajo la corta un plano inclinado (más alto al frente, arriba de los lentes;
+Forma: un campo de distancia. El cráneo (la malla Head de Egg_Head) con una holgura, más un elipsoide que hace
+la copa aguada que cae hacia atrás (ajustado a la silueta de las referencias de Oscar), unidos con una unión
+suave; atrás, lo que cae termina en un rollo que cuelga sobre el dobladillo, con un pliegue entre los dos. La
+copa se recorre con rayos desde un centro dentro de la cabeza (en cada rayo, el último cruce: la superficie es
+una sola capa, sin pliegues que se crucen), con el polo en la punta de lo que cae, viendo hacia atrás: ahí se
+juntan las costillas del tejido, como en un gorro de verdad. Abajo la corta un plano inclinado (más alto al frente, arriba de los lentes;
 más bajo atrás). El dobladillo enrollado es un anillo grueso aparte, de sección redondeada, que sigue el
 cráneo con su propia holgura; en los costados pasa por encima de las patas de los lentes (la holgura crece
 ahí, suavizada, para no hacer chipotes). La copa empieza adentro del dobladillo.
@@ -49,17 +50,46 @@ GRUESO_D = 2.9          # grosor del dobladillo
 RADIO_D = 1.35          # redondeo de sus orillas
 A_COPA = 2.6            # la copa empieza a esta altura sobre el borde (adentro del dobladillo)
 
-# lo aguado que cae atrás: cadena de cápsulas (y, z, radio) en x = 0
-# (sube por la coronilla, se va atrás y cuelga pegado a la nuca hasta apoyarse en el dobladillo; más abajo,
-# la orilla de la copa quedaba afuera del dobladillo y se veía el hueco). El cuarto número es lo ancho (x)
-CAIDA = [(2.0, 162.0, 16.0, 1.35), (8.0, 172.0, 14.0, 1.45), (17.0, 176.0, 12.5, 1.45), (24.0, 172.0, 11.0, 1.4),
-         (27.0, 164.0, 9.5, 1.3)]
-K_CAIDA = 5.0           # unión suave entre cápsulas (sin, se notaban los escalones)
-K_UNION = 7.0           # unión suave entre el cráneo y la caída
+# lo aguado que cae atrás: un elipsoide (Oscar, 2026-11-18, con referencias de lado y de atrás: el de cápsulas que
+# subían por la coronilla se veía "muy tieso hacia arriba"). Ajustado a la silueta de la referencia de lado: en
+# x = 0 su centro (y, z) y sus semiejes en el plano y-z, A hacia arriba y atrás y B de atrás abajo hacia adelante
+# arriba, girados BULTO_GIRO grados; BULTO_X es lo ancho. La referencia se alineó con el dobladillo girada la mitad
+# (8° de 16°): su dobladillo va más inclinado que el nuestro, y girada completa la bola quedaba encima del
+# dobladillo; la de atrás la pide colgando, con lo más ancho a la altura de los lados del dobladillo
+BULTO_C = (11.3, 159.8)
+BULTO_A, BULTO_B = 16.1, 25.95
+BULTO_GIRO = 48.9
+BULTO_X = 25.5
+# de atrás tiene que verse como bola (la referencia de atrás): abajo se angosta a BULTO_X_BAJO, así no se sienta
+# en el dobladillo como hongo y de los lados se asoma el dobladillo
+BULTO_X_BAJO = 18.0
+# el frente inflado (Oscar: "inflar el frente", como la referencia): otro elipsoide, ajustado igual a la silueta de
+# lado entre 115° y 165° desde (y 5, z 158), sin subir la coronilla. Se corta en la orilla de arriba del dobladillo
+# (suelo_sd) y se asoma un poco sobre ella, como el tejido que se infla encima
+FRENTE_C = (-16.0, 150.3)
+FRENTE_A, FRENTE_B = 18.9, 32.85
+FRENTE_GIRO = -27.9
+FRENTE_X = 22.0
+K_UNION = 4.0           # unión suave entre el cráneo y la caída
+# el rollo: atrás, lo que cae se dobla y cuelga sobre la cara de afuera del dobladillo, con un pliegue arriba
+# (las referencias: de atrás la caída tapa la mitad de arriba del dobladillo). Un tubo de ROLLO_R en la nuca y nada
+# desde ROLLO_ANCHO grados a cada lado; en la nuca su orilla de abajo llega a ROLLO_BAJO sobre el borde y su eje va
+# ROLLO_FUERA afuera de la cara del dobladillo; donde se adelgaza sube a sentarse en la orilla de arriba.
+# K_ROLLO chico para que el pliegue se vea (y la tinta del sitio lo marque). Más abajo que la mitad del dobladillo
+# la orilla de la copa saldría afuera
+ROLLO_R = 2.3
+ROLLO_ANCHO = 70.0
+ROLLO_BAJO = 3.0
+ROLLO_FUERA = 1.0
+K_ROLLO = 1.2
+# la caída termina en el rollo: el elipsoide se corta (suave) a esta altura sobre su orilla de abajo, en múltiplos
+# de su radio; donde no hay rollo, en la orilla de arriba del dobladillo
+SUELO_ROLLO = 1.75
+K_SUELO = 5.0
 CENTRO_COPA = Vector((0.0, 4.0, 158.0))     # de aquí salen los rayos de la copa
-# polo de la copa (donde se juntan las costillas): arriba y atrás. Apuntando a la punta de lo que cae
-# (abajo y atrás) la orilla de enfrente ya no subía pareja desde el polo y la copa dejaba un hueco
-EJE_POLO = Vector((0.0, 0.75, 0.66)).normalized()
+# polo de la copa (donde se juntan las costillas): viendo hacia atrás, en medio de la bola vista de atrás (la
+# referencia). Apuntando abajo, la orilla de enfrente ya no subía pareja desde el polo y la copa dejaba un hueco
+EJE_POLO = Vector((0.0, 1.0, 0.05)).normalized()
 
 # la etiqueta tejida: al frente, del lado izquierdo de Skulley (+x), como en la referencia; la imagen la hace
 # etiqueta_beanie.mjs (SKULLEYRAD en SKULLEYGLYPH, Oscar) en Character/assets/beanie_etiqueta.png
@@ -70,7 +100,8 @@ SOBRE_ET = 0.12         # despegada de la cara de afuera del dobladillo
 ET_IMAGEN = "beanie_etiqueta.png"
 
 N_U = 128               # columnas alrededor (copa y dobladillo)
-N_V = 60                # filas de la copa, del borde al polo
+N_V = 84                # filas de la copa, del borde al polo
+FILAS_DENSAS = 1.3      # más juntas abajo, donde están el rollo y el pliegue
 N_P = 28                # puntos de la sección del dobladillo
 
 NEGRO = (0.012, 0.012, 0.014)
@@ -158,6 +189,7 @@ class Campo:
             self.c0 = c - self.n0 * (c - self.c0).dot(self.n0)
         self.extra = [0.0] * 360
         self.extra = self.holgura_lentes()
+        self.rollo = self.centros_rollo()
 
     # distancias
     def sd(self, p):
@@ -186,18 +218,58 @@ class Campo:
         i = int(round(math.degrees(th))) % 360
         return H_CRANEO + self.extra[i] * (1.0 - smoothstep(ALTO_D, ALTO_D + 4.0, a))
 
-    def caida_sd(self, p):
-        d = None
-        for (y0, z0, r0, w0), (y1, z1, r1, w1) in zip(CAIDA, CAIDA[1:]):
-            a = Vector((0.0, y0, z0)); b = Vector((0.0, y1, z1))
-            ab = b - a
-            t = min(max((Vector((0.0, p.y, p.z)) - a).dot(ab) / ab.length_squared, 0.0), 1.0)
-            # las cápsulas son más anchas que altas: de frente la copa sale redonda, no en cono
-            q = a + ab * t
-            ancho = w0 + (w1 - w0) * t
-            di = Vector((p.x / ancho, p.y - q.y, p.z - q.z)).length - (r0 + (r1 - r0) * t)
-            d = di if d is None else smin(d, di, K_CAIDA)
-        return d
+    @staticmethod
+    def elipsoide_sd(p, c, a, b, giro, bx):
+        """Distancia (aproximada, buena cerca de la superficie) a un elipsoide con centro (y, z) en x = 0."""
+        g = math.radians(giro)
+        dy, dz = p.y - c[0], p.z - c[1]
+        u = math.cos(g) * dy + math.sin(g) * dz
+        w = -math.sin(g) * dy + math.cos(g) * dz
+        k0 = Vector((p.x / bx, u / a, w / b)).length
+        k1 = Vector((p.x / bx ** 2, u / a ** 2, w / b ** 2)).length
+        return k0 * (k0 - 1.0) / k1 if k1 > 1e-9 else -min(bx, a, b)
+
+    def bulto_sd(self, p):
+        bx = BULTO_X + (BULTO_X_BAJO - BULTO_X) * smoothstep(4.0, 20.0, BULTO_C[1] - p.z)
+        atras = self.elipsoide_sd(p, BULTO_C, BULTO_A, BULTO_B, BULTO_GIRO, bx)
+        frente = self.elipsoide_sd(p, FRENTE_C, FRENTE_A, FRENTE_B, FRENTE_GIRO, FRENTE_X)
+        return smin(atras, frente, K_UNION)
+
+    def radio_rollo(self, th):
+        g = abs(math.degrees(math.atan2(math.sin(th), math.cos(th))))
+        if g >= ROLLO_ANCHO:
+            return 0.0
+        return ROLLO_R * 0.5 * (1.0 + math.cos(math.pi * g / ROLLO_ANCHO))
+
+    def bajo_rollo(self, rr):
+        """Altura sobre el borde de la orilla de abajo del rollo."""
+        return ALTO_D - (rr / ROLLO_R) * (ALTO_D - ROLLO_BAJO)
+
+    def centros_rollo(self):
+        """El eje del rollo por grado: en la nuca colgado sobre la cara de afuera del dobladillo; donde se
+        adelgaza, sentado en su orilla de arriba."""
+        cs = []
+        for g in range(360):
+            th = math.radians(g)
+            rr = self.radio_rollo(th)
+            f = rr / ROLLO_R
+            cs.append((self.rayo_plano(th, self.bajo_rollo(rr) + rr, GRUESO_D + f * ROLLO_FUERA - (1.0 - f) * 0.5 * rr), rr))
+        return cs
+
+    def suelo_sd(self, p):
+        """> 0 abajo de donde termina la caída."""
+        rr = self.radio_rollo(self.theta(p))
+        return self.bajo_rollo(rr) + SUELO_ROLLO * rr - self.alto(p)
+
+    def rollo_sd(self, p):
+        th = self.theta(p)
+        gr = math.degrees(th) % 360.0
+        i = int(gr); f = gr - i
+        (c0, r0), (c1, r1) = self.rollo[i % 360], self.rollo[(i + 1) % 360]
+        rr = r0 + (r1 - r0) * f
+        if rr <= 0.0:
+            return 1e3
+        return (p - c0.lerp(c1, f)).length - rr
 
     def copa(self, p):
         """< 0 adentro de la copa."""
@@ -205,7 +277,9 @@ class Campo:
         f = self.sd(p) - self.holgura(self.theta(p), a) - TELA - SUELTO * smoothstep(ALTO_D - 1.0, ALTO_D + 7.0, a)
         if not self.caida:
             return f
-        return smin(f, self.caida_sd(p), K_UNION)
+        bulto = -smin(-self.bulto_sd(p), -self.suelo_sd(p), K_SUELO)
+        f = smin(f, bulto, K_UNION)
+        return smin(f, self.rollo_sd(p), K_ROLLO)
 
     # rayos
     def rayo_plano(self, th, a, b, holgura=True, baja=True):
@@ -313,7 +387,7 @@ def copa(campo):
         phis.append((lo + hi) * 0.5)
     filas = []
     for j in range(N_V):
-        v = j / (N_V - 1)
+        v = (j / (N_V - 1)) ** FILAS_DENSAS
         fila = []
         for i in range(N_U):
             th = off + 2 * math.pi * i / N_U
@@ -325,12 +399,15 @@ def copa(campo):
     return filas, ax, phis
 
 
-def suavizar_copa(filas, vueltas=2):
-    """Promedia los radios con sus vecinos (sin la fila de abajo)."""
+def suavizar_copa(filas, vueltas=2, fijo=None):
+    """Promedia los radios con sus vecinos (sin la fila de abajo ni lo marcado en fijo: el rollo y su pliegue,
+    que se borraban)."""
     for _ in range(vueltas):
         nuevo = [list(f) for f in filas]
         for j in range(1, len(filas) - 1):
             for i in range(N_U):
+                if fijo and fijo[j][i]:
+                    continue
                 d, r = filas[j][i]
                 rs = [filas[j][(i - 1) % N_U][1], filas[j][(i + 1) % N_U][1], filas[j - 1][i][1], filas[j + 1][i][1]]
                 nuevo[j][i] = (d, r * 0.5 + sum(rs) / 8.0)
@@ -427,7 +504,16 @@ def imagen_etiqueta():
 def armar(caida=True):
     campo = Campo(caida=caida)
     filas, ax, phis = copa(campo)
-    filas = suavizar_copa(filas, 4)
+    c = CENTRO_COPA
+    fijo = []
+    for fila in filas:
+        fl = []
+        for d, r in fila:
+            q = c + d * r
+            rr = campo.radio_rollo(campo.theta(q))
+            fl.append(rr > 0.3 and campo.alto(q) < ALTO_D + (SUELO_ROLLO + 1.0) * rr + 1.5)
+        fijo.append(fl)
+    filas = suavizar_copa(filas, 4, fijo)
     # el polo, en el promedio de la última fila (calculado aparte quedaba un piquito)
     polo_r = sum(r for _, r in filas[-1]) / N_U
     anillos, sec = dobladillo(campo)
