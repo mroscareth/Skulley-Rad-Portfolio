@@ -12,7 +12,9 @@ export const URL_INFLADA = `${import.meta.env.BASE_URL}props/inflada.glb`
 export const URL_BOTAS = `${import.meta.env.BASE_URL}props/botas.glb`
 export const URL_PANTALONES = `${import.meta.env.BASE_URL}props/pantalones.glb`
 export const URL_MUNEQUERAS = `${import.meta.env.BASE_URL}props/munequeras.glb`
-export const URL_BEANIE = `${import.meta.env.BASE_URL}props/beanie.glb`
+// ?v= con la huella del archivo: los .glb de public/ salen sin Cache-Control y, con el mismo nombre, el navegador
+// seguía enseñando el beanie de antes después del deploy (Oscar, 2026-11-18). Cambiarla al re-exportarlo
+export const URL_BEANIE = `${import.meta.env.BASE_URL}props/beanie.glb?v=8f70b39a`
 // Clips nuevos del mismo .blend (scripts/skulley-anim/exportar_animaciones.py)
 export const URL_CORRER = `${import.meta.env.BASE_URL}animaciones/correr.glb`
 
