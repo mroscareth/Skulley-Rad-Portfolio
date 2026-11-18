@@ -943,8 +943,10 @@ ZONA_CODO = ((43.1, 2.5, 98.7), 12.0)
 ZONA_AXILA = ((23.0, 1.5, 104.0), 16.0)
 # la franja del fondo de la axila, donde el peso va mitad brazo y mitad torso, y el cuello por atrás
 FRANJAS = (((24.0, 7.0, 110.0), 9.0), ((24.0, -2.0, 106.0), 7.0), ((24.0, 2.0, 104.0), 7.0), ((10.5, 8.0, 124.5), 7.0))
-# la línea del pliegue de adentro del codo: sin esto quedaba una raya pellizcada
-CODO_PLIEGUE = (((41.0, -4.0, 98.0), 5.0), ((43.0, -4.5, 100.5), 5.0), ((45.5, -2.5, 103.5), 5.0))
+# la línea del pliegue de adentro del codo: suaviza la raya pellizcada. Con radio 5 y 200
+# pasadas quedaba más bonita, pero en idle el hueso del brazo asomaba por el pliegue (medido
+# con renders de los dos codos en 12 cuadros y 5 ángulos); así, en ninguno.
+CODO_PLIEGUE = (((41.0, -4.0, 98.0), 4.0), ((43.0, -4.5, 100.5), 4.0), ((45.5, -2.5, 103.5), 4.0))
 
 
 def pesos_finos(o):
@@ -958,7 +960,7 @@ def pesos_finos(o):
         huesos=huesos_axila(o),
         axila=suavizar_pesos(o, [ZONA_AXILA], 40),
         franjas=suavizar_pesos(o, FRANJAS, 300),
-        codo_pliegue=suavizar_pesos(o, CODO_PLIEGUE, 200),
+        codo_pliegue=suavizar_pesos(o, CODO_PLIEGUE, 60),
     )
 
 
