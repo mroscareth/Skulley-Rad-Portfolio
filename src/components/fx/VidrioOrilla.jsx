@@ -5,10 +5,15 @@ import { Effect, BlendFunction } from 'postprocessing'
 import { wallpaperEstado } from '../../lib/wallpaperEscritorio.js'
 
 // Vidrio en la orilla de la pantalla (pedido de Oscar, 2026-11-19): el home se ve a
-// través de una lámina de vidrio con el canto redondeado. En una franja junto a la
-// orilla el mundo se dobla (se ve lo de más adentro, estirado hacia el canto), los
-// colores se separan apenas y un filo de luz recorre el canto, fuerte del lado de la
-// luz y tenue del contrario.
+// través de una lámina de vidrio con el canto curvo. En una franja junto a cada orilla
+// el mundo se dobla (se ve lo de más adentro, estirado hacia el canto), los colores se
+// separan apenas y un filo de luz recorre el canto, fuerte del lado de la luz y tenue
+// del contrario.
+//
+// Las esquinas van en escuadra, como la pantalla: la primera versión tenía la lámina
+// con esquinas redondas y Oscar no las pidió. Cada orilla dobla solo en su eje (la de
+// los lados en x, la de arriba y abajo en y), así que en la esquina se suman sin
+// costura y el mapeo nunca se dobla sobre sí mismo.
 //
 // Lee la imagen en pixeles vecinos, y aun así va sin EffectAttribute.CONVOLUTION: con
 // él, el EffectComposer de R3F le daba su propio pase (0.58 ms de GPU en la Iris Xe a
@@ -38,24 +43,19 @@ const FRAGMENTO = /* glsl */`
     vec2 mitad = 0.5 * resolution;
     vec2 p = uv * resolution - mitad;
     float banda = uBanda * min(resolution.x, resolution.y);
-    // Esquinas con radio mayor que la franja: así la normal nunca cambia de golpe
-    // dentro de ella (el cambio de lado cae en el interior, donde ya no hay vidrio).
-    float radio = 1.6 * banda;
-    vec2 q = abs(p) - (mitad - radio);
-    float adentro = radio - length(max(q, 0.0)) - min(max(q.x, q.y), 0.0);
-    if (adentro >= banda) {
+    // x: distancia a la orilla izquierda o derecha; y: a la de arriba o abajo.
+    vec2 adentro = mitad - abs(p);
+    if (min(adentro.x, adentro.y) >= banda) {
       outputColor = inputColor;
       return;
     }
-    float t = clamp(1.0 - adentro / banda, 0.0, 1.0);
+    vec2 t = clamp(1.0 - adentro / banda, 0.0, 1.0);
     vec2 s = sign(p);
-    vec2 n = (q.x > 0.0 && q.y > 0.0) ? normalize(q) * s
-      : (q.x > q.y ? vec2(s.x, 0.0) : vec2(0.0, s.y));
 
-    // Se ve lo de más adentro: con uRefraccion * 2.2 < 1 el mapeo nunca se dobla
-    // sobre sí mismo (en el canto queda estirado, sin espejo).
-    float o = banda * uRefraccion * uFuerza * pow(t, 2.2);
-    vec2 d = -n * o * texelSize;
+    // Se ve lo de más adentro: con uRefraccion * 2.2 < 1 el mapeo de cada eje nunca
+    // se dobla sobre sí mismo (en el canto queda estirado, sin espejo).
+    vec2 o = banda * uRefraccion * uFuerza * pow(t, vec2(2.2));
+    vec2 d = -s * o * texelSize;
     vec4 c = texture2D(inputBuffer, uv + d);
     vec3 col = vec3(
       texture2D(inputBuffer, uv + d * (1.0 + uDispersion)).r,
@@ -64,15 +64,21 @@ const FRAGMENTO = /* glsl */`
     );
 
     // Un anillo apenas más oscuro a media franja, como el grueso del vidrio.
-    col *= 1.0 - uSombra * uFuerza * smoothstep(0.25, 0.55, t) * (1.0 - smoothstep(0.55, 0.85, t));
+    vec2 anillo = smoothstep(0.25, 0.55, t) * (1.0 - smoothstep(0.55, 0.85, t));
+    col *= 1.0 - uSombra * uFuerza * max(anillo.x, anillo.y);
 
-    float l = dot(n, uLuz);
-    float frente = pow(max(l, 0.0), 1.5);
-    float atras = pow(max(-l, 0.0), 1.5);
+    // La normal de cada orilla contra la luz. Con max (no suma) las dos líneas se
+    // juntan en la esquina sin hacer un parche más claro.
+    vec2 l = s * uLuz;
+    vec2 frente = pow(max(l, 0.0), vec2(1.5));
+    vec2 atras = pow(max(-l, 0.0), vec2(1.5));
     float ancho = max(1.0, banda * 0.028);
-    float filo = exp(-pow((adentro - ancho) / ancho, 2.0));
-    float halo = pow(t, 5.0);
-    col += (filo * (0.55 * frente + 0.18 * atras) + halo * (0.05 + 0.07 * frente)) * uBrillo * uFuerza;
+    // Al cuadrado a mano: pow con base negativa no está definido en GLSL.
+    vec2 k = (adentro - ancho) / ancho;
+    vec2 filo = exp(-k * k);
+    vec2 halo = pow(t, vec2(5.0));
+    vec2 luz = filo * (0.55 * frente + 0.18 * atras) + halo * (0.05 + 0.07 * frente);
+    col += max(luz.x, luz.y) * uBrillo * uFuerza;
 
     outputColor = vec4(col, c.a);
   }
