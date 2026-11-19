@@ -10,6 +10,7 @@ import { characterNormalTexture } from '../lib/toonInkBuffer.js'
 import { skinLineColor } from '../lib/skinShaders.js'
 import EdgeInkEffect from './fx/EdgeInkEffect.jsx'
 import { useTrama } from './fx/TramaEffect.jsx'
+import { useVidrioOrilla } from './fx/VidrioOrilla.jsx'
 import { wallpaperEstado } from '../lib/wallpaperEscritorio.js'
 import { hardenContextAttributes } from '../lib/canvasSetup.js'
 
@@ -121,6 +122,7 @@ export default function PostFX({
     return e
   }, [])
   const tramaEffect = useTrama()
+  const vidrioEffect = useVidrioOrilla()
   useEffect(() => () => { try { chromaEffect.dispose?.() } catch { } }, [chromaEffect])
   useEffect(() => () => { try { glitchEffect.dispose?.() } catch { } }, [glitchEffect])
 
@@ -706,6 +708,9 @@ export default function PostFX({
         {/* Montados SIEMPRE, inertes hasta que algo los encienda. Ver la nota
             larga arriba: montarlos/desmontarlos es lo que congelaba el rayo. */}
         <primitive object={chromaEffect} dispose={null} />
+        {/* Vidrio en la orilla: justo después de chroma, primero de su pase (ver
+            VidrioOrilla.jsx), para leer la imagen terminada sin un pase de más. */}
+        <primitive object={vidrioEffect} dispose={null} />
         <primitive object={glitchEffect} dispose={null} />
         {/* Al final de todo: lo que deja es el color exacto del fondo. */}
         <primitive object={tramaEffect} dispose={null} />
