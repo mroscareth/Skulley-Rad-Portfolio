@@ -446,7 +446,9 @@ SHOTS.sec_store = () => tomaSeccion('sec_store', 'STORE')
 async function telefono(storage = {}) {
   const ctx = await abrir({ ruta: '/', width: 540, height: 960, dsf: 2, mobile: true, storage: { lang: 'en', ...SIN_LENTES, ...storage } })
   await esperar(ctx, () => !!document.querySelector('.msh-audio') && !!document.querySelector('canvas'), { timeout: 150000 })
-  await sleep(9000)
+  // Con el servidor recién prendido Skulley tarda más que eso: esperar a que exista.
+  await esperar(ctx, () => (window.__lentes || []).length > 0, { timeout: 150000 })
+  await sleep(6000)
   return ctx
 }
 const jsClic = (ctx, sel) => ctx.page.evaluate((s) => { const e = document.querySelector(s); if (e) { e.focus?.(); e.click() } return !!e }, sel)
@@ -680,6 +682,62 @@ SHOTS.wallpaper5 = async () => {
     [21800, async (t) => { await irClic(ctx, m, t, { sel: '.dwp-chip', texto: 'Face' }) }],
   ]
   await correr(ctx, 'wallpaper5', 26000, { m, acciones })
+}
+
+// Como wallpaper5, pero cada sticker se lleva a una esquina del marco en cuanto
+// sale (salen al centro, encima de Skulley).
+SHOTS.wallpaper6 = async () => {
+  const ctx = await mundo({ skulley_accesorios: JSON.stringify({ lentes: false, hoodie: true, pantalones: true, botas: true }), skulley_active_skin: 'base' })
+  const m = new Raton(ctx, 1150, 560, 57)
+  const escribe = (texto, t0, cada = 110) => [...texto].map((c, i) => [t0 + i * cada, async () => {
+    const ok = await ctx.page.evaluate((primero) => { const e = document.querySelector('.dwp-texto'); if (!e) return false; if (document.activeElement !== e) e.focus(); if (primero) e.select?.(); return true }, i === 0)
+    if (!ok) console.log('sin campo de texto', c)
+    await ctx.client.send('Input.insertText', { text: c })
+  }])
+  // El sticker más cerca del centro del marco (los nuevos salen ahí, encimados).
+  const ultimo = () => ctx.page.evaluate(() => {
+    const m = document.querySelector('.dwp-escenario')?.getBoundingClientRect()
+    const els = [...document.querySelectorAll('.dwp-sticker')]
+    if (!m || !els.length) return null
+    const cx = m.x + m.width / 2, cy = m.y + m.height / 2
+    let mejor = null
+    for (const e of els) {
+      const r = e.getBoundingClientRect()
+      const x = r.x + r.width / 2, y = r.y + r.height / 2
+      const d = Math.hypot(x - cx, y - cy)
+      if (!mejor || d < mejor.d) mejor = { x, y, d, n: els.length }
+    }
+    return mejor
+  })
+  const aEsquina = (fx, fy) => async (t) => {
+    const s = await ultimo()
+    const r = await busca(ctx, { sel: '.dwp-escenario' })
+    if (!s || !r) { console.log('sin sticker o marco'); return }
+    const a = m.ir(t, s.x, s.y, 550); m.bajar(a + 80)
+    m.ir(a + 100, r.x + fx * r.w, r.y + fy * r.h, 800); m.soltar(a + 1000)
+    console.log('sticker', s.n, '→', fx, fy)
+  }
+  const acciones = [
+    [300, async (t) => { await irClic(ctx, m, t, { aria: 'Customize character' }) }],
+    [3500, async (t) => { await irClic(ctx, m, t, { texto: 'Wallpaper 4K' }) }],
+    [6200, async (t) => { await irClic(ctx, m, t, { sel: '.dwp-cap--riel button', aria: 'Text' }) }],
+    ...escribe('RAD', 8000, 260),
+    [10000, async (t) => { await irClic(ctx, m, t, { sel: '.dwp-cap--riel button', aria: 'Sticker' }) }],
+    [11400, async (t) => { await irClic(ctx, m, t, { sel: '.dwp-miniatura', aria: 'Sticker 1' }) }],
+    [12600, async (t) => { await irClic(ctx, m, t, { sel: '.dwp-miniatura', aria: 'Sticker 3' }) }],
+    [13800, async (t) => { await irClic(ctx, m, t, { sel: '.dwp-miniatura', aria: 'Sticker 2' }) }],
+    [15200, aEsquina(-0.37, -0.29)],
+    [16900, aEsquina(0.37, -0.29)],
+    [18600, aEsquina(-0.37, 0.27)],
+    [20300, async (t) => { await irClic(ctx, m, t, { sel: '.dwp-cap--riel button', aria: 'Rotate' }) }],
+    [21500, async (t) => {
+      const r = await busca(ctx, { sel: '.dwp-escenario' })
+      if (!r) return
+      const a = m.ir(t, r.x - 300, r.y, 600); m.bajar(a + 60); m.ir(a + 80, r.x + 298, r.y + 10, 1700); m.soltar(a + 1850)
+    }],
+    [25000, async (t) => { await irClic(ctx, m, t, { sel: '.dwp-chip', texto: 'Face' }) }],
+  ]
+  await correr(ctx, 'wallpaper6', 29500, { m, acciones })
 }
 
 SHOTS.vinetas2 = async () => {

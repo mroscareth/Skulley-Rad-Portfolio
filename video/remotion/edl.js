@@ -99,8 +99,8 @@ PROPS.forEach((s, i) => { const en = 52.21 + i; C('props2', s, en, 1.0, SOLO_SKU
 
 // ── 60.21–64.21: wallpaper 4K (sin bombo) ────────────────────────────────────
 G(60.21)
-C('wallpaper5', 6.4, 60.21, 2.0, { vel: 2.6, monitor: true })
-C('wallpaper5', 22.4, 62.21, 2.0, { vel: 1.0, monitor: true })
+C('wallpaper6', 7.6, 60.21, 2.0, { vel: 1.6, monitor: true })
+C('wallpaper6', 20.2, 62.21, 2.0, { vel: 2.0, monitor: true })
 T(60.4, 1.7, ['4K', 'WALLPAPERS'], { colores: [AMA, '#ffffff'], velo: 0.35, anclaV: 'arriba' })
 
 // ── 64.21–76.21: modo arcade, jugado de verdad ───────────────────────────────
@@ -175,18 +175,18 @@ T(140.4, 1.8, ['ALSO ON', 'YOUR PHONE'], { lineasV: ['ALSO ON', 'YOUR', 'PHONE']
 
 // ── 148.21–168.21: el portafolio ─────────────────────────────────────────────
 G(148.21); D(148.21, AMA, 8, 0.6)
-C('sec_work', 2.6, 148.21, 1.5, { vel: 1.4 })
-C('sec_work', 7.2, 149.71, 4.5, { vel: 1.35 })
+C('sec_work', 2.6, 148.21, 1.5, { vel: 1.4, monitor: true })
+C('sec_work', 7.2, 149.71, 4.5, { vel: 1.35, monitor: true })
 T(148.25, 1.2, ['WORK'], { colores: [AMA] })
 G(154.21)
-C('sec_about', 2.6, 154.21, 1.5, { vel: 1.4 })
-C('sec_about', 7.2, 155.71, 4.5, { vel: 1.35 })
+C('sec_about', 2.6, 154.21, 1.5, { vel: 1.4, monitor: true })
+C('sec_about', 7.2, 155.71, 4.5, { vel: 1.35, monitor: true })
 T(154.25, 1.2, ['ABOUT'], { colores: [AMA] })
 G(160.21)
-C('sec_store', 2.6, 160.21, 1.5, { vel: 1.4 })
-C('sec_store', 7.2, 161.71, 4.5, { vel: 1.35 })
+C('sec_store', 2.6, 160.21, 1.5, { vel: 1.4, monitor: true })
+C('sec_store', 7.2, 161.71, 4.5, { vel: 1.35, monitor: true })
 T(160.25, 1.2, ['STORE'], { colores: [AMA] })
-C('wallpaper5', 22.4, 166.21, 2.0, { vel: 0.8, monitor: true })
+C('wallpaper6', 25.0, 166.21, 2.0, { vel: 0.8, monitor: true })
 
 // ── 168.21–172.21: pausa ─────────────────────────────────────────────────────
 G(168.21)
@@ -198,7 +198,7 @@ const REMATE = [
   ['juego2', 5.3, { zoom: 1.4, focoY: 0.45 }], ['customize2', 24.5, { monitor: true }], ['arcade2', 52.6, {}], ['historia2', H(33.0), {}],
   ['cara_inferno', 9.5, MARCO_CARA], ['juego2', 17.0, { zoom: 1.3 }], ['props2', 27.9, SOLO_SKULLEY_V], ['arcade2', 56.2, {}],
   ['intro', 4.0, {}], ['customize2', 13.6, SOLO_SKULLEY_V], ['juego2', 21.7, { zoom: 1.4, focoY: 0.45 }], ['cara_polter', 10.0, MARCO_CARA],
-  ['historia2', H(39.4), {}], ['arcade2', 34.6, {}], ['wallpaper5', 23.5, { monitor: true }], ['props2', 22.0, SOLO_SKULLEY_V],
+  ['historia2', H(39.4), {}], ['arcade2', 34.6, {}], ['wallpaper6', 26.0, { monitor: true }], ['props2', 22.0, SOLO_SKULLEY_V],
   ['juego2', 33.6, { zoom: 1.3 }], ['customize2', 20.0, SOLO_SKULLEY_V], ['cara_azul', 10.5, MARCO_CARA], ['historia2', H(13.6), {}],
   ['arcade2', 29.0, {}], ['cara_oro', 9.0, MARCO_CARA], ['historia2', H(42.0), {}], ['intro', 13.7, {}],
 ]

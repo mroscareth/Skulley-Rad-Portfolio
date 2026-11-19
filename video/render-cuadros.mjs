@@ -15,7 +15,7 @@ const archivos = []
 for (const t of tiempos) {
   const frame = Math.min(comp.durationInFrames - 1, Math.round(Number(t) * 60))
   const f = join(out, `c-${id}-${t}.png`)
-  await renderStill({ composition: comp, serveUrl, frame, output: f, scale: comp.width > comp.height ? 0.5 : 0.35, timeoutInMilliseconds: 120000 })
+  await renderStill({ composition: comp, serveUrl, frame, output: f, scale: Number(process.env.ESCALA) || (comp.width > comp.height ? 0.5 : 0.35), timeoutInMilliseconds: 120000 })
   archivos.push(f)
   process.stdout.write('.')
 }
