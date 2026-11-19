@@ -73,7 +73,7 @@ T(20.25, 1.2, ['PLAY'], { colores: [AMA] })
 // Break: la patada en cámara lenta.
 C('juego2', 3.35, 30.21, 2.0, { vel: 0.45, zoom: 1.8, foco: 0.49, focoY: 0.47, zoomV: 1.8, focoV: 0.49 })
 D(30.21, '#ffffff', 10, 0.9)
-T(30.25, 1.95, ['THIS IS A', 'PORTFOLIO'], { lineasV: ['THIS', 'IS A', 'PORTFOLIO'], colores: ['#ffffff', AMA], velo: 0.4 })
+T(30.25, 1.95, ['WELCOME TO', 'MY WORLD'], { lineasV: ['WELCOME', 'TO MY', 'WORLD'], colores: ['#ffffff', AMA], coloresV: ['#ffffff', '#ffffff', AMA], velo: 0.4 })
 
 // ── 32.21–60.21: Customize, skins, close-ups y props ────────────────────────
 // Lo que trae interfaz va completo (en vertical, en el monitor); el acercamiento
@@ -221,4 +221,12 @@ negros.push([206.2, 206.8, 0.5, 0])
 export const EDL = {
   clips, titulos, subs, destellos, cortes, barras, negros,
   rebote: [[16.21, 30.21, 0.022], [32.21, 60.21, 0.016], [64.21, 76.21, 0.02], [80.21, 108.21, 0.022], [128.21, 140.21, 0.018], [148.21, 168.21, 0.012], [172.21, 184.21, 0.03]],
+}
+
+// Portada: los primeros cuadros son el hero del sitio, para que la miniatura
+// que sacan X e Instagram del inicio no salga negra (el spot abre en negro).
+export const PORTADA = {
+  cuadros: 3,
+  src: 'intro', desde: 7.0,
+  v: { src: 'tel_scroll', desde: 2.5, fuente: [1080, 1920] },
 }

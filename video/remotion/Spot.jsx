@@ -4,7 +4,7 @@ import { Clip } from './Clip.jsx'
 import { GlitchTitle } from './GlitchTitle.jsx'
 import { Subtitulo } from './Subtitulo.jsx'
 import { Destello, Barras, CorteGlitch, Velo } from './Efectos.jsx'
-import { EDL, FPS, DURACION, golpes } from './edl.js'
+import { EDL, FPS, DURACION, golpes, PORTADA } from './edl.js'
 
 const F = (s) => Math.round(s * FPS)
 
@@ -131,6 +131,9 @@ export function Spot({ vertical = false, corte = 0 }) {
       {EDL.negros.map(([a, b, entra = 0.2, sale = 0.2], i) => (
         <Sequence key={'n' + i} from={F(a)} durationInFrames={F(b - a)}><Negro dur={F(b - a)} entra={F(entra)} sale={F(sale)} /></Sequence>
       ))}
+      <Sequence durationInFrames={PORTADA.cuadros}>
+        <Clip {...PORTADA} {...(vertical ? PORTADA.v : {})} durationInFrames={PORTADA.cuadros} />
+      </Sequence>
       <Audio src={staticFile('madre-lobby-remix.mp3')} volume={corte ? (f) => interpolate(f, [F(corte + 1.2), F(corte + FINAL_CORTO)], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }) : 1} />
     </AbsoluteFill>
   )
