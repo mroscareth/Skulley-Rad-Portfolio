@@ -12,7 +12,7 @@ export { pasoCordones } from './cordonesHoodie.js'
 // (CharacterNormalPass solo entinta SkinnedMesh), los fundidos de opacidad y
 // el despiece (Player despieza los nodos Egg_*: por eso se llama Egg_Lentes).
 // Estado (cuáles van puestos) y URLs, en un módulo sin three
-export { URL_LENTES, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_TENIS, URL_INFLADA, URL_BOTAS, URL_PANTALONES, URL_MUNEQUERAS, URL_BEANIE, URL_CORRER, ACCESORIOS, ACCESORIOS_EVENT, getAccesorios, setAccesorio, mostrarAccesorios, tapadoPorProp } from './accesoriosEstado.js'
+export { URL_LENTES, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_TENIS, URL_INFLADA, URL_BOTAS, URL_PANTALONES, URL_MUNEQUERAS, URL_BEANIE, URL_CORRER, URL_IDLE, conClipsDelBlend, ACCESORIOS, ACCESORIOS_EVENT, getAccesorios, setAccesorio, mostrarAccesorios, tapadoPorProp } from './accesoriosEstado.js'
 
 const MATERIALES_LENTES = {
   Lentes_Armazon: { color: 0x121212, roughness: 0.32, metalness: 0 },

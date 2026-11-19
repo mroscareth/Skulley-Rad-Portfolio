@@ -17,6 +17,26 @@ export const URL_MUNEQUERAS = `${import.meta.env.BASE_URL}props/munequeras.glb`
 export const URL_BEANIE = `${import.meta.env.BASE_URL}props/beanie.glb?v=8f70b39a`
 // Clips nuevos del mismo .blend (scripts/skulley-anim/exportar_animaciones.py)
 export const URL_CORRER = `${import.meta.env.BASE_URL}animaciones/correr.glb`
+// El idle con el pie izquierdo corregido (2026-11-18): se llama igual que el de character.glb y solo trae
+// las pistas que cambian (la pierna izquierda), que van encima de las suyas
+export const URL_IDLE = `${import.meta.env.BASE_URL}animaciones/idle.glb`
+
+/** Los clips de character.glb con los del .blend: uno con el nombre de un clip de character.glb pone sus
+ *  pistas encima de las de ese clip (las demás se quedan); uno nuevo se agrega. */
+export function conClipsDelBlend(base, ...gltfs) {
+  const nuevos = gltfs.flatMap((g) => g?.animations || [])
+  const porNombre = new Map(nuevos.map((c) => [c.name, c]))
+  const out = (base || []).map((c) => {
+    const n = porNombre.get(c.name)
+    if (!n) return c
+    porNombre.delete(c.name)
+    const encima = new Set(n.tracks.map((t) => t.name))
+    const mezcla = c.clone()
+    mezcla.tracks = [...c.tracks.filter((t) => !encima.has(t.name)), ...n.tracks.map((t) => t.clone())]
+    return mezcla
+  })
+  return [...out, ...porNombre.values()]
+}
 
 export const ACCESORIOS = [
   { id: 'lentes', es: 'Lentes', en: 'Sunglasses' },

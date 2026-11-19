@@ -37,7 +37,13 @@ ARMATURE = "root"
 # acción del .blend -> nombre del archivo en public/animaciones (sin .glb)
 ANIMACIONES = {
     "Correr": "correr",   # ciclo de 20 cuadros (0.67 s) en su lugar
+    # el idle con el pie izquierdo corregido (2026-11-18): mismo nombre que el de character.glb, el sitio lo reemplaza
+    "root|root|Iddle": "idle",
 }
+# Las que reemplazan a un clip de character.glb llevan solo las pistas que cambian: el sitio las pone encima
+# del clip del mismo nombre (conClipsDelBlend en accesoriosEstado.js). El idle completo pesa 262 KB y las seis
+# pistas de la pierna izquierda unos KB (la primera pantalla del teléfono espera a este archivo).
+PARCIALES = {"root|root|Iddle"}
 
 
 def exportar(accion, archivo, carpeta=SALIDA, armature=ARMATURE):
@@ -94,7 +100,82 @@ def exportar(accion, archivo, carpeta=SALIDA, armature=ARMATURE):
             o.select_set(o in antes["seleccion"])
         vl.objects.active = antes["activo"]
         bpy.context.scene.frame_set(antes["cuadro"])
+    _solo_huesos(ruta)
     return ruta
+
+
+def _solo_huesos(ruta):
+    """Deja en el clip solo las pistas de los huesos, como los de character.glb. Si la acción también anima
+    al objeto del armature (la del idle trae su posición, giro y escala, fijos), su pista tocaría el nodo
+    'root' del personaje en cada cuadro."""
+    def huesos(j):
+        return {i for s in j.get("skins", []) for i in s["joints"]}
+    return _quitar_canales(ruta, lambda j, c: c["target"].get("node") in huesos(j))
+
+
+def solo_lo_que_cambia(ruta, nombre, umbral=1e-3, sitio_glb=os.path.join(REPO, "public", "character.glb")):
+    """Deja solo las pistas que difieren (más de 'umbral') de las del clip del mismo nombre en character.glb,
+    y limpia lo que queda sin usar (gltf-transform prune). Regresa cuántas quedaron."""
+    a, b = _pistas(ruta, nombre), _pistas(sitio_glb, nombre)
+    cambian = set()
+    for clave, (ta, va) in a.items():
+        if clave not in b:
+            cambian.add(clave)
+            continue
+        tb, vb = b[clave]
+        for i, t in enumerate(ta):
+            x = va[i]
+            # character.glb guarda las pistas fijas con menos llaves: se compara contra su valor interpolado
+            k = next((k for k in range(1, len(tb)) if tb[k][0] >= t[0] - 1e-6), len(tb) - 1)
+            t0, t1 = tb[k - 1][0] if k else tb[0][0], tb[k][0]
+            u = 0.0 if t1 <= t0 else min(1.0, max(0.0, (t[0] - t0) / (t1 - t0)))
+            y0, y1 = vb[k - 1] if k else vb[0], vb[k]
+            if clave[1] == "rotation" and sum(p * q for p, q in zip(y0, y1)) < 0:
+                y1 = tuple(-q for q in y1)
+            y = tuple(p + (q - p) * u for p, q in zip(y0, y1))
+            if clave[1] == "rotation":
+                m = math.sqrt(sum(p * p for p in y)) or 1.0
+                y = tuple(p / m for p in y)
+            if clave[1] == "rotation" and sum(p * q for p, q in zip(x, y)) < 0:
+                y = tuple(-q for q in y)
+            if max(abs(p - q) for p, q in zip(x, y)) > umbral:
+                cambian.add(clave); break
+    _quitar_canales(ruta, lambda j, c: (j["nodes"][c["target"]["node"]]["name"].replace(".", ""), c["target"]["path"]) in cambian)
+    import subprocess
+    tmp = ruta[:-4] + "_tmp.glb"
+    npx = "npx.cmd" if os.name == "nt" else "npx"
+    r = subprocess.run([npx, "--no-install", "gltf-transform", "prune", ruta, tmp], cwd=REPO, capture_output=True, text=True)
+    if r.returncode == 0 and os.path.exists(tmp):
+        os.replace(tmp, ruta)
+    else:
+        print("no se pudo limpiar", ruta, r.stderr[-400:])
+    return len(cambian)
+
+
+def _quitar_canales(ruta, conservar):
+    """Reescribe el GLB con solo los canales de animación para los que conservar(json, canal) es verdadero."""
+    b = open(ruta, "rb").read()
+    n = struct.unpack("<I", b[12:16])[0]
+    j = json.loads(b[20:20 + n])
+    quitadas = 0
+    for a in j.get("animations", []):
+        canales = [c for c in a["channels"] if conservar(j, c)]
+        quitadas += len(a["channels"]) - len(canales)
+        usados = sorted({c["sampler"] for c in canales})
+        nuevo = {v: i for i, v in enumerate(usados)}
+        a["samplers"] = [a["samplers"][i] for i in usados]
+        for c in canales:
+            c["sampler"] = nuevo[c["sampler"]]
+        a["channels"] = canales
+    if not quitadas:
+        return 0
+    js = json.dumps(j, separators=(",", ":")).encode("utf-8")
+    js += b" " * (-len(js) % 4)
+    resto = b[20 + n:]
+    total = 12 + 8 + len(js) + len(resto)
+    with open(ruta, "wb") as f:
+        f.write(b[:8] + struct.pack("<I", total) + struct.pack("<I", len(js)) + b"JSON" + js + resto)
+    return quitadas
 
 
 def aligerar(ruta):
@@ -113,7 +194,13 @@ def aligerar(ruta):
 
 
 def exportar_todas():
-    return [aligerar(exportar(a, f)) for a, f in ANIMACIONES.items()]
+    rutas = []
+    for a, f in ANIMACIONES.items():
+        r = aligerar(exportar(a, f))
+        if a in PARCIALES:
+            solo_lo_que_cambia(r, a)
+        rutas.append(r)
+    return rutas
 
 
 # --- Props -----------------------------------------------------------------

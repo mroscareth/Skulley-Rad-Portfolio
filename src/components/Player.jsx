@@ -29,7 +29,7 @@ import {
   LASER_ARM_YAW, laserReachFor,
 } from '../lib/laserPose.js'
 import { applyCharacterColorsToScene, getCharacterColors, CHARACTER_COLOR_EVENT, EYES_ORB_ONLY } from '../lib/characterColors.js'
-import { URL_LENTES, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_TENIS, URL_INFLADA, URL_BOTAS, URL_PANTALONES, URL_MUNEQUERAS, URL_BEANIE, URL_CORRER, ponerLentes, ponerBoxers, ponerChamarra, ponerHoodie, ponerTenis, ponerInflada, ponerBotas, ponerPantalones, ponerMunequeras, ponerBeanie, opcionesTelaChamarra, opcionesTelaHoodie, opcionesTelaInflada, opcionesTelaPantalones, opcionesTelaBeanie, pasoCordones, getAccesorios, tapadoPorProp, ACCESORIOS_EVENT } from '../lib/accesorios.js'
+import { URL_LENTES, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_TENIS, URL_INFLADA, URL_BOTAS, URL_PANTALONES, URL_MUNEQUERAS, URL_BEANIE, URL_CORRER, URL_IDLE, conClipsDelBlend, ponerLentes, ponerBoxers, ponerChamarra, ponerHoodie, ponerTenis, ponerInflada, ponerBotas, ponerPantalones, ponerMunequeras, ponerBeanie, opcionesTelaChamarra, opcionesTelaHoodie, opcionesTelaInflada, opcionesTelaPantalones, opcionesTelaBeanie, pasoCordones, getAccesorios, tapadoPorProp, ACCESORIOS_EVENT } from '../lib/accesorios.js'
 import { telaDe } from '../lib/telaProp.js'
 import { crearApartaManos } from '../lib/apartaManos.js'
 import { crearConstructorTela, colocarTela, pasoTela as pasoTelaSuelta, escribirTela, normalesDeMalla, bajoDe } from '../lib/telaSuelta.js'
@@ -235,6 +235,7 @@ export default function Player({
   const munequerasGltf = useGLTF(URL_MUNEQUERAS, true)
   const beanieGltf = useGLTF(URL_BEANIE, true)
   const correrGltf = useGLTF(URL_CORRER, true)
+  const idleGltf = useGLTF(URL_IDLE, true)
   // Detect GPU compressed-texture support once per renderer
   useEffect(() => { detectKTX2Support(gl) }, [gl])
 
@@ -278,9 +279,9 @@ export default function Player({
   // PropertyBinding objects that reference specific skeleton nodes. When the scene
   // changes, stale bindings prevent animations from playing → T-pose.
   const animations = useMemo(
-    () => [...baseAnimations, ...(correrGltf?.animations || [])].map((clip) => clip.clone()),
+    () => conClipsDelBlend(baseAnimations, idleGltf, correrGltf).map((clip) => clip.clone()),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [baseAnimations, correrGltf, originalScene],
+    [baseAnimations, idleGltf, correrGltf, originalScene],
   )
 
   const { actions, mixer } = useAnimations(animations, scene)

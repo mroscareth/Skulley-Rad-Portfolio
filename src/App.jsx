@@ -1607,7 +1607,7 @@ function SiteApp() {
     }
       ; (async () => {
         try {
-          const [{ useGLTF }, three, { extendGLTFLoaderKTX2 }, { URL_LENTES, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_TENIS, URL_INFLADA, URL_PANTALONES, URL_MUNEQUERAS, URL_BEANIE, URL_CORRER }] = await Promise.all([
+          const [{ useGLTF }, three, { extendGLTFLoaderKTX2 }, { URL_LENTES, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_TENIS, URL_INFLADA, URL_PANTALONES, URL_MUNEQUERAS, URL_BEANIE, URL_CORRER, URL_IDLE }] = await Promise.all([
             import('@react-three/drei'),
             import('three'),
             import('./lib/ktx2Setup.js'),
@@ -1649,6 +1649,7 @@ function SiteApp() {
             useGLTF.preload(URL_MUNEQUERAS, true)
             useGLTF.preload(URL_BEANIE, true)
             useGLTF.preload(URL_CORRER, true)
+            useGLTF.preload(URL_IDLE, true)
           } finally {
             mgr.itemStart = prevItemStart
           }

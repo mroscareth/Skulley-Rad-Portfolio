@@ -892,6 +892,22 @@ export function crearNumerito(personaje, { idle, camina, orbe, alPatear } = {}) 
   let activo = false
   let tPrevio = 0
   let faseCamina = 0
+  // Mezcla de `a` a `b` sin el camino corto (que cambia de lado de golpe al
+  // pasar de media vuelta): el giro de `a` a `b` sigue al del cuadro anterior
+  // de esa `clave` (el corto solo la primera vez, o tras un salto de la barra).
+  // Al subir las manos a la cabeza, al soltarla y al levantarla del piso, la
+  // mano y la cabeza brincaban hasta 27° en un cuadro (Oscar: "se
+  // teletransportan").
+  const giros = new Map()
+  function slerpSeguido(clave, a, b, w, t, out = a) {
+    const rel = a.clone().invert().multiply(b)
+    const prev = giros.get(clave)
+    const dt = prev ? t - prev.t : -1
+    if (prev && Math.abs(dt) < 0.1 ? rel.dot(prev.rel) < 0 : rel.w < 0) rel.set(-rel.x, -rel.y, -rel.z, -rel.w)
+    giros.set(clave, { t, rel: rel.clone() })
+    const base = a.clone()
+    return out.copy(base.multiply(slerpDirecto(new THREE.Quaternion(), rel, w)))
+  }
 
   // Dónde va el cuerpo (en el espacio del rig), hacia dónde mira (giro sobre
   // su eje; 0 = a la cámara) y cuánto camina y a qué paso.
@@ -1516,7 +1532,7 @@ export function crearNumerito(personaje, { idle, camina, orbe, alPatear } = {}) 
             cMundo.addScaledVector(medio.clone().sub(cMundo).normalize(), sobra)
           }
           c.copy(rig.worldToLocal(cMundo))
-          mundo = aMatriz(c, acostada2.slerp(puestaQ, suave(tramo(t, N.agarra, N.puesta - 0.25))))
+          mundo = aMatriz(c, slerpSeguido('cabeza', acostada2, puestaQ, suave(tramo(t, N.agarra, N.puesta - 0.25)), t))
         }
       }
     }
@@ -1694,14 +1710,13 @@ export function crearNumerito(personaje, { idle, camina, orbe, alPatear } = {}) 
       const q0 = mano.quaternion.clone()
       const girar = () => {
         mano.parent.getWorldQuaternion(_q3).invert().multiply(qMano)
-        mano.quaternion.copy(q0).slerp(_q3, peso)
+        slerpSeguido(s > 0 ? 'agarraL' : 'agarraR', q0, _q3, peso, t, mano.quaternion)
         limitarGiro(mano.quaternion, q0)
         mano.updateMatrixWorld(true)
       }
       // De la palma a la muñeca, con la mano girada, y la palma donde el
       // cráneo llega hacia `n` (la distancia, no el vértice que llega: ese
-      // brinca de uno a otro y la mano se teletransportaba; Oscar). Dos
-      // pasadas: la línea del antebrazo cambia con el IK y la mano la sigue.
+      // brinca de uno a otro y la mano se teletransportaba; Oscar).
       const escalaMano = mano.matrixWorld.getMaxScaleOnAxis()
       const muneca = new THREE.Vector3()
       const llega = new THREE.Vector3()
@@ -1714,13 +1729,23 @@ export function crearNumerito(personaje, { idle, camina, orbe, alPatear } = {}) 
         const v = muneca.clone().sub(hombro)
         if (v.length() > largoBrazo * AGARRE.estira) muneca.copy(hombro).addScaledVector(v.normalize(), largoBrazo * AGARRE.estira)
       }
-      for (let k = 0; k < 2; k++) {
-        orientar()
-        llega.copy(centroCab).addScaledVector(n, extremoEn(craneo ? craneo.lista : contacto.cabeza, n, centroCab) + alto * AGARRE.holgura + abre)
-        muneca.copy(llega).sub(palma.clone().multiplyScalar(escalaMano).applyQuaternion(qMano))
-        alcanza()
-        ik(brazo, antebrazo, mano, muneca, polo, peso)
+      // Siempre desde la pose con la que llegó el brazo y con las mismas dos
+      // pasadas del IK, que con peso se suman: una pasada de más en cuanto la
+      // mano rozaba el cráneo brincaba el brazo (hasta 24° el antebrazo en un
+      // cuadro, al subir las manos a la cabeza y al soltarla).
+      const q0Brazo = brazo.quaternion.clone()
+      const q0Antebrazo = antebrazo.quaternion.clone()
+      const posarBrazo = () => {
+        brazo.quaternion.copy(q0Brazo)
+        antebrazo.quaternion.copy(q0Antebrazo)
+        brazo.updateMatrixWorld(true)
+        for (let k = 0; k < 2; k++) ik(brazo, antebrazo, mano, muneca, polo, peso)
       }
+      orientar()
+      llega.copy(centroCab).addScaledVector(n, extremoEn(craneo ? craneo.lista : contacto.cabeza, n, centroCab) + alto * AGARRE.holgura + abre)
+      muneca.copy(llega).sub(palma.clone().multiplyScalar(escalaMano).applyQuaternion(qMano))
+      alcanza()
+      posarBrazo()
       orientar()
       girar()
       // Los dedos se cierran sobre el cráneo al agarrar (abiertos, no).
@@ -1738,7 +1763,7 @@ export function crearNumerito(personaje, { idle, camina, orbe, alPatear } = {}) 
         // brinquito al empezar a rozar.
         muneca.addScaledVector(n, fondo)
         alcanza()
-        ik(brazo, antebrazo, mano, muneca, polo, peso)
+        posarBrazo()
         girar()
       }
       torcer(s, mano, q0)
@@ -1773,7 +1798,7 @@ export function crearNumerito(personaje, { idle, camina, orbe, alPatear } = {}) 
       const qMano = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3().crossVectors(y, z), y, z))
       const q0 = mano.quaternion.clone()
       mano.parent.getWorldQuaternion(_q3).invert().multiply(qMano)
-      mano.quaternion.copy(q0).slerp(_q3, peso)
+      slerpSeguido(s > 0 ? 'tanteaL' : 'tanteaR', q0, _q3, peso, t, mano.quaternion)
       limitarGiro(mano.quaternion, q0)
       mano.updateMatrixWorld(true)
       torcer(s, mano, q0)
@@ -1800,7 +1825,7 @@ export function crearNumerito(personaje, { idle, camina, orbe, alPatear } = {}) 
         const y = adelante.clone()
         const z = arriba.clone().negate()
         mano.parent.getWorldQuaternion(_q3).invert().multiply(new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3().crossVectors(y, z), y, z)))
-        mano.quaternion.copy(q0).slerp(_q3, pesoEncoge)
+        slerpSeguido(s > 0 ? 'encogeL' : 'encogeR', q0, _q3, pesoEncoge, t, mano.quaternion)
         limitarGiro(mano.quaternion, q0)
         mano.updateMatrixWorld(true)
         torcer(s, mano, q0)
@@ -1855,14 +1880,19 @@ export function crearNumerito(personaje, { idle, camina, orbe, alPatear } = {}) 
       // siga una pose de aquí o la animación (la patada): si se meten, la mano
       // se aparta lo que falte (se lee como que la esquiva). Medido: tras el
       // golpe y tras la patada la cabeza le atravesaba el brazo. Agarrándola,
-      // tocarla es a propósito.
-      if (!agarrando) {
+      // tocarla es a propósito: se aparta menos entre más la agarra, y nada ya
+      // agarrada (sin apartarse nada al agarrar, en cuanto la tomaba y la
+      // soltaba la mano brincaba lo que la apartaba, hasta 33° en un cuadro).
+      {
         const lista = s > 0 ? contacto?.brazoL : contacto?.brazoR
         // Desde donde quedó la mano, con el codo en su plano: así, sin
         // traspaso, la pose no cambia nada.
         const meta = mano.getWorldPosition(new THREE.Vector3())
         const codo = antebrazo.getWorldPosition(new THREE.Vector3())
-        apartar(lista, meta, (m) => ik(brazo, antebrazo, mano, m, codo, 1), alto)
+        const desde = meta.clone()
+        const posarA = (m) => ik(brazo, antebrazo, mano, m, codo, 1)
+        if (!agarrando || peso < 0.999) apartarConMemoria(memoriaNumerito, s, t, lista, meta, posarA, alto, cuerpoQ, 8, 1, Infinity, false)
+        if (agarrando && !meta.equals(desde)) posarA(meta.lerp(desde, peso))
       }
       // Agachado por la cabeza, la punta de los dedos se metía en el piso:
       // la mano sube lo que falte. Solo se revisa con la mano cerca del piso.
@@ -2028,18 +2058,32 @@ export function crearNumerito(personaje, { idle, camina, orbe, alPatear } = {}) 
   // Con `peso` menor que 1 la IK solo se acerca a la meta: se empuja más.
   // `tope`: lo más que se mueve la meta (en altos); sin tope, contra algo que
   // no podía esquivar la mandaba lejísimos y el brazo quedaba estirado.
-  function apartar(lista, meta, posar, alto, veces = 8, peso = 1, tope = Infinity) {
+  // `quedaMejor`: se queda con la meta que menos se mete de todos los empujones
+  // (pasando el codo sobre el cráneo, seguir empujando lo enderezaba y lo volvía
+  // a meter, y unas veces paraba en el tope y otras no). Va con una meta que ya
+  // parte de la del cuadro anterior (ver `apartarConMemoria`): desde cero, cuál
+  // de los empujones quedaba mejor cambiaba de un cuadro a otro. Parar en el
+  // primero que no mejoraba dejaba crecer el traspaso varios cuadros hasta que
+  // de golpe salía.
+  function apartar(lista, meta, posar, alto, veces = 8, peso = 1, tope = Infinity, quedaMejor = false) {
+    if (!lista) return
     const sale = new THREE.Vector3()
     const ganancia = 1.25 / Math.max(0.35, peso)
     const inicio = meta.clone()
-    for (let k = 0; lista && k < veces; k++) {
-      const d = traspaso(lista, sale, null, MARGEN_BRAZO)
-      if (d <= alto * 1e-5) break
+    const mejor = meta.clone()
+    let menos = Infinity
+    for (let k = 0; k <= veces; k++) {
+      const ultimo = k === veces
+      if (ultimo && !quedaMejor) break
+      const d = traspaso(lista, ultimo ? null : sale, null, MARGEN_BRAZO)
+      if (quedaMejor && d < menos) { menos = d; mejor.copy(meta) }
+      if (d <= alto * 1e-5 || ultimo) break
       meta.addScaledVector(sale, d * ganancia)
       const lejos = meta.distanceTo(inicio)
       if (lejos > tope * alto) meta.sub(inicio).multiplyScalar(tope * alto / lejos).add(inicio)
       posar(meta)
     }
+    if (quedaMejor && !meta.equals(mejor)) { meta.copy(mejor); posar(meta) }
   }
   // En desarrollo, `window.__auditarTraspasos = true` deja en `window.__traspasos`
   // lo más que se mete cada brazo en el cuerpo en cada cuadro (en altos).
@@ -2055,17 +2099,23 @@ export function crearNumerito(personaje, { idle, camina, orbe, alPatear } = {}) 
 
   // En desarrollo, `window.__auditarSaltos = true` deja en `window.__saltos` por
   // cuadro dónde quedan manos, codos, puntas de los dedos, cabeza, rodillas y
-  // pies (en mundo) y cómo quedan girados manos y antebrazos, para encontrar
-  // brincos: un cuadro que se mueve mucho más que los de junto.
+  // pies y cómo quedan girados manos y antebrazos, para encontrar brincos: un
+  // cuadro que se mueve mucho más que los de junto. Va en el espacio del
+  // personaje (escalado a mundo): la cámara del personalizador gira y mueve el
+  // rig, y en mundo cada corte salía como brinco de todo el cuerpo.
   function grabarSaltos(t, fit, que) {
     if (!import.meta.env.DEV || !window.__auditarSaltos) return
     const fila = [+t.toFixed(4), que, fit.alto]
+    personaje.updateMatrixWorld(true)
+    const inv = personaje.matrixWorld.clone().invert()
+    const esc = personaje.matrixWorld.getMaxScaleOnAxis()
+    const qInv = personaje.getWorldQuaternion(new THREE.Quaternion()).invert()
     for (const b of [huesos.manoL, huesos.manoR, huesos.antebrazoL, huesos.antebrazoR, dedos.L[2], dedos.R[2], huesos.cabeza, huesos.piernaL, huesos.piernaR, huesos.pieL, huesos.pieR]) {
-      b.getWorldPosition(_v1)
+      b.getWorldPosition(_v1).applyMatrix4(inv).multiplyScalar(esc)
       fila.push(_v1.x, _v1.y, _v1.z)
     }
     for (const b of [huesos.manoL, huesos.manoR, huesos.giroL2, huesos.giroR2]) {
-      b.getWorldQuaternion(_q1)
+      b.getWorldQuaternion(_q1).premultiply(qInv)
       fila.push(_q1.x, _q1.y, _q1.z, _q1.w)
     }
     ;(window.__saltos ||= []).push(fila)
@@ -2100,6 +2150,34 @@ export function crearNumerito(personaje, { idle, camina, orbe, alPatear } = {}) 
 
   const hombrosHueso = [h('shoulderl'), h('shoulderr')]
   const derechos = [huesos.rootx, huesos.spine_01x, huesos.spine_02x, huesos.spine_03x, huesos.cuello, huesos.cabeza, ...hombrosHueso]
+  // Del último cuadro, por brazo: lo que se apartó en el numerito, en la pose
+  // del estirón y en su base (en altos y en el espacio del cuerpo), y el giro
+  // de la palma en el arco. `APARTA_SUELTA`: en cuánto se suelta lo apartado (s).
+  const memoriaNumerito = new Map()
+  const memoriaAparta = new Map()
+  const memoriaBase = new Map()
+  const memoriaPalma = new Map()
+  const APARTA_SUELTA = 0.15
+  // `apartar` partiendo de lo que se apartó el cuadro anterior (en el espacio
+  // del cuerpo, que la cámara gira), que se va soltando para no quedarse lejos;
+  // con un salto de la barra (o al empezar) parte de cero. Un regreso de unos
+  // milisegundos no es salto: el reloj de la historia y el del rig no van en
+  // el mismo instante y a veces `t` baja un poco (y empezaba de cero a media
+  // pose). `tope`, en altos, sobre la meta sin apartar.
+  function apartarConMemoria(memoria, s, t, lista, meta, posar, alto, cuerpoQ, veces, peso, tope = Infinity, quedaMejor = true) {
+    if (!lista) return
+    const base = meta.clone()
+    const mem = memoria.get(s)
+    const dt = mem ? t - mem.t : -1
+    if (mem && Math.abs(dt) < 0.1) {
+      meta.addScaledVector(mem.off.clone().applyQuaternion(cuerpoQ), alto * Math.exp(-Math.max(0, dt) / APARTA_SUELTA))
+      posar(meta)
+    }
+    apartar(lista, meta, posar, alto, veces, peso, tope, quedaMejor)
+    const off = meta.clone().sub(base)
+    if (off.length() > tope * alto) { off.setLength(tope * alto); meta.copy(base).add(off); posar(meta) }
+    memoria.set(s, { t, off: off.divideScalar(alto).applyQuaternion(cuerpoQ.clone().invert()) })
+  }
   function inspeccionar(t, rig, fit) {
     const I = INSPECCION
     partirDelMixer()
@@ -2298,20 +2376,31 @@ export function crearNumerito(personaje, { idle, camina, orbe, alPatear } = {}) 
       if (x <= 0) return 0
       return C.a * Math.sin(2 * Math.PI * C.hz * x) * Math.exp(-C.frena * x) * (1 - suave(tramo(t, I.dura - 0.3, I.dura)))
     }
+    const baseFunde = suave(tramo(t, 0, 0.35)) * (1 - suave(tramo(t, I.dura - 0.5, I.dura)))
     for (const [s, brazo, antebrazo, mano] of [[1, huesos.brazoL, huesos.antebrazoL, huesos.manoL], [-1, huesos.brazoR, huesos.antebrazoR, huesos.manoR]]) {
       const m = unas(s)
       const e = m.peso
       const arribaW = brazoDe(s)
       const abajoW = brazoDe(-s)
       const peso = Math.max(e, arribaW, abajoW)
-      if (peso < 0.001) {
-        // Sin pose propia, el del idle tampoco se mete (colgando rozaba el muslo).
-        rotarMundo(brazo, derecha, columpio(s))
+      let angPalma = null
+      // La base, con o sin pose propia: el brazo de la animación columpiándose
+      // y fuera del cuerpo (colgando rozaba el muslo). Las poses parten de ella:
+      // partiendo del brazo metido, al entrar y salir de cada una brincaba lo
+      // que la base lo sacaba, hasta 25° en un cuadro (Oscar: "los brazos se
+      // teletransportan").
+      rotarMundo(brazo, derecha, columpio(s))
+      {
         const meta = mano.getWorldPosition(new THREE.Vector3())
         const codo = antebrazo.getWorldPosition(new THREE.Vector3())
-        apartar(s > 0 ? contacto?.brazoL : contacto?.brazoR, meta, (m) => ik(brazo, antebrazo, mano, m, codo, 1), alto)
-        continue
+        const desde = meta.clone()
+        const posarBase = () => ik(brazo, antebrazo, mano, meta, codo, 1)
+        apartarConMemoria(memoriaBase, s, t, s > 0 ? contacto?.brazoL : contacto?.brazoR, meta, posarBase, alto, cuerpoQ, 8, 1, Infinity, false)
+        // Entra y sale con fundido: la capa empieza y termina sobre el idle,
+        // que trae la mano rozando el muslo, y de golpe brincaba lo apartado.
+        if (baseFunde < 1 && !meta.equals(desde)) { meta.lerp(desde, 1 - baseFunde); posarBase() }
       }
+      if (peso < 0.001) continue
       // El hombro del brazo que sube se encoge (sube la clavícula), como en la
       // referencia: con su cabezota el brazo no alcanzaba a pasar por encima.
       if (arribaW > 0.001) rotarMundo(s > 0 ? hombrosHueso[0] : hombrosHueso[1], adelante, s * I.encoge * arribaW)
@@ -2417,7 +2506,10 @@ export function crearNumerito(personaje, { idle, camina, orbe, alPatear } = {}) 
         // En el arco, la palma hacia adentro (viendo la cabeza, Oscar) girando
         // solo la mano, que va despegada: ni el codo ni el antebrazo se tuercen.
         // Le falta casi media vuelta: el ángulo va de 0 a una vuelta (no de
-        // -media a media), para que no cambie de lado a medio camino.
+        // -media a media), para que no cambie de lado a medio camino. Después
+        // sigue al del cuadro anterior (`memoriaPalma`): al subir y al bajar el
+        // brazo, con la palma casi de frente a la cabeza, pasaba de 0 a una vuelta
+        // y la mano brincaba lo que pesaba esa vuelta (hasta 38° en un cuadro).
         if (arribaW > 0.001) {
           const eje = mano.getWorldPosition(new THREE.Vector3()).sub(antebrazo.getWorldPosition(new THREE.Vector3())).normalize()
           const palma = new THREE.Vector3(0, 0, -1).transformDirection(mano.matrixWorld)
@@ -2428,11 +2520,14 @@ export function crearNumerito(personaje, { idle, camina, orbe, alPatear } = {}) 
             palma.normalize()
             hacia.normalize()
             let ang = Math.atan2(eje.dot(_v2.crossVectors(palma, hacia)), palma.dot(hacia))
-            if (ang < 0) ang += 2 * Math.PI
+            const previa = memoriaPalma.get(s)
+            const dtP = previa ? t - previa.t : -1
+            if (previa && Math.abs(dtP) < 0.1) ang = previa.ang + Math.atan2(Math.sin(ang - previa.ang), Math.cos(ang - previa.ang))
+            else if (ang < 0) ang += 2 * Math.PI
+            angPalma = ang
             rotarMundo(mano, eje, arribaW * ang)
           }
         }
-        rotarMundo(brazo, derecha, columpio(s))
         // Los dedos: estirados para las uñas, en ola revisándolas; estirados en
         // el arco; juntos en la cintura.
         dedosDe.forEach((f, i) => {
@@ -2442,15 +2537,20 @@ export function crearNumerito(personaje, { idle, camina, orbe, alPatear } = {}) 
           f.updateMatrixWorld(true)
         })
       }
-      // Que ni la mano ni el antebrazo se metan al cráneo o a las costillas.
+      // Que ni la mano ni el antebrazo se metan al cráneo o a las costillas,
+      // partiendo de lo que se apartó el cuadro anterior (en el espacio del
+      // cuerpo, que la cámara gira), que se va soltando para no quedarse lejos.
       posar()
-      apartar(s > 0 ? contacto?.brazoL : contacto?.brazoR, objetivo, posar, alto, 16, peso, 0.12)
+      const lista = s > 0 ? contacto?.brazoL : contacto?.brazoR
+      apartarConMemoria(memoriaAparta, s, t, lista, objetivo, posar, alto, cuerpoQ, 16, peso, 0.12)
+      if (angPalma != null) memoriaPalma.set(s, { t, ang: angPalma })
+      else memoriaPalma.delete(s)
     }
     auditar(t, fit, 'inspeccion')
     tocados.forEach((b, i) => copiar(escrita[i], b))
     hayEscrita = true
   }
-  function dejarInspeccion() { reponer() }
+  function dejarInspeccion() { reponer(); memoriaAparta.clear(); memoriaBase.clear(); memoriaPalma.clear() }
 
   function soltar() {
     if (!activo) return
@@ -2458,6 +2558,7 @@ export function crearNumerito(personaje, { idle, camina, orbe, alPatear } = {}) 
     estado = null
     tPrevio = 0
     reponer()
+    memoriaNumerito.clear()
     rigidas.quitar()
     personaje.position.set(0, 0, 0)
     personaje.rotation.set(0, 0, 0)

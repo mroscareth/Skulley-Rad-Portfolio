@@ -13,7 +13,7 @@ import PortraitGlobo from './PortraitGlobo.jsx'
 import { applyToonBanding } from '../lib/toonBanding.js'
 import { compileAsyncSafe } from '../lib/compileAsyncSafe.js'
 import { applyCharacterColorsToScene, getCharacterColors, CHARACTER_COLOR_EVENT, EYES_ORB_ONLY } from '../lib/characterColors.js'
-import { URL_LENTES, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_INFLADA, URL_PANTALONES, URL_MUNEQUERAS, URL_BEANIE, ponerLentes, ponerBoxers, ponerChamarra, ponerHoodie, ponerInflada, ponerPantalones, ponerMunequeras, ponerBeanie, mostrarAccesorios, getAccesorios, tapadoPorProp, ACCESORIOS_EVENT } from '../lib/accesorios.js'
+import { URL_LENTES, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_INFLADA, URL_PANTALONES, URL_MUNEQUERAS, URL_BEANIE, URL_IDLE, conClipsDelBlend, ponerLentes, ponerBoxers, ponerChamarra, ponerHoodie, ponerInflada, ponerPantalones, ponerMunequeras, ponerBeanie, mostrarAccesorios, getAccesorios, tapadoPorProp, ACCESORIOS_EVENT } from '../lib/accesorios.js'
 import { crearApartaManos } from '../lib/apartaManos.js'
 import { applyCharacterSkinShader, materialTakesSkin, skinLineColor, SKIN_LINE_COLOR_EVENT, getSkinForcedColors } from '../lib/skinShaders.js'
 import CharacterNormalPass from './fx/CharacterNormalPass.jsx'
@@ -109,6 +109,7 @@ function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
   const pantalonesGltf = useGLTF(URL_PANTALONES, true)
   const munequerasGltf = useGLTF(URL_MUNEQUERAS, true)
   const beanieGltf = useGLTF(URL_BEANIE, true)
+  const idleGltf = useGLTF(URL_IDLE, true)
   // Detect GPU compressed-texture support once per renderer
   useEffect(() => { detectKTX2Support(gl) }, [gl])
   // Load gold model WITHOUT KTX2 (re-exported with standard JPEG textures)
@@ -194,9 +195,9 @@ function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
 
   // Clone animation clips per scene swap to avoid stale PropertyBinding cache (T-pose)
   const animations = useMemo(
-    () => baseAnimations.map((clip) => clip.clone()),
+    () => conClipsDelBlend(baseAnimations, idleGltf).map((clip) => clip.clone()),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [baseAnimations, activeScene],
+    [baseAnimations, idleGltf, activeScene],
   )
 
   // Isolate portrait materials so they don't share instances with the Player

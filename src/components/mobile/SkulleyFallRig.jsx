@@ -27,7 +27,7 @@ import { RUNE_FONT_FAMILY_BOLD } from '../../lib/installRuneFont.js'
 import { registrarCabeza } from '../../lib/cabezaEnPantalla.js'
 import { instalarPrepaso } from '../../lib/prepasoProfundidad.js'
 import LlamaMano from '../fx/LlamaMano.jsx'
-import { URL_LENTES, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_TENIS, URL_INFLADA, URL_BOTAS, URL_PANTALONES, URL_MUNEQUERAS, URL_BEANIE, ponerLentes, ponerBoxers, ponerChamarra, ponerHoodie, ponerTenis, ponerInflada, ponerBotas, ponerPantalones, ponerMunequeras, ponerBeanie, pasoCordones, getAccesorios, tapadoPorProp, ACCESORIOS_EVENT } from '../../lib/accesorios.js'
+import { URL_LENTES, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_TENIS, URL_INFLADA, URL_BOTAS, URL_PANTALONES, URL_MUNEQUERAS, URL_BEANIE, URL_IDLE, conClipsDelBlend, ponerLentes, ponerBoxers, ponerChamarra, ponerHoodie, ponerTenis, ponerInflada, ponerBotas, ponerPantalones, ponerMunequeras, ponerBeanie, pasoCordones, getAccesorios, tapadoPorProp, ACCESORIOS_EVENT } from '../../lib/accesorios.js'
 import { telaDe } from '../../lib/telaProp.js'
 import { crearApartaManos } from '../../lib/apartaManos.js'
 import { armarLentesArticulados, ponerPiezasLentes } from '../../lib/lentesArticulados.js'
@@ -1130,6 +1130,8 @@ useGLTF.preload(URL_INFLADA, true)
 useGLTF.preload(URL_BOTAS, true)
 useGLTF.preload(URL_MUNEQUERAS, true)
 useGLTF.preload(URL_BEANIE, true)
+// El idle corregido (reemplaza al de character.glb)
+useGLTF.preload(URL_IDLE, true)
 // Cuadros con Skulley en pantalla antes de preparar lo que solo usa la historia
 // (el numerito y PrecompilaDesarme): primero que salga él.
 const ESPERA_TRAS_SKULLEY = 20
@@ -1155,7 +1157,9 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
 
   useEffect(() => { detectKTX2Support(gl) }, [gl])
 
-  const { scene, animations } = useGLTF(MODELO_URL, true, true, extendGLTFLoaderKTX2)
+  const { scene, animations: clipsGlb } = useGLTF(MODELO_URL, true, true, extendGLTFLoaderKTX2)
+  const idleGltf = useGLTF(URL_IDLE, true)
+  const animations = useMemo(() => conClipsDelBlend(clipsGlb, idleGltf), [clipsGlb, idleGltf])
   const lentesGltf = useGLTF(URL_LENTES, true)
   const boxersGltf = useGLTF(URL_BOXERS, true)
   const chamarraGltf = useGLTF(URL_CHAMARRA, true)
