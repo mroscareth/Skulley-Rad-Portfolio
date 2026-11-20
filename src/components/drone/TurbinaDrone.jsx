@@ -102,7 +102,7 @@ const _x = new THREE.Vector3()
 const _y = new THREE.Vector3()
 const _c = new THREE.Vector3()
 const _prev = new THREE.Vector3()
-const _q = new THREE.Quaternion()
+const _q = new THREE.Vector3()
 
 export default function TurbinaDrone({ boquillaRef, dir = [0, 0, -1], escala = 1, intensidad, enojoRef }) {
   const { camera, size, gl } = useThree()
@@ -193,19 +193,28 @@ export default function TurbinaDrone({ boquillaRef, dir = [0, 0, -1], escala = 1
     const en = enojoRef?.current?.value ?? 0
     for (let k = 0; k < 4; k++) campo.u[`uC${k}`].value.copy(colores.frio[k]).lerp(colores.rojo[k], en)
     if (n > 0) {
+      // Cada bocanada se coloca donde se VE sobre el cuadro (un plano de frente a
+      // la cámara a la profundidad del centro): en el espacio de la vista y
+      // escalada por la perspectiva, como en LlamaMano. Proyectada plano, con la
+      // cámara alta del home lo cercano y lo lejano del chorro se corrían y
+      // salía chueco y despegado de la turbina (Oscar).
+      camera.updateMatrixWorld()
       _x.setFromMatrixColumn(camera.matrixWorld, 0)
       _y.setFromMatrixColumn(camera.matrixWorld, 1)
+      const persp = camera.isPerspectiveCamera
       let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
       _c.set(0, 0, 0)
       for (const b of e.bocanadas) _c.add(b.p)
       _c.divideScalar(n)
+      _q.copy(_c).applyMatrix4(camera.matrixWorldInverse)
       const loc = []
       for (const b of e.bocanadas) {
         const k = b.t / b.vida
         // crece rápido al nacer y se consume al final
-        const r = b.r * Math.min(1, k / 0.18 + 0.35) * (1 - k * k)
-        _v.subVectors(b.p, _c)
-        const x = _v.dot(_x), y = _v.dot(_y)
+        const r0 = b.r * Math.min(1, k / 0.18 + 0.35) * (1 - k * k)
+        _v.copy(b.p).applyMatrix4(camera.matrixWorldInverse)
+        const esc = persp ? _q.z / Math.min(-1e-4, _v.z) : 1
+        const x = _v.x * esc - _q.x, y = _v.y * esc - _q.y, r = r0 * esc
         loc.push([x, y, Math.max(r, 1e-4), 1.15 - 0.5 * k])
         x0 = Math.min(x0, x - r); x1 = Math.max(x1, x + r); y0 = Math.min(y0, y - r); y1 = Math.max(y1, y + r)
       }
@@ -260,7 +269,7 @@ export default function TurbinaDrone({ boquillaRef, dir = [0, 0, -1], escala = 1
     // tamaño de las chispas en pixeles a 1 unidad de distancia
     const fov = camera.isPerspectiveCamera ? THREE.MathUtils.degToRad(camera.fov) : 1
     chispas.m.uniforms.uEscalaPx.value = (size.height * gl.getPixelRatio()) / (2 * Math.tan(fov / 2))
-  })
+  }, 0.5)
 
   return (
     <>

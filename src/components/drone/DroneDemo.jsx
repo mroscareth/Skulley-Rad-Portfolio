@@ -39,6 +39,11 @@ const TOMAS = {
     guion: [[0, { accion: 'IdleTranquilo', expr: 'normal' }], [1.6, { expr: 'feliz' }], [4.0, { expr: 'normal' }],
       [5.0, { voltear: true }], [7.8, { expr: 'confundida' }], [11.0, { expr: 'enojada' }], [14.2, { expr: 'normal' }]],
   },
+  // la cámara alta del home, para revisar que el chorro salga derecho de la turbina
+  alto: {
+    dura: 4, cam: () => [40, 52, 8.5], seguir: true,
+    guion: [[0, { accion: 'IdleTranquilo', expr: 'normal' }], [0.4, { accion: 'Arrancar' }]],
+  },
   acciones: {
     dura: 15, cam: () => [35, 12, 7.0], seguir: true,
     guion: [[0, { accion: 'IdleTranquilo', expr: 'normal' }], [2.2, { accion: 'Arrancar' }], [6.6, { accion: 'Detenerse' }],
