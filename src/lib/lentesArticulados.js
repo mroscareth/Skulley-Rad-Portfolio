@@ -27,6 +27,21 @@ export const LENTES_BISAGRAS = {
   abre: -0.1,        // rad: lo que se abren de más
 }
 
+// Las de lentes3d.glb (Oscar, 2026-11-19; las da bisagras() de
+// scripts/skulley-anim/lentes3d.py). El plano queda entre la lengüeta del
+// armazón y el principio de las patas (0.3 mm de cada lado) y el eje, en la
+// esquina de adentro de la pata: doblada queda detrás del plano, sin meterse
+// en el armazón, como el cartón que se dobla en la orilla.
+export const LENTES3D_BISAGRAS = {
+  ...LENTES_BISAGRAS,
+  bisagraZ: 0.2441,
+  bisagraX: 0.224,
+  bisagraY: [1.5111, 1.5363],
+}
+
+// Qué lentes caen con bisagras, por su id de accesorio (accesorios.js)
+export const BISAGRAS_DE = { lentes: LENTES_BISAGRAS, lentes3d: LENTES3D_BISAGRAS }
+
 /** Las tres piezas y su física. Cada vértice es del armazón o de una pata
  *  según dónde queda respecto a la bisagra; cada triángulo, de la pieza de la
  *  mayoría de sus vértices. */

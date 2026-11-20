@@ -29,7 +29,7 @@ import {
   LASER_ARM_YAW, laserReachFor,
 } from '../lib/laserPose.js'
 import { applyCharacterColorsToScene, getCharacterColors, CHARACTER_COLOR_EVENT, EYES_ORB_ONLY } from '../lib/characterColors.js'
-import { URL_LENTES, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_TENIS, URL_INFLADA, URL_BOTAS, URL_PANTALONES, URL_MUNEQUERAS, URL_BEANIE, URL_CORRER, URL_IDLE, conClipsDelBlend, ponerLentes, ponerBoxers, ponerChamarra, ponerHoodie, ponerTenis, ponerInflada, ponerBotas, ponerPantalones, ponerMunequeras, ponerBeanie, opcionesTelaChamarra, opcionesTelaHoodie, opcionesTelaInflada, opcionesTelaPantalones, opcionesTelaBeanie, pasoCordones, getAccesorios, tapadoPorProp, ACCESORIOS_EVENT } from '../lib/accesorios.js'
+import { URL_LENTES, URL_LENTES3D, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_TENIS, URL_INFLADA, URL_BOTAS, URL_PANTALONES, URL_MUNEQUERAS, URL_BEANIE, URL_CORRER, URL_IDLE, conClipsDelBlend, ponerLentes, ponerLentes3D, ponerBoxers, ponerChamarra, ponerHoodie, ponerTenis, ponerInflada, ponerBotas, ponerPantalones, ponerMunequeras, ponerBeanie, opcionesTelaChamarra, opcionesTelaHoodie, opcionesTelaInflada, opcionesTelaPantalones, opcionesTelaBeanie, pasoCordones, getAccesorios, tapadoPorProp, ACCESORIOS_EVENT } from '../lib/accesorios.js'
 import { telaDe } from '../lib/telaProp.js'
 import { crearApartaManos } from '../lib/apartaManos.js'
 import { crearConstructorTela, colocarTela, pasoTela as pasoTelaSuelta, escribirTela, normalesDeMalla, bajoDe } from '../lib/telaSuelta.js'
@@ -235,6 +235,7 @@ export default function Player({
   const pantalonesGltf = useGLTF(URL_PANTALONES, true)
   const munequerasGltf = useGLTF(URL_MUNEQUERAS, true)
   const beanieGltf = useGLTF(URL_BEANIE, true)
+  const lentes3dGltf = useGLTF(URL_LENTES3D, true)
   const correrGltf = useGLTF(URL_CORRER, true)
   const idleGltf = useGLTF(URL_IDLE, true)
   // Detect GPU compressed-texture support once per renderer
@@ -252,6 +253,7 @@ export default function Player({
   const scene = useMemo(() => {
     const s = SkeletonUtils.clone(originalScene)
     try { ponerLentes(s, lentesGltf) } catch { }
+    try { ponerLentes3D(s, lentes3dGltf) } catch (e) { if (import.meta.env.DEV) console.warn('[lentes3d]', e) }
     try {
       ponerBoxers(s, boxersGltf)
       // la tela se arma aquí, en reposo y con la carga, y no al prenderla a media partida
@@ -274,7 +276,7 @@ export default function Player({
       s.userData.apartaManos = crearApartaManos(s, (b) => new THREE.Matrix4().multiplyMatrices(raizInv, b.matrixWorld))
     } catch { }
     return s
-  }, [originalScene, lentesGltf, boxersGltf, chamarraGltf, hoodieGltf, tenisGltf, infladaGltf, botasGltf, pantalonesGltf, munequerasGltf, beanieGltf])
+  }, [originalScene, lentesGltf, boxersGltf, chamarraGltf, hoodieGltf, tenisGltf, infladaGltf, botasGltf, pantalonesGltf, munequerasGltf, beanieGltf, lentes3dGltf])
 
   // CRITICAL: Clone animation clips per scene swap. Three.js AnimationClips cache
   // PropertyBinding objects that reference specific skeleton nodes. When the scene

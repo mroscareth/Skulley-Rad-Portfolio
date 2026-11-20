@@ -13,7 +13,7 @@ import PortraitGlobo from './PortraitGlobo.jsx'
 import { applyToonBanding } from '../lib/toonBanding.js'
 import { compileAsyncSafe } from '../lib/compileAsyncSafe.js'
 import { applyCharacterColorsToScene, getCharacterColors, CHARACTER_COLOR_EVENT, EYES_ORB_ONLY } from '../lib/characterColors.js'
-import { URL_LENTES, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_INFLADA, URL_PANTALONES, URL_MUNEQUERAS, URL_BEANIE, URL_IDLE, conClipsDelBlend, ponerLentes, ponerBoxers, ponerChamarra, ponerHoodie, ponerInflada, ponerPantalones, ponerMunequeras, ponerBeanie, mostrarAccesorios, getAccesorios, tapadoPorProp, ACCESORIOS_EVENT } from '../lib/accesorios.js'
+import { URL_LENTES, URL_LENTES3D, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_INFLADA, URL_PANTALONES, URL_MUNEQUERAS, URL_BEANIE, URL_IDLE, conClipsDelBlend, ponerLentes, ponerLentes3D, ponerBoxers, ponerChamarra, ponerHoodie, ponerInflada, ponerPantalones, ponerMunequeras, ponerBeanie, mostrarAccesorios, getAccesorios, tapadoPorProp, ACCESORIOS_EVENT } from '../lib/accesorios.js'
 import { crearApartaManos } from '../lib/apartaManos.js'
 import { applyCharacterSkinShader, materialTakesSkin, skinLineColor, SKIN_LINE_COLOR_EVENT, getSkinForcedColors } from '../lib/skinShaders.js'
 import CharacterNormalPass from './fx/CharacterNormalPass.jsx'
@@ -109,6 +109,7 @@ function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
   const pantalonesGltf = useGLTF(URL_PANTALONES, true)
   const munequerasGltf = useGLTF(URL_MUNEQUERAS, true)
   const beanieGltf = useGLTF(URL_BEANIE, true)
+  const lentes3dGltf = useGLTF(URL_LENTES3D, true)
   const idleGltf = useGLTF(URL_IDLE, true)
   // Detect GPU compressed-texture support once per renderer
   useEffect(() => { detectKTX2Support(gl) }, [gl])
@@ -161,6 +162,7 @@ function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
     } catch { }
 
     try { ponerLentes(clone, lentesGltf) } catch { }
+    try { ponerLentes3D(clone, lentes3dGltf) } catch { }
     try { ponerBoxers(clone, boxersGltf) } catch { }
     try { ponerChamarra(clone, chamarraGltf) } catch { }
     try { ponerHoodie(clone, hoodieGltf) } catch { }
@@ -175,7 +177,7 @@ function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
       clone.userData.apartaManos = crearApartaManos(clone, (b) => new THREE.Matrix4().multiplyMatrices(raizInv, b.matrixWorld))
     } catch { }
     return clone
-  }, [activeScene, lentesGltf, boxersGltf, chamarraGltf, hoodieGltf, infladaGltf, pantalonesGltf, munequerasGltf, beanieGltf])
+  }, [activeScene, lentesGltf, boxersGltf, chamarraGltf, hoodieGltf, infladaGltf, pantalonesGltf, munequerasGltf, beanieGltf, lentes3dGltf])
 
   // Los props que se prenden y apagan en Customize, y lo que tapan (el pelo con el beanie)
   useEffect(() => {

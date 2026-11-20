@@ -27,10 +27,10 @@ import { RUNE_FONT_FAMILY_BOLD } from '../../lib/installRuneFont.js'
 import { registrarCabeza } from '../../lib/cabezaEnPantalla.js'
 import { instalarPrepaso } from '../../lib/prepasoProfundidad.js'
 import LlamaMano from '../fx/LlamaMano.jsx'
-import { URL_LENTES, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_TENIS, URL_INFLADA, URL_BOTAS, URL_PANTALONES, URL_MUNEQUERAS, URL_BEANIE, URL_IDLE, conClipsDelBlend, ponerLentes, ponerBoxers, ponerChamarra, ponerHoodie, ponerTenis, ponerInflada, ponerBotas, ponerPantalones, ponerMunequeras, ponerBeanie, pasoCordones, getAccesorios, tapadoPorProp, ACCESORIOS_EVENT } from '../../lib/accesorios.js'
+import { URL_LENTES, URL_LENTES3D, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_TENIS, URL_INFLADA, URL_BOTAS, URL_PANTALONES, URL_MUNEQUERAS, URL_BEANIE, URL_IDLE, conClipsDelBlend, ponerLentes, ponerLentes3D, ponerBoxers, ponerChamarra, ponerHoodie, ponerTenis, ponerInflada, ponerBotas, ponerPantalones, ponerMunequeras, ponerBeanie, pasoCordones, getAccesorios, tapadoPorProp, ACCESORIOS_EVENT } from '../../lib/accesorios.js'
 import { telaDe } from '../../lib/telaProp.js'
 import { crearApartaManos } from '../../lib/apartaManos.js'
-import { armarLentesArticulados, ponerPiezasLentes } from '../../lib/lentesArticulados.js'
+import { armarLentesArticulados, ponerPiezasLentes, BISAGRAS_DE } from '../../lib/lentesArticulados.js'
 
 // La caída: Skulley gira, le cae un rayo, se desarma y sus huesos aterrizan
 // en el pie de página.
@@ -726,26 +726,31 @@ function PicarOjos({ modelo, rigRef, escenaRef, fitRef, activoAhora, personaliza
   const activoRef = useRef(false)
   const tmp = useMemo(() => ({ s: new THREE.Sphere(), v: new THREE.Vector3(), c: new THREE.Vector3() }), [])
 
-  // Los lentes (si el personaje los trae): la malla, su caja de reposo y, al
-  // tirarlos la primera vez, sus tres piezas (armazón y patas, en reposo y
-  // cada una centrada en el suyo) y su física, que se reusan.
-  const lentesRef = useRef(null)
+  // Los lentes (los de sol y los 3D, si el personaje los trae; se excluyen,
+  // así que se ve uno a la vez): por cada par, la malla, sus bisagras, su caja
+  // de reposo y, al tirarlos la primera vez, sus tres piezas (armazón y patas,
+  // en reposo y cada una centrada en el suyo) y su física, que se reusan.
+  const lentesRef = useRef([])
   useEffect(() => {
-    let malla = null
-    modelo.traverse((o) => { if (!malla && o.userData?.accesorio === 'lentes' && o.isSkinnedMesh) malla = o })
-    if (!malla) { lentesRef.current = null; return undefined }
-    malla.geometry.computeBoundingBox()
-    const l = {
-      malla, caja: malla.geometry.boundingBox.clone(), piezas: null, cuerpo: null,
-      // fuera: desde que se tiran hasta que regresan
-      fuera: false, golpesOidos: 0, vuelveA: 0, parpadeoDesde: -1, parpadeoT: -1,
-      M: new THREE.Matrix4(), esquina: new THREE.Vector3(),
-    }
-    lentesRef.current = l
+    const lista = []
+    modelo.traverse((o) => {
+      const C = BISAGRAS_DE[o.userData?.accesorio]
+      if (!C || !o.isSkinnedMesh) return
+      o.geometry.computeBoundingBox()
+      lista.push({
+        malla: o, C, caja: o.geometry.boundingBox.clone(), piezas: null, cuerpo: null,
+        // fuera: desde que se tiran hasta que regresan
+        fuera: false, golpesOidos: 0, vuelveA: 0, parpadeoDesde: -1, parpadeoT: -1,
+        M: new THREE.Matrix4(), esquina: new THREE.Vector3(),
+      })
+    })
+    lentesRef.current = lista
     return () => {
-      malla.userData.caido = false
-      for (const p of l.piezas || []) { p.parent?.remove(p); p.geometry.dispose() }
-      lentesRef.current = null
+      for (const l of lista) {
+        l.malla.userData.caido = false
+        for (const p of l.piezas || []) { p.parent?.remove(p); p.geometry.dispose() }
+      }
+      lentesRef.current = []
     }
   }, [modelo])
   // Dónde están ahora: hueso de la cabeza · su inverso (bindMode 'attached').
@@ -753,31 +758,33 @@ function PicarOjos({ modelo, rigRef, escenaRef, fitRef, activoAhora, personaliza
     const sk = l.malla.skeleton
     return l.M.multiplyMatrices(sk.bones[0].matrixWorld, sk.boneInverses[0])
   }, [])
-  // ¿El puntero cae sobre los lentes? La caja de reposo, puesta y proyectada:
-  // en la pantalla principal la cabeza casi siempre va de frente.
+  // ¿El puntero cae sobre unos lentes puestos? La caja de reposo, puesta y
+  // proyectada: en la pantalla principal la cabeza casi siempre va de frente.
+  // Regresa ese par (o null).
   const tocaLentes = useCallback((x, y) => {
-    const l = lentesRef.current
-    if (!l || l.fuera || !l.malla.visible) return false
     const rect = gl.domElement.getBoundingClientRect()
-    if (!rect.width) return false
-    const M = matrizLentes(l)
-    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
-    for (let k = 0; k < 8; k++) {
-      const e = l.esquina.set(k & 1 ? l.caja.max.x : l.caja.min.x, k & 2 ? l.caja.max.y : l.caja.min.y, k & 4 ? l.caja.max.z : l.caja.min.z)
-      e.applyMatrix4(M).project(camera)
-      const sx = rect.left + (e.x + 1) * 0.5 * rect.width
-      const sy = rect.top + (1 - e.y) * 0.5 * rect.height
-      x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); y0 = Math.min(y0, sy); y1 = Math.max(y1, sy)
+    if (!rect.width) return null
+    for (const l of lentesRef.current) {
+      if (l.fuera || !l.malla.visible) continue
+      const M = matrizLentes(l)
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
+      for (let k = 0; k < 8; k++) {
+        const e = l.esquina.set(k & 1 ? l.caja.max.x : l.caja.min.x, k & 2 ? l.caja.max.y : l.caja.min.y, k & 4 ? l.caja.max.z : l.caja.min.z)
+        e.applyMatrix4(M).project(camera)
+        const sx = rect.left + (e.x + 1) * 0.5 * rect.width
+        const sy = rect.top + (1 - e.y) * 0.5 * rect.height
+        x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); y0 = Math.min(y0, sy); y1 = Math.max(y1, sy)
+      }
+      if (x >= x0 && x <= x1 && y >= y0 && y <= y1) return l
     }
-    return x >= x0 && x <= x1 && y >= y0 && y <= y1
+    return null
   }, [gl, camera, matrizLentes])
   // Saltan de la cara en la pose de este cuadro; la original se oculta
   // (FallingSkulley respeta `caido`).
-  const tirarLentes = useCallback(() => {
-    const l = lentesRef.current
+  const tirarLentes = useCallback((l) => {
     const rig = rigRef.current
     if (!l || !rig) return
-    if (!l.piezas) Object.assign(l, armarLentesArticulados(l.malla))
+    if (!l.piezas) Object.assign(l, armarLentesArticulados(l.malla, l.C))
     rig.updateMatrixWorld(true)
     // de reposo al contenedor: giro y dónde queda su centro
     const aRig = rig.matrixWorld.clone().invert().multiply(matrizLentes(l))
@@ -801,8 +808,7 @@ function PicarOjos({ modelo, rigRef, escenaRef, fitRef, activoAhora, personaliza
     l.malla.visible = false
     playEyePop()
   }, [rigRef, matrizLentes])
-  const reponerLentes = useCallback(() => {
-    const l = lentesRef.current
+  const reponerLentes = useCallback((l) => {
     if (!l || !l.fuera) return
     l.fuera = false
     l.malla.userData.caido = false
@@ -902,11 +908,12 @@ function PicarOjos({ modelo, rigRef, escenaRef, fitRef, activoAhora, personaliza
     // y `window.__lentesCaidos()`, los lentes tirados
     // (`__lentesCaidos(20000)`: que tarden eso en regresar, para revisarlos)
     window.__lentesCaidos = (vuelveMs) => {
-      const l = lentesRef.current
+      const lista = lentesRef.current
+      const l = lista.find((x) => x.fuera) || lista.find((x) => x.malla.visible) || lista[0]
       if (!l) return null
       if (vuelveMs != null && l.fuera) l.vuelveA = performance.now() + vuelveMs
       const c = l.cuerpo
-      return { fuera: l.fuera, caido: !!l.malla.userData.caido, dormido: c?.dormido, golpes: c?.golpes, vuelveEn: Math.round(l.vuelveA - performance.now()), parpadeoT: Math.round(l.parpadeoT), bisagras: c?.bisagras.map((b) => +b.angulo.toFixed(2)), piezas: c?.piezas().map((p) => p.c.map((n) => +n.toFixed(3))), piso: fitRef.current?.piso }
+      return { accesorio: l.malla.userData.accesorio, fuera: l.fuera, caido: !!l.malla.userData.caido, dormido: c?.dormido, golpes: c?.golpes, vuelveEn: Math.round(l.vuelveA - performance.now()), parpadeoT: Math.round(l.parpadeoT), bisagras: c?.bisagras.map((b) => +b.angulo.toFixed(2)), piezas: c?.piezas().map((p) => p.c.map((n) => +n.toFixed(3))), piso: fitRef.current?.piso }
     }
     return () => { delete window.__ojos; delete window.__lentesCaidos }
   }, [gl, camera, centroDe, tmp, fitRef])
@@ -975,7 +982,8 @@ function PicarOjos({ modelo, rigRef, escenaRef, fitRef, activoAhora, personaliza
       if (!activoAhora() || e?.pausa != null) return
       if (ev.button !== 0 || esUi(ev.target)) return
       // con lentes, primero se caen ellos (tapan los ojos)
-      if (tocaLentes(ev.clientX, ev.clientY)) { tirarLentes(); return }
+      const lentes = tocaLentes(ev.clientX, ev.clientY)
+      if (lentes) { tirarLentes(lentes); return }
       const ojo = tocado(ev.clientX, ev.clientY)
       if (!ojo) return
       ojo.piquetes += 1
@@ -1018,7 +1026,7 @@ function PicarOjos({ modelo, rigRef, escenaRef, fitRef, activoAhora, personaliza
       playEyeRespawn()
     }
     l.parpadeoT = ahora - l.parpadeoDesde
-    if (l.parpadeoT >= OJOS.parpadeoMs) { reponerLentes(); return }
+    if (l.parpadeoT >= OJOS.parpadeoMs) { reponerLentes(l); return }
     const enCara = Math.floor(l.parpadeoT / OJOS.pasoParpadeoMs) % 2 === 0
     l.malla.userData.caido = !enCara
     for (const p of l.piezas) p.visible = !enCara
@@ -1030,9 +1038,9 @@ function PicarOjos({ modelo, rigRef, escenaRef, fitRef, activoAhora, personaliza
     // entrada a las experiencias se quedan en el piso) y regresan a la cara
     // al rato, con el personalizador del teléfono abierto o ya a oscuras en
     // la historia.
-    const l = lentesRef.current
-    if (l?.fuera) {
-      if (personalizaRef?.current?.eligeSkin || (e?.enHistoria && (e.ambiente ?? 1) < 0.3)) reponerLentes()
+    for (const l of lentesRef.current) {
+      if (!l.fuera) continue
+      if (personalizaRef?.current?.eligeSkin || (e?.enHistoria && (e.ambiente ?? 1) < 0.3)) reponerLentes(l)
       else if (e?.pausa == null) lentesEnElPiso(l, Math.min(0.05, delta || 0))
     }
     if (!e || !activoAhora()) {
@@ -1130,6 +1138,7 @@ useGLTF.preload(URL_INFLADA, true)
 useGLTF.preload(URL_BOTAS, true)
 useGLTF.preload(URL_MUNEQUERAS, true)
 useGLTF.preload(URL_BEANIE, true)
+useGLTF.preload(URL_LENTES3D, true)
 // El idle corregido (reemplaza al de character.glb)
 useGLTF.preload(URL_IDLE, true)
 // Cuadros con Skulley en pantalla antes de preparar lo que solo usa la historia
@@ -1170,6 +1179,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
   const pantalonesGltf = useGLTF(URL_PANTALONES, true)
   const munequerasGltf = useGLTF(URL_MUNEQUERAS, true)
   const beanieGltf = useGLTF(URL_BEANIE, true)
+  const lentes3dGltf = useGLTF(URL_LENTES3D, true)
 
   const cloned = useMemo(() => {
     const clone = SkeletonUtils.clone(scene)
@@ -1177,6 +1187,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     // toon, la tinta, la sombra y el despiece, y se compilan con todo lo demás
     // (como en Player). Cuáles se ven se decide cada cuadro (ver `propsRef`).
     try { ponerLentes(clone, lentesGltf) } catch { }
+    try { ponerLentes3D(clone, lentes3dGltf) } catch (e) { if (import.meta.env.DEV) console.warn('[lentes3d]', e) }
     try {
       const b = ponerBoxers(clone, boxersGltf)?.[0]
       if (b) telaDe(b)
@@ -1251,7 +1262,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
       obj.material = Array.isArray(obj.material) ? out : out[0]
     })
     return clone
-  }, [scene, lentesGltf, boxersGltf, chamarraGltf, hoodieGltf, tenisGltf, infladaGltf, botasGltf, pantalonesGltf, munequerasGltf, beanieGltf])
+  }, [scene, lentesGltf, boxersGltf, chamarraGltf, hoodieGltf, tenisGltf, infladaGltf, botasGltf, pantalonesGltf, munequerasGltf, beanieGltf, lentes3dGltf])
 
   // Las manos se apartan de los bóxers sobre la pose de cada cuadro: antes
   // del mixer regresan a lo que él dejó (registrado antes de useAnimations).

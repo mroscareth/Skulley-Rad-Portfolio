@@ -9,7 +9,7 @@ import { useVueloColores } from '../../lib/vueloColores.js'
 import SkinChip from '../SkinChip.jsx'
 import ColorWell from '../ColorWell.jsx'
 import { ICONOS_PROP } from '../CharacterCustomizer.jsx'
-import { ACCESORIOS, ACCESORIOS_EVENT, getAccesorios, setAccesorio } from '../../lib/accesoriosEstado.js'
+import { ACCESORIOS, ACCESORIOS_EVENT, getAccesorios, setAccesorio, propDesbloqueado } from '../../lib/accesoriosEstado.js'
 
 // La versión ligera del personalizador de escritorio (CharacterCustomizer) para
 // la home de teléfono: cuatro skins, un color por parte solo en Personalizada y
@@ -648,7 +648,8 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
         <div className="mcz-pie">
           {/* Los props a la izquierda, el wallpaper (la acción de color) al final. */}
           <div className="mcz-props" role="group" aria-label="Props">
-            {ACCESORIOS.map((a) => {
+            {/* los que se ganan con un logro (los lentes 3D) solo salen ya ganados: aquí no se juega */}
+            {ACCESORIOS.filter((a) => propDesbloqueado(a.id)).map((a) => {
               const puesto = !!props[a.id]
               const accion = lang === 'es'
                 ? `${puesto ? 'Quitar' : 'Poner'} ${a.es.toLowerCase()}`

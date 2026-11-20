@@ -228,6 +228,8 @@ PROPS = {
     "Munequeras": dict(archivo="munequeras", piel=True, imagenes=False),
     # el beanie (beanie.py), todo en head.x, con sus dos imágenes: las costillas del tejido y la etiqueta
     "Beanie": dict(archivo="beanie", piel=True, imagenes=True),
+    # los lentes 3D de cartón (lentes3d.py): sin piel, colgados de head.x como los Lentes
+    "Lentes3D": dict(archivo="lentes3d", piel=False),
 }
 SALIDA_PROPS = os.path.join(REPO, "public", "props")
 

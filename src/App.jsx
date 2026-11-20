@@ -197,6 +197,7 @@ import JuegoHUD from './components/JuegoHUD.jsx'
 import useDwellTimeTracking from './hooks/useDwellTimeTracking.js'
 import useSectionVisitTracking from './hooks/useSectionVisitTracking.js'
 import { ACHIEVEMENTS, localizeAchievement, PIXEL_SKIN_SCORE_THRESHOLD } from './lib/achievementsCatalog.js'
+import { setLogrosDeProps } from './lib/accesoriosEstado.js'
 import { LOBBY_LENTO_EVENT } from './lib/musicaLobby.js'
 import { getCount as getSlugCount, SLUG_TOTAL, SLIME_SLUGS_EVENT } from './lib/slimeSlugs.js'
 import useOutsideClickClose from './hooks/useOutsideClickClose.js'
@@ -529,6 +530,8 @@ function SiteApp() {
   // orb rojo dentro. Guests → sessionStorage; auth → persistente en DB
   // (ver src/hooks/useAchievements.js).
   const { has: hasAchievement, unlock: unlockAchievement, isLoaded: achievementsLoaded, achievements: achievementSet, unlockedAt: achievementDates } = useAchievements()
+  // Los props que se ganan con un logro (los lentes 3D) leen de aquí si ya se ganaron (accesoriosEstado.js)
+  useEffect(() => { setLogrosDeProps(achievementSet) }, [achievementSet])
   const section6Unlocked = hasAchievement('section6_unlocked')
   const [gameOverOpen, setGameOverOpen] = useState(false)
   const [gameOverScore, setGameOverScore] = useState(0)
@@ -1653,7 +1656,7 @@ function SiteApp() {
     }
       ; (async () => {
         try {
-          const [{ useGLTF }, three, { extendGLTFLoaderKTX2 }, { URL_LENTES, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_TENIS, URL_INFLADA, URL_PANTALONES, URL_MUNEQUERAS, URL_BEANIE, URL_CORRER, URL_IDLE }] = await Promise.all([
+          const [{ useGLTF }, three, { extendGLTFLoaderKTX2 }, { URL_LENTES, URL_LENTES3D, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_TENIS, URL_INFLADA, URL_PANTALONES, URL_MUNEQUERAS, URL_BEANIE, URL_CORRER, URL_IDLE }] = await Promise.all([
             import('@react-three/drei'),
             import('three'),
             import('./lib/ktx2Setup.js'),
@@ -1694,6 +1697,7 @@ function SiteApp() {
             useGLTF.preload(URL_PANTALONES, true)
             useGLTF.preload(URL_MUNEQUERAS, true)
             useGLTF.preload(URL_BEANIE, true)
+            useGLTF.preload(URL_LENTES3D, true)
             useGLTF.preload(URL_CORRER, true)
             useGLTF.preload(URL_IDLE, true)
           } finally {

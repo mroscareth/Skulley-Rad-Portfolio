@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ArrowPathIcon, ArrowLeftIcon, ComputerDesktopIcon, SwatchIcon } from '@heroicons/react/24/solid'
+import { ArrowPathIcon, ArrowLeftIcon, ComputerDesktopIcon, LockClosedIcon, SwatchIcon } from '@heroicons/react/24/solid'
 
 // Dado (heroicons no tiene dice) — representa randomness para el botón Randomize.
 function DiceIcon({ className }) {
@@ -29,7 +29,8 @@ import ColorWell from './ColorWell.jsx'
 import SkinCarousel from './SkinCarousel.jsx'
 import { PALETAS_INFERNO, varianteInferno } from '../lib/paletaFuego.js'
 import { cambiarVarianteInferno } from '../lib/characterSkin.js'
-import { ACCESORIOS, ACCESORIOS_EVENT, getAccesorios, setAccesorio } from '../lib/accesoriosEstado.js'
+import { ACCESORIOS, ACCESORIOS_EVENT, LOGRO_DE_PROP, getAccesorios, setAccesorio, propDesbloqueado } from '../lib/accesoriosEstado.js'
+import { ACHIEVEMENTS } from '../lib/achievementsCatalog.js'
 
 // Llamas rojas o azules de Inferno (Oscar, 2026-11-16): dos círculos del tamaño
 // de los de color, cada uno con su fuego (la orilla honda y el centro claro),
@@ -80,6 +81,17 @@ function LentesIcon({ className }) {
   return (
     <svg className={className} viewBox="0 0 32 32" fill="currentColor" aria-hidden="true">
       <path d="M2 11.2c0-.9.7-1.5 1.6-1.6 3.9-.3 7.8-.4 11.4.5.6.2 1.4.2 2 0 3.6-.9 7.5-.8 11.4-.5.9.1 1.6.7 1.6 1.6v1.1c0 .6-.4 1-.9 1.2-.4.1-.7.5-.8.9l-1.2 4.9c-.3 1.3-1.5 2.2-2.8 2.2h-3.6c-1.4 0-2.6-1-2.9-2.3l-.6-2.8c-.1-.6-.6-1-1.2-1s-1.1.4-1.2 1l-.6 2.8c-.3 1.3-1.5 2.3-2.9 2.3H7.7c-1.3 0-2.5-.9-2.8-2.2l-1.2-4.9c-.1-.4-.4-.8-.8-.9-.5-.2-.9-.6-.9-1.2z" />
+    </svg>
+  )
+}
+
+// Lentes 3D de frente (armazón cuadrado con la muesca de la nariz; una mica llena y la otra con su
+// brillo, porque el ícono es de un color y la roja y la azul no se distinguirían) para el botón del prop.
+function Lentes3DIcon({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 32 32" fill="currentColor" fillRule="evenodd" aria-hidden="true">
+      <path d="M3.6 9h24.8c.9 0 1.6.7 1.6 1.6v9.8c0 .9-.7 1.6-1.6 1.6h-8.6l-1-3.4c-.3-1-1.3-1.7-2.4-1.7h-.8c-1.1 0-2.1.7-2.4 1.7l-1 3.4H3.6c-.9 0-1.6-.7-1.6-1.6v-9.8C2 9.7 2.7 9 3.6 9zM4.6 11.4h7.6c.4 0 .8.4.8.8v4.6l-.9 2.8H4.6c-.4 0-.8-.4-.8-.8v-6.6c0-.4.4-.8.8-.8zM27.4 11.4h-7.6c-.4 0-.8.4-.8.8v4.6l.9 2.8h7.5c.4 0 .8-.4.8-.8v-6.6c0-.4-.4-.8-.8-.8z" />
+      <path d="M26.6 12.4h-6c-.3 0-.6.3-.6.6v3.9l.7 1.7h5.9c.3 0 .6-.3.6-.6v-5c0-.3-.3-.6-.6-.6zM6 17.6l4.4-4.4.9.9-4.4 4.4z" />
     </svg>
   )
 }
@@ -175,7 +187,7 @@ function BeanieIcon({ className }) {
   )
 }
 
-export const ICONOS_PROP = { lentes: LentesIcon, boxers: BoxersIcon, pantalones: PantalonesIcon, chamarra: ChamarraIcon, hoodie: HoodieIcon, tenis: TenisIcon, inflada: InfladaIcon, botas: BotasIcon, munequeras: MunequerasIcon, beanie: BeanieIcon }
+export const ICONOS_PROP = { lentes: LentesIcon, lentes3d: Lentes3DIcon, boxers: BoxersIcon, pantalones: PantalonesIcon, chamarra: ChamarraIcon, hoodie: HoodieIcon, tenis: TenisIcon, inflada: InfladaIcon, botas: BotasIcon, munequeras: MunequerasIcon, beanie: BeanieIcon }
 
 // Íconos de las partes del cuerpo (pestaña Props).
 function CabezaIcon({ className }) {
@@ -226,7 +238,7 @@ const PARTES = [
   { id: 'piernas', es: 'Piernas', en: 'Legs', Icono: PiernasIcon },
   { id: 'pies', es: 'Pies', en: 'Feet', Icono: PiesIcon },
 ]
-const PARTE_DE = { lentes: 'cabeza', chamarra: 'torso', hoodie: 'torso', inflada: 'torso', boxers: 'piernas', pantalones: 'piernas', tenis: 'pies', botas: 'pies', munequeras: 'munecas', beanie: 'cabeza' }
+const PARTE_DE = { lentes: 'cabeza', lentes3d: 'cabeza', chamarra: 'torso', hoodie: 'torso', inflada: 'torso', boxers: 'piernas', pantalones: 'piernas', tenis: 'pies', botas: 'pies', munequeras: 'munecas', beanie: 'cabeza' }
 const parteDe = (a) => a.parte || PARTE_DE[a.id] || 'torso'
 
 function useAccesorios() {
@@ -269,8 +281,17 @@ function SelectorPartes({ lang, parte, onParte, estado, enFila = false }) {
   )
 }
 
+// La pista del logro que desbloquea un prop (achievementsCatalog.js), en el idioma.
+function pistaDeProp(id, lang) {
+  const a = ACHIEVEMENTS.find((x) => x.key === LOGRO_DE_PROP[id])
+  const h = a?.hint
+  return h && typeof h === 'object' ? (h[lang] ?? h.en) : h || ''
+}
+
 // Los props de una parte: cada uno se pone o se quita; el puesto va en
-// amarillo, como los chips marcados del sitio.
+// amarillo, como los chips marcados del sitio. Los que se ganan con un logro
+// (los lentes 3D) salen con candado y su pista hasta tenerlo, como las skins
+// bloqueadas (SkinChip).
 function PropsDeParte({ lang, parte, estado, setEstado, enFila = false }) {
   const lista = ACCESORIOS.filter((a) => parteDe(a) === parte)
   if (!lista.length) {
@@ -287,6 +308,29 @@ function PropsDeParte({ lang, parte, estado, setEstado, enFila = false }) {
         const nombre = lang === 'es' ? a.es : a.en
         const accion = puesto ? (lang === 'es' ? `Quitar ${a.es.toLowerCase()}` : `Remove ${a.en.toLowerCase()}`) : (lang === 'es' ? `Poner ${a.es.toLowerCase()}` : `Wear ${a.en.toLowerCase()}`)
         const Icono = ICONOS_PROP[a.id] || LentesIcon
+        if (!propDesbloqueado(a.id)) {
+          const pista = pistaDeProp(a.id, lang)
+          return (
+            <div key={a.id} className="cc-pieza group relative flex flex-col items-center">
+              <button
+                type="button"
+                disabled
+                aria-label={`${nombre}: ${lang === 'es' ? 'bloqueado' : 'locked'}`}
+                className="relative grid place-items-center w-12 h-12 md:w-16 md:h-16 rounded-full border-2 border-white/[0.08] bg-black/35 backdrop-blur-md text-white/35 cursor-not-allowed shadow-elev-sm"
+              >
+                <Icono className="w-7 h-7 md:w-9 md:h-9" />
+                <span className="absolute inset-0 rounded-full grid place-items-center bg-black/45">
+                  <LockClosedIcon className="w-4 h-4 text-white/85" />
+                </span>
+              </button>
+              <div className="mt-1 w-12 md:w-16 text-[9px] md:text-[10px] text-center leading-tight opacity-80 truncate">{nombre}</div>
+              <div className={`pointer-events-none absolute px-2.5 py-1.5 rounded-lg bg-black/90 border border-white/10 text-[10px] text-white/85 w-40 text-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-10 ${enFila ? 'bottom-full left-1/2 -translate-x-1/2 mb-2' : 'right-full top-0 mr-2'}`}>
+                {lang === 'es' ? 'No has ganado este prop' : "You haven't earned this prop"}
+                {pista && <><br /><span className="opacity-60">{pista}</span></>}
+              </div>
+            </div>
+          )
+        }
         return (
           <div key={a.id} className="cc-pieza flex flex-col items-center">
             <button

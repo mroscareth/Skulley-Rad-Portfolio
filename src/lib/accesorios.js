@@ -12,7 +12,7 @@ export { pasoCordones } from './cordonesHoodie.js'
 // (CharacterNormalPass solo entinta SkinnedMesh), los fundidos de opacidad y
 // el despiece (Player despieza los nodos Egg_*: por eso se llama Egg_Lentes).
 // Estado (cuáles van puestos) y URLs, en un módulo sin three
-export { URL_LENTES, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_TENIS, URL_INFLADA, URL_BOTAS, URL_PANTALONES, URL_MUNEQUERAS, URL_BEANIE, URL_CORRER, URL_IDLE, conClipsDelBlend, ACCESORIOS, ACCESORIOS_EVENT, getAccesorios, setAccesorio, mostrarAccesorios, tapadoPorProp } from './accesoriosEstado.js'
+export { URL_LENTES, URL_LENTES3D, URL_BOXERS, URL_CHAMARRA, URL_HOODIE, URL_TENIS, URL_INFLADA, URL_BOTAS, URL_PANTALONES, URL_MUNEQUERAS, URL_BEANIE, URL_CORRER, URL_IDLE, conClipsDelBlend, ACCESORIOS, ACCESORIOS_EVENT, getAccesorios, setAccesorio, mostrarAccesorios, tapadoPorProp } from './accesoriosEstado.js'
 
 const MATERIALES_LENTES = {
   Lentes_Armazon: { color: 0x121212, roughness: 0.32, metalness: 0 },
@@ -21,11 +21,24 @@ const MATERIALES_LENTES = {
   // tomar (el toon apaga el del HDRI) salían negros: plateado de caricatura.
   Lentes_Metal: { color: 0xd4d8de, roughness: 0.3, metalness: 0 },
 }
+const LENTES = { id: 'lentes', malla: 'Egg_Lentes', materiales: MATERIALES_LENTES, base: 'Lentes_Armazon' }
 
-function material(nombre) {
-  const p = MATERIALES_LENTES[nombre] || MATERIALES_LENTES.Lentes_Armazon
+// Lentes 3D de cartón (Oscar, 2026-11-19: "de esos blancos cuadrados con un
+// lente rojo y otro azul"), de scripts/skulley-anim/lentes3d.py: entran igual
+// que los Lentes. Las micas son opacas: translúcidas habría que ordenarlas y
+// dibujarlas aparte de lo opaco (y recompilar con los fundidos de Skulley).
+const MATERIALES_LENTES3D = {
+  Lentes3D_Armazon: { color: 0xeeece6, roughness: 0.6, metalness: 0 },
+  // la roja del ojo izquierdo de Skulley, la azul del derecho (como los de anáglifo)
+  Lentes3D_Rojo: { color: 0xe3122c, roughness: 0.2, metalness: 0 },
+  Lentes3D_Azul: { color: 0x1668ff, roughness: 0.2, metalness: 0 },
+}
+const LENTES3D = { id: 'lentes3d', malla: 'Egg_Lentes3D', materiales: MATERIALES_LENTES3D, base: 'Lentes3D_Armazon' }
+
+function material(cfg, nombre) {
+  const p = cfg.materiales[nombre] || cfg.materiales[cfg.base]
   const m = new THREE.MeshStandardMaterial(p)
-  m.name = nombre
+  m.name = cfg.materiales[nombre] ? nombre : cfg.base
   return m
 }
 
@@ -42,8 +55,18 @@ function material(nombre) {
  * duplica.
  */
 export function ponerLentes(escena, gltfLentes, hueso = 'headx') {
+  return ponerEnCabeza(escena, gltfLentes, LENTES, hueso)
+}
+
+/** Los lentes 3D como `Egg_Lentes3D`, igual que los Lentes (armazón y micas en una malla). */
+export function ponerLentes3D(escena, gltf, hueso = 'headx') {
+  return ponerEnCabeza(escena, gltf, LENTES3D, hueso)
+}
+
+function ponerEnCabeza(escena, gltfLentes, cfg, hueso) {
+  const llave = `__${cfg.id}`
   if (!escena || !gltfLentes?.scene) return []
-  if (escena.userData.__lentes) return escena.userData.__lentes
+  if (escena.userData[llave]) return escena.userData[llave]
   let cabeza = null
   escena.traverse((o) => { if (!cabeza && o.isBone && o.name === hueso) cabeza = o })
   if (!cabeza) return []
@@ -60,7 +83,7 @@ export function ponerLentes(escena, gltfLentes, hueso = 'headx') {
     g.applyMatrix4(o.matrixWorld)          // reposo, en las coordenadas de la escena del personaje
     for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k)
     geos.push(g)
-    mats.push(material(o.material?.name || 'Lentes_Armazon'))
+    mats.push(material(cfg, o.material?.name))
   })
   if (!geos.length) return []
   const geo = mergeGeometries(geos, true)
@@ -71,8 +94,8 @@ export function ponerLentes(escena, gltfLentes, hueso = 'headx') {
   for (let k = 0; k < n; k++) peso[k * 4] = 1
   geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(peso, 4))
   const sm = new THREE.SkinnedMesh(geo, mats)
-  sm.name = 'Egg_Lentes'
-  sm.userData.accesorio = 'lentes'
+  sm.name = cfg.malla
+  sm.userData.accesorio = cfg.id
   sm.frustumCulled = false
   escena.add(sm)
   sm.updateMatrixWorld(true)
@@ -80,10 +103,10 @@ export function ponerLentes(escena, gltfLentes, hueso = 'headx') {
   // cuelga no importa; manda el hueso.
   sm.bind(esqueleto, new THREE.Matrix4())
   const hechos = [sm]
-  escena.userData.__lentes = hechos
+  escena.userData[llave] = hechos
   if (import.meta.env.DEV && typeof window !== 'undefined') {
-    // window.__lentes: las escenas que ya los traen (para revisar dónde se dibujan)
-    ;(window.__lentes ||= []).push({ escena, hechos })
+    // window.__lentes / __lentes3d: las escenas que ya los traen (para revisar dónde se dibujan)
+    ;(window[llave] ||= []).push({ escena, hechos })
   }
   return hechos
 }
