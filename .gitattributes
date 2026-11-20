@@ -2,3 +2,4 @@
 * text=auto
 Character/*.blend filter=lfs diff=lfs merge=lfs -text
 Character/assets/*.png filter=lfs diff=lfs merge=lfs -text
+Argus/*.blend filter=lfs diff=lfs merge=lfs -text
