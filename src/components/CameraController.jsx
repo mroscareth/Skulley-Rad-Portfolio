@@ -2,6 +2,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import React, { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
+import { dron } from '../lib/droneNpc.js'
 import { wallpaperEstado } from '../lib/wallpaperEscritorio.js'
 import { playSfx, preloadSfx } from '../lib/sfx.js'
 import { playCameraZoom, playCameraZoomStop } from '../lib/homeSounds.js'
@@ -51,13 +52,16 @@ export default function CameraController({
   // Primer plano a la cara (antes del iris de "Conocer la historia", App.jsx):
   // la misma órbita de customize, pero cerca y a la altura de la cara.
   primerPlano = false,
+  // Hablando con el drone de M.A.D.R.E. (DroneNPC): detrás de Skulley, sobre su
+  // hombro, viendo al drone (Oscar, 2026-11-19).
+  dialogo = false,
 }) {
   const { camera, gl } = useThree()
   const controlsRef = useRef()
   // De frente (Customize, primer plano) el arrastre no gira la cámara del juego:
   // seguía sonando el swipe y la dejaba girada al salir (Oscar).
   const deFrenteRef = useRef(false)
-  deFrenteRef.current = customizeActive || primerPlano
+  deFrenteRef.current = customizeActive || primerPlano || dialogo
   const followOffset = useMemo(() => new THREE.Vector3(0, 2.4, -5.2), [])
   const targetOffset = useMemo(() => new THREE.Vector3(0, 1.6, 0), [])
   
@@ -116,6 +120,13 @@ export default function CameraController({
   // cámara y lo que mira van a la misma, de frente).
   const PRIMER_PLANO_DIST = 1.9
   const PRIMER_PLANO_Y = 2.1
+  // Sobre el hombro en el diálogo con el drone: tanto atrás de Skulley, a su
+  // derecha y a esta altura; mira al drone corrido hacia el centro, así el
+  // hombro queda a la izquierda del cuadro y el drone a la derecha.
+  const DIALOGO_ATRAS = 2.4
+  const DIALOGO_LADO = 1.05
+  const DIALOGO_ALTO = 2.8
+  const DIALOGO_MIRA_LADO = 0.5
   const CUSTOMIZE_SALIDA_S = 1.25 // el regreso a la vista de arriba: arranca y llega suave
   const custTmpRef = useRef({
     quat: new THREE.Quaternion(),
@@ -490,9 +501,9 @@ export default function CameraController({
   // Al entrar de frente con el mouse encima, la mano de "agarrar" se iba hasta
   // el siguiente movimiento.
   useEffect(() => {
-    if (!customizeActive && !primerPlano) return
+    if (!customizeActive && !primerPlano && !dialogo) return
     try { window.dispatchEvent(new CustomEvent('camera-grab', { detail: { state: '' } })) } catch { }
-  }, [customizeActive, primerPlano])
+  }, [customizeActive, primerPlano, dialogo])
 
   // Place the camera behind the player on mount. Solo al inicio: en cada cambio de
   // modo la teletransportaba antes de que empezara el barrido.
@@ -525,13 +536,13 @@ export default function CameraController({
 
   // Seed the smoothing refs from the live camera when entering customize mode,
   // so the transition into the front pose eases from wherever the camera was.
-  const deFrente = customizeActive || primerPlano
+  const deFrente = customizeActive || primerPlano || dialogo
   useEffect(() => {
     if (!deFrente || !playerRef.current) return
     smoothCamPosRef.current.copy(camera.position)
     // El primer plano sale de lo que miraba la cámara, para que el giro hacia
     // la cara no brinque.
-    if (primerPlano && controlsRef.current) smoothTargetRef.current.copy(controlsRef.current.target)
+    if ((primerPlano || dialogo) && controlsRef.current) smoothTargetRef.current.copy(controlsRef.current.target)
     else {
       const b = playerRef.current.position
       smoothTargetRef.current.set(b.x, b.y + CUSTOMIZE_TARGET_Y, b.z)
@@ -600,12 +611,23 @@ export default function CameraController({
       const compact = (typeof window !== 'undefined' && window.innerWidth <= 1100)
       const frontDist = primerPlano ? PRIMER_PLANO_DIST : compact ? CUSTOMIZE_FRONT_DIST_MOBILE : CUSTOMIZE_FRONT_DIST
       const lateral = primerPlano ? 0 : compact ? CUSTOMIZE_LATERAL_MOBILE : CUSTOMIZE_LATERAL
-      // Camera in front of the face (+Z local) + lateral truck (+X local).
-      c.camOff.set(lateral, primerPlano ? PRIMER_PLANO_Y : CUSTOMIZE_CAM_HEIGHT, frontDist).applyQuaternion(c.quat)
-      c.camTarget.copy(base).add(c.camOff)
-      // Look target shares the same lateral offset → pure sideways framing.
-      c.tgtOff.set(lateral, primerPlano ? PRIMER_PLANO_Y : CUSTOMIZE_TARGET_Y, 0).applyQuaternion(c.quat)
-      c.lookTarget.copy(base).add(c.tgtOff)
+      if (dialogo) {
+        // de Skulley hacia el drone, y su derecha vista desde atrás
+        const dx = dron.pos.x - base.x
+        const dz = dron.pos.z - base.z
+        const d = Math.hypot(dx, dz) || 1
+        const fx = dx / d, fz = dz / d
+        const rx = -fz, rz = fx
+        c.camTarget.set(base.x - fx * DIALOGO_ATRAS + rx * DIALOGO_LADO, base.y + DIALOGO_ALTO, base.z - fz * DIALOGO_ATRAS + rz * DIALOGO_LADO)
+        c.lookTarget.set(dron.pos.x - rx * DIALOGO_MIRA_LADO, dron.pos.y - 0.1, dron.pos.z - rz * DIALOGO_MIRA_LADO)
+      } else {
+        // Camera in front of the face (+Z local) + lateral truck (+X local).
+        c.camOff.set(lateral, primerPlano ? PRIMER_PLANO_Y : CUSTOMIZE_CAM_HEIGHT, frontDist).applyQuaternion(c.quat)
+        c.camTarget.copy(base).add(c.camOff)
+        // Look target shares the same lateral offset → pure sideways framing.
+        c.tgtOff.set(lateral, primerPlano ? PRIMER_PLANO_Y : CUSTOMIZE_TARGET_Y, 0).applyQuaternion(c.quat)
+        c.lookTarget.copy(base).add(c.tgtOff)
+      }
 
       const k = 1 - Math.exp(-CUSTOMIZE_LERP_LAMBDA * dt)
       // ORBIT transition: interpolate the camera around the player's vertical

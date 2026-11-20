@@ -71,6 +71,9 @@ const OjosMadreJuego = lazy(importOjosMadre)
 // Del castigo: cuánto se ven los ojos rojos antes de que caiga el rayo (los de
 // la furia terminan de prenderse a los ~900 ms).
 const CASTIGO_RAYO_MS = 1900
+// Con el drone en la escena el rayo cae cuando ella azota (castigarConDron); si
+// algo la atora, a lo más a este tiempo.
+const CASTIGO_DRON_TOPE_MS = 3800
 import SectionSwitch from './components/SectionSwitch.jsx'
 // El árbol de teléfonos va lazy a propósito: arrastra el Canvas del cartel (y
 // con él three), y el presupuesto del chunk de entrada no lo aguanta
@@ -103,7 +106,13 @@ const PoseStudio = lazy(() => import('./components/dev/PoseStudio.jsx'))
 // Diálogo del zoidian: lazy porque monta un mini-canvas R3F (retrato) — si se
 // importara eager arrastraría three al bundle inicial.
 const ZoidianDialog = lazy(() => import('./components/ZoidianDialog.jsx'))
-import { HomeIcon, MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon, UserIcon, UserCircleIcon, ArrowRightOnRectangleIcon, ArrowLeftIcon, SwatchIcon, ShoppingCartIcon, ExclamationTriangleIcon, BackwardIcon, Squares2X2Icon, PlayIcon } from '@heroicons/react/24/solid'
+// El diálogo con el drone de M.A.D.R.E. (DroneNPC en la home).
+const importDialogoMadre = () => import('./components/drone/DialogoMadre.jsx')
+const DialogoMadre = lazy(importDialogoMadre)
+// Los avisos de las trampas, con la cara del diálogo de M.A.D.R.E.
+const importAvisoMadre = () => import('./components/drone/AvisoMadre.jsx')
+const AvisoMadre = lazy(importAvisoMadre)
+import { HomeIcon, MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon, UserIcon, UserCircleIcon, ArrowRightOnRectangleIcon, ArrowLeftIcon, SwatchIcon, ShoppingCartIcon, BackwardIcon, Squares2X2Icon, PlayIcon } from '@heroicons/react/24/solid'
 import { playSfx, preloadSfx, unlockSfx } from './lib/sfx.js'
 import { silenciarSitio, useSilencioSitio } from './lib/silencioSitio.js'
 import useGlobalSfx from './hooks/useGlobalSfx.js'
@@ -183,6 +192,7 @@ import useTicketDiscount from './hooks/useTicketDiscount.js'
 import { useShopCartCtx } from './lib/shopCartContext.jsx'
 import { startGameSession, endGameSession } from './lib/gameSession.js'
 import { iniciarJuego, detenerJuego, escuchar as escucharJuego } from './lib/juegoEsferas.js'
+import { castigarConDron } from './lib/droneNpc.js'
 import JuegoHUD from './components/JuegoHUD.jsx'
 import useDwellTimeTracking from './hooks/useDwellTimeTracking.js'
 import useSectionVisitTracking from './hooks/useSectionVisitTracking.js'
@@ -498,11 +508,17 @@ function SiteApp() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [tutorialOpen, setTutorialOpen] = useState(false)
   const [spheresTutorialOpen, setSpheresTutorialOpen] = useState(false)
-  useEffect(() => { if (spheresTutorialOpen) importOjosMadre().catch(() => {}) }, [spheresTutorialOpen])
+  useEffect(() => {
+    if (!spheresTutorialOpen) return
+    importOjosMadre().catch(() => {})
+    importAvisoMadre().catch(() => {})
+  }, [spheresTutorialOpen])
   // { modo: 'madre' | 'furia', id }: cuándo se asoman los ojos de M.A.D.R.E.
   const [ojosMadre, setOjosMadre] = useState(null)
   // Diálogo del zoidian (NPC del juego de esferas) — antesala del tutorial.
   const [zoidianDialogOpen, setZoidianDialogOpen] = useState(false)
+  // Hablando con el drone de M.A.D.R.E.: la UI se va y la cámara se pone sobre el hombro.
+  const [dialogoDron, setDialogoDron] = useState(false)
   const [sphereGameActive, setSphereGameActive] = useState(false)
   // Guarda de secciones durante la partida (se define junto a sectionLabel).
   // Devuelve true si bloqueó la entrada.
@@ -1089,6 +1105,7 @@ function SiteApp() {
   const cheatCountRef = useRef(0)
   const [cheatAlertVisible, setCheatAlertVisible] = useState(false)
   const [cheatAlertText, setCheatAlertText] = useState('')
+  const cheatAlertIdRef = useRef(0)
   const [cheatDragEnabled, setCheatDragEnabled] = useState(true)
   const cheatScoreAnimRef = useRef(null)
   const cheatBlockedShownRef = useRef(false)
@@ -1109,6 +1126,7 @@ function SiteApp() {
     }
     cheatAlertProcessingRef.current = true
     const next = queue.shift()
+    cheatAlertIdRef.current += 1
     setCheatAlertText(next.text)
     setCheatAlertVisible(true)
     // Schedule dismissal / next-in-queue after this alert's guaranteed duration
@@ -1128,6 +1146,12 @@ function SiteApp() {
     // If an alert IS showing, the new one waits in the queue
     // and will be shown after the current one's timer expires.
   }, [processCheatAlertQueue])
+  // desarrollo: window.__avisoMadre('texto', ms) encola un aviso para verlo
+  useEffect(() => {
+    if (!import.meta.env.DEV) return undefined
+    window.__avisoMadre = (texto, ms = 6000) => enqueueCheatAlert(texto, ms)
+    return () => { delete window.__avisoMadre }
+  }, [enqueueCheatAlert])
 
   // User tries to drag a sphere after being penalized
   const handleBlockedDragAttempt = () => {
@@ -1198,14 +1222,22 @@ function SiteApp() {
       // Sin arrastre desde ya; los ojos rojos y, cuando ya se ven todos, el rayo.
       setCheatDragEnabled(false)
       setOjosMadre({ modo: 'furia', id: Date.now() })
-      cheatScoreAnimRef.current = setTimeout(() => {
+      // El rayo: con el drone en la escena, cuando ella azota al invocarlo
+      // (vuela hacia Skulley y lo ve, Oscar 2026-11-19); si no, a su tiempo.
+      let hecho = false
+      let tope = 0
+      const golpe = () => {
+        if (hecho) return
+        hecho = true
+        clearTimeout(tope)
         const p = playerRef.current?.position
         try {
           window.dispatchEvent(new CustomEvent('madre-castigo-strike', { detail: { x: p?.x || 0, y: 0, z: p?.z || 0 } }))
           window.dispatchEvent(new CustomEvent('bolt-strike', { detail: { at: performance.now() } }))
         } catch { }
         castigoGolpe()
-      }, CASTIGO_RAYO_MS)
+      }
+      tope = setTimeout(golpe, castigarConDron(golpe) ? CASTIGO_DRON_TOPE_MS : CASTIGO_RAYO_MS)
     }
   }
 
@@ -1458,7 +1490,14 @@ function SiteApp() {
 
     if (inHome) {
       // In HOME: UI enters when homeLanded is true
-      if (homeLanded && uiAnimPhase !== 'visible' && uiAnimPhase !== 'entering' && uiAnimPhase !== 'exiting') {
+      if (dialogoDron) {
+        // hablando con el drone: la UI sale animada y se queda escondida
+        if (uiAnimPhase === 'visible' || uiAnimPhase === 'entering') {
+          setUiAnimPhase('exiting')
+          if (uiExitTimerRef.current) clearTimeout(uiExitTimerRef.current)
+          uiExitTimerRef.current = setTimeout(() => setUiAnimPhase('hidden'), 400)
+        }
+      } else if (homeLanded && uiAnimPhase !== 'visible' && uiAnimPhase !== 'entering' && uiAnimPhase !== 'exiting') {
         setUiAnimPhase('entering')
       } else if (!homeLanded && uiAnimPhase !== 'hidden' && uiAnimPhase !== 'exiting') {
         // Character hasn't landed, hide UI (but don't interrupt exiting)
@@ -1479,7 +1518,7 @@ function SiteApp() {
         clearTimeout(uiEnterTimerRef.current)
       }
     }
-  }, [section, homeLanded, transitionState.active, uiAnimPhase])
+  }, [section, homeLanded, transitionState.active, uiAnimPhase, dialogoDron])
 
   // El deck de música se monta UNA vez (al primer aterrizaje, o al entrar
   // directo a una sección) y ya no se desmonta. Antes colgaba de `homeLanded`
@@ -2417,6 +2456,19 @@ function SiteApp() {
     })
   }, [])
 
+  // El drone de M.A.D.R.E. contesta preguntas solo en la home quieta: sin
+  // partida, sin Customize, sin otro diálogo ni transición. Si algo de eso
+  // empieza a medias, el diálogo se cierra.
+  const puedeHablarDron = section === 'home' && homeLanded && !sphereGameActive && !customizeOpen
+    && !transitionState.active && !zoidianDialogOpen && !spheresTutorialOpen && !tutorialOpen
+  const abrirDialogoDron = useCallback(() => {
+    try { playSfx('click', { volume: 0.8 }) } catch { }
+    setDialogoDron(true)
+  }, [])
+  useEffect(() => {
+    if (dialogoDron && (section !== 'home' || sphereGameActive || customizeOpen || transitionState.active)) setDialogoDron(false)
+  }, [dialogoDron, section, sphereGameActive, customizeOpen, transitionState.active])
+
   // Volver al inicio: la pantalla principal (/), con la cortinilla.
   const irAlInicio = useCallback(() => {
     try { playSfx('click', { volume: 1.0 }) } catch { }
@@ -2924,7 +2976,10 @@ function SiteApp() {
   const [tintFactor, setTintFactor] = useState(0)
   // Throttle scene color recomputation, damping abrupt changes
   const sceneColor = useMemo(() => {
-    const baseBg = '#022dd6'
+    // El azul de estar parado en un portal, siempre (Oscar, 2026-11-19): con el de
+    // antes (#022dd6) el piso salía al tope, no se veía su pintura y la llama y los
+    // portales resaltaban menos. Por eso ya no cambia al acercarse a un portal.
+    const baseBg = '#011d8a'
     const nearColor = '#011d8a'
     return lerpColor(baseBg, nearColor, tintFactor)
   }, [tintFactor])
@@ -3047,6 +3102,9 @@ function SiteApp() {
           sectionCovered={showSectionPreloader || sectionPreloaderFading}
           historiaCubre={historiaAbierta}
           primerPlano={historiaCara}
+          dialogoDron={dialogoDron}
+          puedeHablarDron={puedeHablarDron}
+          onHablarDron={abrirDialogoDron}
           transitionState={transitionState}
           noiseMixEnabled={noiseMixEnabled}
           mainWarmStage={mainWarmStage}
@@ -3961,36 +4019,12 @@ function SiteApp() {
         </div>
       )}
 
-      {/* Cheat system alert overlay */}
-      {cheatAlertVisible && (
-        <div className="fixed inset-0 z-[99999999] flex items-center justify-center pointer-events-none">
-          {/* Toon: superficie plana, borde de 2px en el color de estado (ámbar
-              aviso, rojo correctivo), sin glow. Lo firma M.A.D.R.E. como la
-              nota de la Store, en vez de un pie de "sistema operativo". */}
-          <div
-            role="alert"
-            className="flex items-start gap-4 p-6 bg-[#0d0714] border-2 rounded-2xl text-white pointer-events-auto cheat-alert-enter"
-            style={{
-              width: 'min(520px, 90vw)',
-              borderColor: cheatCountRef.current >= 3 ? '#dc2626' : '#f59e0b',
-            }}
-          >
-            <ExclamationTriangleIcon
-              className="w-7 h-7 flex-shrink-0 mt-0.5"
-              style={{ color: cheatCountRef.current >= 3 ? '#dc2626' : '#f59e0b' }}
-              aria-hidden
-            />
-            <div className="min-w-0">
-              <p className="text-lg font-bold leading-snug">{cheatAlertText}</p>
-              <p
-                className="display-title mt-3 text-base"
-                style={{ color: cheatCountRef.current >= 3 ? '#dc2626' : '#f59e0b' }}
-              >
-                M.A.D.R.E.
-              </p>
-            </div>
-          </div>
-        </div>
+      {/* Los avisos de las trampas: M.A.D.R.E. con la cara de su diálogo. Se
+          queda montado desde el primero para entrar y salir con su animación. */}
+      {cheatAlertText && (
+        <Suspense fallback={null}>
+          <AvisoMadre visible={cheatAlertVisible} texto={cheatAlertText} id={cheatAlertIdRef.current} enojo={cheatCountRef.current >= 3} />
+        </Suspense>
       )}
 
 
@@ -4004,6 +4038,12 @@ function SiteApp() {
           markTutorialShown()
         }}
       />
+      {/* El diálogo con el drone de M.A.D.R.E. */}
+      {dialogoDron && (
+        <Suspense fallback={null}>
+          <DialogoMadre onClose={() => setDialogoDron(false)} />
+        </Suspense>
+      )}
       {/* Zoidian dialog — antesala del tutorial de esferas */}
       {zoidianDialogOpen && (
         <Suspense fallback={null}>

@@ -54,7 +54,8 @@ export default function SpeechBubble3D({
 
   // ── SIZING MODEL (two simple knobs) ─────────────────────────────────────
   // 1) FONT: the text size is FIXED and readable (never shrinks → no tiny text).
-  // 2) MAX_R: the bubble GROWS to fit the text, up to this cap.
+  // 2) The bubble GROWS to fit the text. Sin tope: con el de 2.4 la frase más
+  //    larga quedaba a 0.02 del tope y una más larga se desbordaba.
   // maxWidth is a constant (not tied to R), so R converges once per phrase and
   // never oscillates → no trembling. Short phrases → small bubble; long ones →
   // bigger bubble, but text stays the same readable size.
@@ -62,12 +63,14 @@ export default function SpeechBubble3D({
   const MAX_WIDTH = 2.2     // ← wrap width (wider = fewer lines = squarer bubble)
   const PAD = 0.20          // inner margin (text ↔ spike valleys)
   const MIN_R = 0.62
-  const MAX_R = 2.4         // ← bubble size cap (room for the longest phrases)
   const BASE_R = 0.82
-  const [R, setR] = useState(BASE_R)
-  const rRef = useRef(R)
-  useEffect(() => { rRef.current = R }, [R])
-  useEffect(() => { setR(BASE_R) }, [layoutText])
+  // La medida va con el texto que se midió. Antes cada frase nueva regresaba el
+  // globo a BASE_R y esperaba el onSync del texto de medida; si la frase se
+  // repetía, troika no tenía nada que sincronizar, no llegaba onSync y el globo
+  // se quedaba chico con el texto desbordado (o "cortado": el texto oscuro que
+  // cae fuera del blanco casi no se ve sobre el azul).
+  const [medida, setMedida] = useState({ texto: null, R: BASE_R })
+  const R = medida.R
 
   const tmp = useMemo(() => ({
     p: new THREE.Vector3(),
@@ -278,6 +281,10 @@ export default function SpeechBubble3D({
   if (!shouldRender && !ultimoRef.current.display && !ultimoRef.current.layout) return null
   const textoVisible = shouldRender ? displayText : ultimoRef.current.display
   const textoMedida = shouldRender ? layoutText : ultimoRef.current.layout
+  const textoMedir = textoMedida || textoVisible
+  // Una frase nueva no sale hasta que su medida llega (un par de cuadros): así
+  // nunca se ve con el tamaño de la anterior.
+  const medido = medida.texto === textoMedir
 
   const CY = 0.72 // local Y center of the bubble
   const SEG = 64
@@ -286,7 +293,7 @@ export default function SpeechBubble3D({
   const noRaycast = () => null
 
   return (
-    <group ref={groupRef} rotation={[0, 0, -0.04]} raycast={noRaycast} visible={shouldRender}>
+    <group ref={groupRef} rotation={[0, 0, -0.04]} raycast={noRaycast} visible={shouldRender && medido}>
       {/* Shadow: hard offset black burst + tail (pop-art drop) */}
       <mesh geometry={burstGeos.border} position={[0.12, CY - 0.12, -0.02]} raycast={noRaycast}>
         <meshBasicMaterial color={'#000000'} opacity={0.9} />
@@ -344,17 +351,21 @@ export default function SpeechBubble3D({
             const info = troika?.textRenderInfo
             const bb = info?.blockBounds
             if (!bb || bb.length < 4) return
-            const w = Math.max(0, bb[2] - bb[0])
-            const h = Math.max(0, bb[3] - bb[1])
-            // Grow the bubble to fit the FULL text: the block's half-diagonal
-            // (corners) plus PAD must reach the valley circle (R*INNER_RATIO).
-            const halfDiag = 0.5 * Math.sqrt(w * w + h * h)
-            const desired = clamp((halfDiag + PAD) / INNER_RATIO, MIN_R, MAX_R)
-            if (Math.abs((rRef.current || 0) - desired) > 0.04) setR(desired)
+            // Grow the bubble to fit the FULL text: the block's farthest corner
+            // plus PAD must reach the valley circle (R*INNER_RATIO). Con la tinta
+            // (visibleBounds) por si una palabra sola mide más que MAX_WIDTH.
+            const vb = info.visibleBounds?.length === 4 ? info.visibleBounds : bb
+            const x = Math.max(Math.abs(bb[0]), Math.abs(bb[2]), Math.abs(vb[0]), Math.abs(vb[2]))
+            const y = Math.max(Math.abs(bb[1]), Math.abs(bb[3]), Math.abs(vb[1]), Math.abs(vb[3]))
+            const desired = Math.max(MIN_R, (Math.hypot(x, y) + PAD) / INNER_RATIO)
+            // El texto que midió este resultado: si cambió a media medición,
+            // troika.text ya es el nuevo y su onSync llega después.
+            const texto = info.parameters?.text ?? troika.text
+            setMedida((m) => (m.texto === texto && m.R === desired ? m : { texto, R: desired }))
           } catch {}
         }}
       >
-        {textoMedida || textoVisible}
+        {textoMedir}
       </Text>
 
       {/* VISIBLE text: shows the typed-in characters. No onSync (doesn't drive

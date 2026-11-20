@@ -1,7 +1,8 @@
-import React, { useMemo, useEffect, useRef } from 'react'
+import React, { useMemo, useEffect, useRef, useCallback } from 'react'
 import { Environment as DreiEnv, MeshReflectorMaterial } from '@react-three/drei'
 import * as THREE from 'three'
 import { useThree } from '@react-three/fiber'
+import { aplicarPisoPintado, ponerPortalesPiso } from '../lib/pisoPintado.js'
 
 /**
  * Environment
@@ -10,11 +11,15 @@ import { useThree } from '@react-three/fiber'
  * added as a visual reference so the player doesn’t appear to float in empty
  * space.  The plane receives shadows cast by the directional light.
  */
-export default function Environment({ overrideColor, lowPerf = false, mobileHdri = false, noAmbient = false, transparentBg = false, shadowCatcherOpacity }) {
+export default function Environment({ overrideColor, lowPerf = false, mobileHdri = false, noAmbient = false, transparentBg = false, shadowCatcherOpacity, portales }) {
   // Scene background color (can be overridden from props for proximity tint)
   const bg = overrideColor || '#204580'
-  const { scene } = useThree()
+  const { scene, gl } = useThree()
   const reflectRef = useRef()
+  // Tierra pintada a mano en el piso (lib/pisoPintado.js), gastada en los portales.
+  useEffect(() => { ponerPortalesPiso(portales) }, [portales])
+  const pintarPiso = useCallback((m) => { if (m) aplicarPisoPintado(m, gl) }, [gl])
+  const refReflector = useCallback((m) => { reflectRef.current = m; pintarPiso(m) }, [pintarPiso])
   const catcherOpacity = (typeof shadowCatcherOpacity === 'number')
     ? Math.max(0, Math.min(1, shadowCatcherOpacity))
     : (lowPerf ? 0.18 : 0.22)
@@ -91,6 +96,7 @@ export default function Environment({ overrideColor, lowPerf = false, mobileHdri
           {lowPerf ? (
             // Simple material without reflection (saves ~1 full RTT pass per frame)
             <meshStandardMaterial
+              ref={pintarPiso}
               color={bg}
               roughness={0.95}
               metalness={0}
@@ -98,7 +104,7 @@ export default function Environment({ overrideColor, lowPerf = false, mobileHdri
             />
           ) : (
             <MeshReflectorMaterial
-            ref={reflectRef}
+            ref={refReflector}
             blur={[50, 20]}
             // This material is very expensive: keep resolution moderate even in high quality.
             resolution={128}

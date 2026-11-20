@@ -947,19 +947,6 @@ button[aria-disabled="true"]:hover {
   width: min(1200px, 92vw);
 }
 
-/* ============= Cheat System Alert Animations ============= */
-/* Alerta de cheats: pop toon (aplasta y rebota). Sin flash de brillo,
-   sin parpadeo ni cursor: eso era lenguaje de terminal. */
-@keyframes cheatAlertIn {
-  0% { opacity: 0; transform: scale(0.9) translateY(-10px); }
-  60% { opacity: 1; transform: scale(1.03) translateY(0); }
-  100% { opacity: 1; transform: none; }
-}
-
-.cheat-alert-enter {
-  animation: cheatAlertIn 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
 /* ============================================================
    CONSOLA DE MÚSICA — SR-90 (MusicPlayer.jsx, DESIGN.md §14.11)
    Un objeto de hardware dicho en el lenguaje del sitio: superficies
@@ -7246,3 +7233,165 @@ div:has(> #privy-dialog-backdrop) {
   .pd-galeria > *,
   .qp-raiz .qp-cerrar { animation: none; }
 }
+
+/* ── El diálogo con el drone de M.A.D.R.E. (DialogoMadre.jsx) ─────────────
+   Barras de cine como las de la historia y un globo blanco con la tinta de las
+   viñetas del sitio, abajo al centro. La etiqueta amarilla se glitchea a runas
+   como su firma en la tienda. Entra y sale con las barras. */
+.dlg-raiz {
+  position: fixed;
+  inset: 0;
+  z-index: 999990;
+  cursor: pointer;
+  --dlg-barra: 10svh;
+}
+.dlg-barra {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--dlg-barra);
+  background: #000;
+  transition: transform 700ms cubic-bezier(0.65, 0, 0.35, 1);
+}
+.dlg-barra--arriba { top: 0; transform: translateY(-101%); display: flex; align-items: center; justify-content: flex-end; padding: 0 2.5rem; }
+.dlg-barra--abajo { bottom: 0; transform: translateY(101%); }
+.dlg-raiz.is-texto .dlg-barra,
+.dlg-raiz.is-menu .dlg-barra,
+.dlg-raiz.is-entra .dlg-barra { transform: none; }
+.dlg-salir {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: rgba(255, 255, 255, 0.72);
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 0.875rem;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+.dlg-salir:hover { color: #fff; }
+.dlg-tecla {
+  padding: 0.1rem 0.45rem;
+  border: 1.5px solid currentColor;
+  border-radius: 0.35rem;
+  font-size: 0.75rem;
+}
+.dlg-globo {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--dlg-barra) * 0.55);
+  width: min(62rem, calc(100vw - 2rem));
+  min-height: 9.5rem;
+  padding: 2.1rem 2.4rem 1.8rem;
+  background: #fff;
+  color: #0a0a0a;
+  border: 3px solid #000;
+  border-radius: 1.4rem;
+  box-shadow: 7px 7px 0 #000;
+  transform: translate(-50%, 140%) scale(0.92);
+  opacity: 0;
+  transition: transform 520ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 220ms ease;
+  cursor: pointer;
+}
+.dlg-raiz.is-texto .dlg-globo,
+.dlg-raiz.is-menu .dlg-globo {
+  transform: translate(-50%, 0) scale(1);
+  opacity: 1;
+  transition-delay: 220ms;
+}
+.dlg-raiz.is-sale .dlg-globo { transition: transform 360ms cubic-bezier(0.36, 0, 0.66, -0.56), opacity 300ms ease; }
+.dlg-nombre {
+  position: absolute;
+  top: 0;
+  left: 1.8rem;
+  transform: translateY(-58%) rotate(-2.5deg);
+  padding: 0.3rem 1rem 0.15rem;
+  background: var(--amarillo);
+  color: #000;
+  border: 3px solid #000;
+  border-radius: 0.8rem;
+  box-shadow: 4px 4px 0 #000;
+  font-family: 'Luckiest Guy', 'Archivo Black', system-ui, sans-serif;
+  font-size: 1.35rem;
+  line-height: 1.1;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+.dlg-globo.is-enojo { box-shadow: 7px 7px 0 #ff2a1c; }
+.dlg-globo.is-enojo .dlg-nombre { background: #ff2a1c; color: #fff; }
+.dlg-texto {
+  margin: 0;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: clamp(1.125rem, 1.55vw, 1.6rem);
+  line-height: 1.38;
+}
+/* el renglón ya revelado (o saltado con un clic): sin runas ni animación */
+.dlg-texto.is-completo .rt-runes { display: none; }
+.dlg-texto.is-completo .rt-l { animation: none; }
+.dlg-texto--pregunta { margin-bottom: 0.7rem; }
+.dlg-menu ul {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem 1.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dlg-opcion {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.35rem 0.7rem;
+  border-radius: 0.6rem;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: clamp(1rem, 1.25vw, 1.25rem);
+  text-align: left;
+  color: #0a0a0a;
+  cursor: pointer;
+}
+.dlg-opcion.is-visto { color: rgba(10, 10, 10, 0.5); }
+.dlg-opcion[aria-selected='true'] { background: var(--amarillo); color: #000; box-shadow: inset 0 0 0 2px #000; }
+.dlg-cursor { visibility: hidden; font-size: 0.75em; }
+.dlg-opcion[aria-selected='true'] .dlg-cursor { visibility: visible; animation: dlg-cursor 700ms ease-in-out infinite; }
+.dlg-sigue {
+  position: absolute;
+  right: 1.4rem;
+  bottom: 0.9rem;
+  font-size: 1rem;
+  animation: dlg-sigue 650ms ease-in-out infinite alternate;
+}
+@keyframes dlg-sigue { from { transform: translateY(-2px); } to { transform: translateY(4px); } }
+@keyframes dlg-cursor { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(3px); } }
+@media (max-width: 700px) {
+  .dlg-menu ul { grid-template-columns: minmax(0, 1fr); }
+  .dlg-globo { padding: 1.8rem 1.3rem 1.5rem; }
+}
+/* Los avisos del juego (AvisoMadre): el mismo globo, abajo y sin tomar el
+   puntero, arriba del botón de terminar la partida. */
+.aviso-madre {
+  position: fixed;
+  inset: 0;
+  z-index: 99999999;
+  pointer-events: none;
+}
+.aviso-madre .dlg-globo {
+  bottom: 7.5rem;
+  width: min(44rem, calc(100vw - 2rem));
+  min-height: 0;
+  padding: 1.9rem 2.2rem 1.5rem;
+  cursor: default;
+}
+.aviso-madre.is-on .dlg-globo {
+  transform: translate(-50%, 0) scale(1);
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .aviso-madre .dlg-globo { transition-duration: 1ms; }
+}
+.dlg-raiz.is-quieto .dlg-barra,
+.dlg-raiz.is-quieto .dlg-globo { transition-duration: 1ms; transition-delay: 0ms; }
+.dlg-raiz.is-quieto .dlg-sigue,
+.dlg-raiz.is-quieto .dlg-cursor { animation: none; }

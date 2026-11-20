@@ -8,6 +8,7 @@ import { toonPisoGlobal } from '../../lib/toonBanding.js'
 import { wallpaperEstado } from '../../lib/wallpaperEscritorio.js'
 import PortalCrystal from '../fx/PortalCrystal.jsx'
 import PortalHitArea from '../fx/PortalHitArea.jsx'
+import Luciernagas from '../fx/Luciernagas.jsx'
 import * as THREE from 'three'
 import PauseFrameloop from '../PauseFrameloop.jsx'
 import { compileAsyncSafe } from '../../lib/compileAsyncSafe.js'
@@ -243,6 +244,7 @@ import Environment from '../Environment.jsx'
 import FakeGrass from '../FakeGrass.jsx'
 import FloatingExclamation from '../FloatingExclamation.jsx'
 import ZoidianNPC from '../ZoidianNPC.jsx'
+import DroneNPC from '../drone/DroneNPC.jsx'
 import PortalParticles from '../PortalParticles.jsx'
 import GoldenFlashOverlay from '../GoldenFlashOverlay.jsx'
 import GoldenDissolveParticles from '../GoldenDissolveParticles.jsx'
@@ -412,6 +414,7 @@ function ToonKeyLight({ playerRef, intensity = 2.4 }) {
 export default function HomeScene({
   // state flags
   pageHidden, showPreloaderOverlay, showSectionUi, sectionUiAnimatingOut, sectionCovered, historiaCubre, primerPlano,
+  dialogoDron = false, puedeHablarDron = false, onHablarDron,
   transitionState, tramaViaje, noiseMixEnabled, mainWarmStage, sectionHomeWarm, onHomeWarmDone, psychoSceneColor,
   effectiveSceneColor, isMobilePerf, degradedMode, fxWarm, prevSceneTex,
   eggActive, boltFlashActive, vhsRewindActive, section, homeLanded, spheresTutorialOpen, sphereGameActive,
@@ -600,6 +603,7 @@ export default function HomeScene({
             lowPerf={Boolean(isMobilePerf || degradedMode || !fxWarm)}
             mobileHdri={Boolean(isMobilePerf)}
             transparentBg={prevSceneTex == null && noiseMixEnabled}
+            portales={portals}
           />
         )}
         {/* Cel-shading key light RELATIVA A CÁMARA → corte toon consistente y
@@ -682,6 +686,10 @@ export default function HomeScene({
         {mainWarmStage >= 2 && (
           <>
             <SharedBoltImpactLight />
+            {/* Luciérnagas del escenario (fx/Luciernagas.jsx): montadas desde el
+                warm-up y nunca desmontadas, para que su programa se compile ahí;
+                fuera del home o en Customize solo se apagan. */}
+            <Luciernagas playerRef={playerRef} activo={Boolean(section === 'home' && !saliendoDeHome && !customizeActive)} />
             <OrbLightRig count={isMobilePerf ? 5 : 10} rigRef={orbLightRigRef} />
             {/* Antimatter strike — rayo del cielo al PISO en la posición del
                 respawn. Top alto fijo, bottom siempre en y=0 (ground) para que
@@ -747,6 +755,23 @@ export default function HomeScene({
             />
           </>
         )}
+        {/* El drone de M.A.D.R.E.: deambula, ofrece la tienda en el portal de Work,
+            habla (DialogoMadre en App) y castiga las trampas. Monta desde el
+            warm-up como Argus, con su propio Suspense. */}
+        {comoHome && mainWarmStage >= 2 && !saliendoDeHome && (
+          <Suspense fallback={null}>
+            <DroneNPC
+              playerRef={playerRef}
+              portals={portals}
+              nearPortalId={nearPortalId}
+              activo={section === 'home' && homeLanded}
+              juegoActivo={sphereGameActive}
+              dialogo={dialogoDron}
+              puedeHablar={puedeHablarDron}
+              onHablar={onHablarDron}
+            />
+          </Suspense>
+        )}
         {/* Floating "!" — ahora flota ARRIBA del zoidian, mismo trigger.
             Monta desde el warmup y no se desmonta: su luz cuenta para todos los
             materiales iluminados, y aparecer al aterrizar o irse con la sección
@@ -771,8 +796,8 @@ export default function HomeScene({
           eggActive={eggActive}
           goldSkinActive={goldSkinModelActive}
           goldSkinTransformActive={goldSkinTransformActive}
-          customizeActive={customizeActive || tramaViaje || primerPlano}
-          powerEnabled={section === 'home' && !saliendoDeHome}
+          customizeActive={customizeActive || tramaViaje || primerPlano || dialogoDron}
+          powerEnabled={section === 'home' && !saliendoDeHome && !dialogoDron}
           homeLanded={homeLanded}
           onPortalEnter={bootLoading ? undefined : handlePortalEnter}
           onProximityChange={bootLoading ? undefined : ((f) => {
@@ -1006,6 +1031,7 @@ export default function HomeScene({
               mode={cameraMode}
               customizeActive={customizeActive}
               primerPlano={primerPlano}
+              dialogo={dialogoDron}
             />
           )
         })()}
