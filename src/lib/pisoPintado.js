@@ -58,6 +58,8 @@ const RADIO_DESGASTE = 6.5
 // También en las dos áreas de lozas (lo que llega desde su centro) y en los tramos
 // visibles del camino (Oscar: que se vea en la textura del inicio y en el camino).
 const RADIO_DESGASTE_PLAZA = 11.0
+// Para que lo que crece en el piso (las matas de PastoPintado) sepa dónde hay lozas y camino.
+export const zonasPiso = { plaza: PLAZA, plazaGlifo: PLAZA_GLIFO, camino: CAMINO, caminoTramos: CAMINO_TRAMOS }
 
 export const uniformsPiso = {
   uPisoFuerza: { value: 1 },

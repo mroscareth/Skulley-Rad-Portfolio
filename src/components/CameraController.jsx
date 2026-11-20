@@ -3,6 +3,7 @@ import { OrbitControls } from '@react-three/drei'
 import React, { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { dron } from '../lib/droneNpc.js'
+import { argus } from '../lib/argusNpc.js'
 import { wallpaperEstado } from '../lib/wallpaperEscritorio.js'
 import { playSfx, preloadSfx } from '../lib/sfx.js'
 import { playCameraZoom, playCameraZoomStop } from '../lib/homeSounds.js'
@@ -52,9 +53,11 @@ export default function CameraController({
   // Primer plano a la cara (antes del iris de "Conocer la historia", App.jsx):
   // la misma órbita de customize, pero cerca y a la altura de la cara.
   primerPlano = false,
-  // Hablando con el drone de M.A.D.R.E. (DroneNPC): detrás de Skulley, sobre su
-  // hombro, viendo al drone (Oscar, 2026-11-19).
+  // Hablando con el drone de M.A.D.R.E. (DroneNPC) o con Argus (su escena del
+  // trato): detrás de Skulley, sobre su hombro, viendo a quien le habla (Oscar,
+  // 2026-11-19). `dialogoCon`: 'dron' | 'argus'.
   dialogo = false,
+  dialogoCon = 'dron',
 }) {
   const { camera, gl } = useThree()
   const controlsRef = useRef()
@@ -130,6 +133,13 @@ export default function CameraController({
   const DIALOGO_ALTO = 3.1
   const DIALOGO_MIRA_LADO = 1.2
   const DIALOGO_MIRA_Y = -0.6
+  // Con Argus (mide 3.2, parado en el piso a ~3.6 de Skulley): más atrás y más
+  // abierto para que quepa entero; mira a la altura de su pecho, desde el piso.
+  const ARGUS_ATRAS = 2.7
+  const ARGUS_LADO = 3.3
+  const ARGUS_ALTO = 3.7
+  const ARGUS_MIRA_LADO = 1.5
+  const ARGUS_MIRA_Y = 1.45
   const CUSTOMIZE_SALIDA_S = 1.25 // el regreso a la vista de arriba: arranca y llega suave
   const custTmpRef = useRef({
     quat: new THREE.Quaternion(),
@@ -615,14 +625,20 @@ export default function CameraController({
       const frontDist = primerPlano ? PRIMER_PLANO_DIST : compact ? CUSTOMIZE_FRONT_DIST_MOBILE : CUSTOMIZE_FRONT_DIST
       const lateral = primerPlano ? 0 : compact ? CUSTOMIZE_LATERAL_MOBILE : CUSTOMIZE_LATERAL
       if (dialogo) {
-        // de Skulley hacia el drone, y su derecha vista desde atrás
-        const dx = dron.pos.x - base.x
-        const dz = dron.pos.z - base.z
+        // de Skulley hacia quien le habla, y su derecha vista desde atrás
+        const conArgus = dialogoCon === 'argus'
+        const otro = conArgus ? argus.pos : dron.pos
+        const atras = conArgus ? ARGUS_ATRAS : DIALOGO_ATRAS
+        const lado = conArgus ? ARGUS_LADO : DIALOGO_LADO
+        const alto = conArgus ? ARGUS_ALTO : DIALOGO_ALTO
+        const miraLado = conArgus ? ARGUS_MIRA_LADO : DIALOGO_MIRA_LADO
+        const dx = otro.x - base.x
+        const dz = otro.z - base.z
         const d = Math.hypot(dx, dz) || 1
         const fx = dx / d, fz = dz / d
         const rx = -fz, rz = fx
-        c.camTarget.set(base.x - fx * DIALOGO_ATRAS + rx * DIALOGO_LADO, base.y + DIALOGO_ALTO, base.z - fz * DIALOGO_ATRAS + rz * DIALOGO_LADO)
-        c.lookTarget.set(dron.pos.x - rx * DIALOGO_MIRA_LADO, dron.pos.y + DIALOGO_MIRA_Y, dron.pos.z - rz * DIALOGO_MIRA_LADO)
+        c.camTarget.set(base.x - fx * atras + rx * lado, base.y + alto, base.z - fz * atras + rz * lado)
+        c.lookTarget.set(otro.x - rx * miraLado, conArgus ? otro.y + ARGUS_MIRA_Y : otro.y + DIALOGO_MIRA_Y, otro.z - rz * miraLado)
       } else {
         // Camera in front of the face (+Z local) + lateral truck (+X local).
         c.camOff.set(lateral, primerPlano ? PRIMER_PLANO_Y : CUSTOMIZE_CAM_HEIGHT, frontDist).applyQuaternion(c.quat)

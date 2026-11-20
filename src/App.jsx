@@ -1,6 +1,7 @@
 import { isPhoneExperience, usePhoneExperience } from './lib/mobileExperience.js'
 import { VERSION_RAPIDA, PUERTA_DE_LLEGADA, RUTA_COMPLETA, puertaDeRuta, salirDeRapida, entrarARapida } from './lib/versionRapida.js'
 import { cambiarDeVersion, cortinaDeLlegada, volverAlInicio } from './lib/cambioDeVersion.js'
+import { PALETAS_HOME, useMomentoHome } from './lib/momentoHome.js'
 import { lazyListo } from './lib/lazyListo.js'
 import React, { useRef, useState, useMemo, useCallback, Suspense, lazy, useEffect } from 'react'
 // three / @react-three/* live inside HomeCanvas (lazy-loaded below).
@@ -103,7 +104,7 @@ const DesktopScrollPreloader = lazy(() => import('./components/DesktopScrollPrel
 // el árbol del sitio — monta su propio canvas y su propio personaje, así que
 // no puede tocar la escena de HOME.
 const PoseStudio = lazy(() => import('./components/dev/PoseStudio.jsx'))
-// Diálogo del zoidian: lazy porque monta un mini-canvas R3F (retrato) — si se
+// La escena del trato de Argus: lazy, se baja al picarlo — si se
 // importara eager arrastraría three al bundle inicial.
 const ZoidianDialog = lazy(() => import('./components/ZoidianDialog.jsx'))
 // El diálogo con el drone de M.A.D.R.E. (DroneNPC en la home).
@@ -127,7 +128,6 @@ const GlobalShopCart = lazy(() => import('./components/shop/ShopCart.jsx'))
 const OrderStatusModal = lazy(() => import('./components/shop/OrderStatusModal.jsx'))
 const AccountModal = lazy(() => import('./components/account/AccountModal.jsx'))
 import TutorialModal, { useTutorialShown } from './components/TutorialModal.jsx'
-import SphereGameModal from './components/SphereGameModal.jsx'
 import GameOverModal, { getRewardTier } from './components/GameOverModal.jsx'
 import SectionPreloader from './components/SectionPreloader.jsx'
 import { GameToastProvider, useGameToast } from './components/GameToast.jsx'
@@ -193,6 +193,7 @@ import { useShopCartCtx } from './lib/shopCartContext.jsx'
 import { startGameSession, endGameSession } from './lib/gameSession.js'
 import { iniciarJuego, detenerJuego, escuchar as escucharJuego } from './lib/juegoEsferas.js'
 import { castigarConDron } from './lib/droneNpc.js'
+import { argus } from './lib/argusNpc.js'
 import JuegoHUD from './components/JuegoHUD.jsx'
 import useDwellTimeTracking from './hooks/useDwellTimeTracking.js'
 import useSectionVisitTracking from './hooks/useSectionVisitTracking.js'
@@ -508,16 +509,17 @@ function SiteApp() {
   const [socialsOpen, setSocialsOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [tutorialOpen, setTutorialOpen] = useState(false)
-  const [spheresTutorialOpen, setSpheresTutorialOpen] = useState(false)
-  useEffect(() => {
-    if (!spheresTutorialOpen) return
-    importOjosMadre().catch(() => {})
-    importAvisoMadre().catch(() => {})
-  }, [spheresTutorialOpen])
   // { modo: 'madre' | 'furia', id }: cuándo se asoman los ojos de M.A.D.R.E.
   const [ojosMadre, setOjosMadre] = useState(null)
-  // Diálogo del zoidian (NPC del juego de esferas) — antesala del tutorial.
+  // La escena del trato de Argus (ZoidianDialog): la UI se va, Skulley camina
+  // hasta él y la cámara se pone sobre su hombro; de ahí arranca la partida.
   const [zoidianDialogOpen, setZoidianDialogOpen] = useState(false)
+  useEffect(() => {
+    if (!zoidianDialogOpen) return
+    // lo que la partida va a necesitar, mientras Argus habla
+    importOjosMadre().catch(() => {})
+    importAvisoMadre().catch(() => {})
+  }, [zoidianDialogOpen])
   // Hablando con el drone de M.A.D.R.E.: la UI se va y la cámara se pone sobre el hombro.
   // 'charla' al picarla; 'bienvenida' la primera vez en la experiencia (luego los controles).
   const [dialogoDron, setDialogoDron] = useState(false)
@@ -1515,8 +1517,8 @@ function SiteApp() {
 
     if (inHome) {
       // In HOME: UI enters when homeLanded is true
-      if (dialogoDron || bienvenidaPendiente) {
-        // hablando con el drone (o esperando su bienvenida): la UI sale animada y se queda escondida
+      if (dialogoDron || zoidianDialogOpen || bienvenidaPendiente) {
+        // hablando con el drone o con Argus (o esperando la bienvenida): la UI sale animada y se queda escondida
         if (uiAnimPhase === 'visible' || uiAnimPhase === 'entering') {
           setUiAnimPhase('exiting')
           if (uiExitTimerRef.current) clearTimeout(uiExitTimerRef.current)
@@ -1543,7 +1545,7 @@ function SiteApp() {
         clearTimeout(uiEnterTimerRef.current)
       }
     }
-  }, [section, homeLanded, transitionState.active, uiAnimPhase, dialogoDron, bienvenidaPendiente])
+  }, [section, homeLanded, transitionState.active, uiAnimPhase, dialogoDron, zoidianDialogOpen, bienvenidaPendiente])
 
   // El deck de música se monta UNA vez (al primer aterrizaje, o al entrar
   // directo a una sección) y ya no se desmonta. Antes colgaba de `homeLanded`
@@ -2488,7 +2490,7 @@ function SiteApp() {
   // partida, sin Customize, sin otro diálogo ni transición. Si algo de eso
   // empieza a medias, el diálogo se cierra.
   const puedeHablarDron = section === 'home' && homeLanded && !sphereGameActive && !customizeOpen
-    && !transitionState.active && !zoidianDialogOpen && !spheresTutorialOpen && !tutorialOpen
+    && !transitionState.active && !zoidianDialogOpen && !tutorialOpen
   const abrirDialogoDron = useCallback(() => {
     try { playSfx('click', { volume: 0.8 }) } catch { }
     setDialogoDron(true)
@@ -2499,6 +2501,26 @@ function SiteApp() {
     // si se corta la bienvenida, que la UI no se quede esperándola
     if (dialogoModo === 'bienvenida') { setDialogoModo('charla'); markTutorialShown() }
   }, [dialogoDron, dialogoModo, section, sphereGameActive, customizeOpen, transitionState.active, markTutorialShown])
+
+  // Argus: su escena del trato solo con Skulley dentro de su radio (argus.cerca,
+  // Oscar: así funcionan la caminata y la cámara) y en la home quieta. Si algo de
+  // eso empieza a medias, se cierra.
+  const abrirTratoArgus = useCallback(() => {
+    if (section !== 'home' || !homeLanded || sphereGameActive || customizeOpen || transitionState.active
+      || dialogoDron || tutorialOpen || !argus.cerca) return
+    try { playSfx('click', { volume: 0.8 }) } catch { }
+    setZoidianDialogOpen(true)
+  }, [section, homeLanded, sphereGameActive, customizeOpen, transitionState.active, dialogoDron, tutorialOpen])
+  useEffect(() => {
+    if (!zoidianDialogOpen || !(section !== 'home' || sphereGameActive || customizeOpen || transitionState.active)) return
+    setZoidianDialogOpen(false)
+  }, [zoidianDialogOpen, section, sphereGameActive, customizeOpen, transitionState.active])
+  const empezarPartida = useCallback(() => {
+    setSphereGameActive(true)
+    scoreStore.reset()
+    startGameSession()
+    iniciarJuego([])
+  }, [])
 
   // Volver al inicio: la pantalla principal (/), con la cortinilla.
   const irAlInicio = useCallback(() => {
@@ -3005,15 +3027,17 @@ function SiteApp() {
   }, [transitionState])
 
   const [tintFactor, setTintFactor] = useState(0)
+  // Día (morado) o noche (azul) del home: lib/momentoHome.js.
+  const momentoHome = useMomentoHome()
   // Throttle scene color recomputation, damping abrupt changes
   const sceneColor = useMemo(() => {
-    // El azul de estar parado en un portal, siempre (Oscar, 2026-11-19): con el de
-    // antes (#022dd6) el piso salía al tope, no se veía su pintura y la llama y los
-    // portales resaltaban menos. Por eso ya no cambia al acercarse a un portal.
-    const baseBg = '#011d8a'
-    const nearColor = '#011d8a'
+    // De noche, el azul de estar parado en un portal, siempre (Oscar, 2026-11-19):
+    // con el de antes (#022dd6) el piso salía al tope, no se veía su pintura y la
+    // llama y los portales resaltaban menos. Por eso ya no cambia al acercarse a un portal.
+    const baseBg = PALETAS_HOME[momentoHome].escena
+    const nearColor = baseBg
     return lerpColor(baseBg, nearColor, tintFactor)
-  }, [tintFactor])
+  }, [tintFactor, momentoHome])
   const [portalMixMap, setPortalMixMap] = useState({})
   function lerpColor(hex1, hex2, t) {
     const c1 = parseInt(hex1.slice(1), 16)
@@ -3152,8 +3176,8 @@ function SiteApp() {
           vhsRewindActive={vhsRewindActive}
           section={section}
           homeLanded={homeLanded}
-          spheresTutorialOpen={spheresTutorialOpen}
-          setZoidianDialogOpen={setZoidianDialogOpen}
+          dialogoArgus={zoidianDialogOpen}
+          onHablarArgus={abrirTratoArgus}
           sphereGameActive={sphereGameActive}
           cheatDragEnabled={cheatDragEnabled}
           bootLoading={bootLoading}
@@ -3209,7 +3233,6 @@ function SiteApp() {
           setActionCooldown={setActionCooldown}
           setPreloaderFadingOut={setPreloaderFadingOut}
           setHomeLanded={setHomeLanded}
-          setSpheresTutorialOpen={setSpheresTutorialOpen}
           setPlayerMeshes={setPlayerMeshes}
           handlePortalEnter={handlePortalEnter}
           handleCheatCapture={handleCheatCapture}
@@ -4084,33 +4107,21 @@ function SiteApp() {
           />
         </Suspense>
       )}
-      {/* Zoidian dialog — antesala del tutorial de esferas */}
+      {/* La escena del trato de Argus: el trato, cómo se juega, los premios y de ahí a la partida */}
       {zoidianDialogOpen && (
         <Suspense fallback={null}>
           <ZoidianDialog
-            t={t}
-            open={zoidianDialogOpen}
+            playerRef={playerRef}
+            portals={portals}
+            tactil={controlesTactiles}
             onClose={() => setZoidianDialogOpen(false)}
             onPlay={() => {
               setZoidianDialogOpen(false)
-              setSpheresTutorialOpen(true)
+              empezarPartida()
             }}
           />
         </Suspense>
       )}
-      {/* Sphere game tutorial modal */}
-      <SphereGameModal
-        t={t}
-        open={spheresTutorialOpen}
-        onClose={() => setSpheresTutorialOpen(false)}
-        gameActive={sphereGameActive}
-        onStartGame={() => {
-          setSphereGameActive(true)
-          scoreStore.reset()
-          startGameSession()
-          iniciarJuego([])
-        }}
-      />
       {/* Game Over modal */}
       <GameOverModal
         t={t}

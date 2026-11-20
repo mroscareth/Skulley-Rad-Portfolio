@@ -32,6 +32,9 @@ export default function useSpeechBubbles({
   firstDelayMs = 250,
   delayMinMs = 2000,
   delayRandMs = 2600,
+  // false: sin frases solas; solo salen al llamar `decir()` (y las de override).
+  automatico = true,
+  pausaMs = 2500,
 } = {}) {
   const { lang, t } = useLanguage()
   // Bubble theme (e.g. egg override for 3D bubble)
@@ -171,7 +174,7 @@ export default function useSpeechBubbles({
   }
 
   const scheduleNext = () => {
-    if (!enabled) return
+    if (!enabled || !automatico) return
     if (overrideRef.current) return
     const arr = phrasesRef.current || []
     if (!arr.length) return
@@ -281,11 +284,39 @@ export default function useSpeechBubbles({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lang])
 
+  // Ocupada mientras hay frase y `pausaMs` después de que se va (también el
+  // hueco antes del remate de un chain), para que no salgan una tras otra.
+  const visibleRef = useRef(visible)
+  visibleRef.current = visible
+  const libreDesdeRef = useRef(0)
+  useEffect(() => {
+    if (!visible) libreDesdeRef.current = performance.now() + pausaMs
+  }, [visible, pausaMs])
+  const ocupada = () => visibleRef.current || performance.now() < libreDesdeRef.current
+
+  // Una frase al azar ahora mismo, sin repetir la última.
+  const enabledRef = useRef(enabled)
+  enabledRef.current = enabled
+  const decir = () => {
+    if (!enabledRef.current || ocupada()) return
+    const list = phrasesRef.current || []
+    const pool = []
+    for (let i = 0; i < list.length; i++) {
+      if (!CHAINED_FOLLOWERS.has(i) && i !== idxRef.current) pool.push(i)
+    }
+    if (!pool.length) return
+    bumpEpoch()
+    overrideRef.current = null
+    showPhraseByIdx(pool[Math.floor(Math.random() * pool.length)])
+  }
+
   return {
     visible,
     text: displayText || fullText,
     fullText,
     theme,
+    decir,
+    ocupada,
   }
 }
 

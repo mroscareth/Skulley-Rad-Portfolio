@@ -10,10 +10,9 @@ import { TicketArt } from '../GoldenTicketBadge.jsx'
 // premio no se esconde: se muestran los dos niveles con sus números REALES
 // (los del backend, no escritos a mano) y Argus dice de frente dónde se ganan.
 //
-// Por qué nada de 3D: el diálogo de escritorio (ZoidianDialog) monta un
-// <Canvas> con ZoidianModel y eso arrastra zoidian.glb — 2.0 MB para un
-// retrato. Acá la presencia de Argus es SVG: su ojo, el mismo de la pleca
-// amarilla de SphereGameModal. El boleto ya era SVG (TicketArt).
+// Por qué nada de 3D: en escritorio Argus habla en su escena dentro del mundo
+// (ZoidianDialog) y aquí no hay mundo. Acá su presencia es SVG: su ojo, el que
+// tenía la pleca amarilla de las reglas del juego. El boleto ya era SVG (TicketArt).
 
 // La línea del teléfono, en la voz de Argus: corta, hechos concretos, sin
 // disculpa y sin fecha. Local a propósito — LanguageContext.jsx lo está
@@ -29,7 +28,7 @@ const TIER_COLOR = { gold: '#FFC21A', silver: '#DCE2EA' }
 
 const ALMOND = 'M4 20 Q 20 3 32 3 Q 44 3 60 20 Q 44 37 32 37 Q 20 37 4 20 Z'
 
-// Copia del ojo toon de SphereGameModal (allá es local al módulo). Vive de las
+// El ojo toon de Argus (venía de las reglas del juego de escritorio). Vive de las
 // clases .argus-eye de index.css, así que el parpadeo, la mirada y su
 // prefers-reduced-motion son los mismos. El párpado es amarillo porque baja
 // sobre la pleca amarilla: ese color es su "piel".

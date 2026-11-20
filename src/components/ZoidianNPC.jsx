@@ -1,47 +1,148 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { useGLTF, useAnimations } from '@react-three/drei'
+import { useGLTF } from '@react-three/drei'
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
 import * as THREE from 'three'
 import { extendGLTFLoaderKTX2 } from '../lib/ktx2Setup.js'
 import { applyToonBanding } from '../lib/toonBanding.js'
+import { applyNeonOrb } from '../lib/applyNeonOrb.js'
+import makeHullOutline from '../lib/makeHullOutline.js'
+import { sectionColors } from '../lib/appHelpers.js'
 import SpeechBubble3D from './SpeechBubble3D.jsx'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import { playSfx } from '../lib/sfx.js'
 import { escuchar as escucharJuego } from '../lib/juegoEsferas.js'
+import { crearMaterialMochila, crearCaraMochila } from './argus/pantallaMochila.js'
+import { crearRelojHolograma } from './argus/relojHolograma.js'
+import { argus, escucharArgus } from '../lib/argusNpc.js'
 
-// Zoidian — NPC dueño del juego de las esferas. Vive donde antes flotaba solo
-// el "!" amarillo (entre los portales de Store y Contact); ahora el signo
+// Zoidian (Argus) — NPC dueño del juego de las esferas. Vive donde antes flotaba
+// solo el "!" amarillo (entre los portales de Store y Contact); ahora el signo
 // flota ARRIBA de él. Click → diálogo (ZoidianDialog en App) → instrucciones.
 //
-// El GLB viene de Sketchfab con transforms raros en el root, así que el modelo
-// se AUTO-CENTRA por bounding box: pies en y=0, centrado en X/Z. Nada de
-// offsets mágicos que se rompan si se re-exporta el asset.
+// El GLB (zoidian_rig.glb) lo arma scripts/argus/armar_argus.py a partir del de
+// Sketchfab (zoidian.glb): esqueleto limpio con el reposo en la pose que se ve,
+// huesos de cara (quijada, globos de los ojos, cuatro párpados que se le
+// agregaron, cejas), tres huesos por antena y los clips de abajo. Encima de los
+// clips, aquí: la cara (parpadeo, mirada, expresión, quijada al hablar), el
+// resorte de las antenas, la esfera luminosa del idle de comer, el head tracking
+// hacia Skulley y el empujón procedural.
+//
+// El modelo se AUTO-CENTRA por bounding box: pies en y=0, centrado en X/Z.
 
-const ZOIDIAN_URL = `${import.meta.env.BASE_URL}3dmodels/zoidian.glb`
-// Hueso de la cabeza del rig (Sketchfab). Lo usan el head-tracking y el
-// encuadre del retrato del diálogo.
+const ZOIDIAN_URL = `${import.meta.env.BASE_URL}3dmodels/zoidian_rig.glb`
+// Hueso de la cabeza. Lo usan el head-tracking y el encuadre del retrato.
 export const ZOIDIAN_HEAD_BONE = 'head_05'
 const ZOIDIAN_NECK_BONE = 'neck_04'
 
-// Modelo puro + idle en loop. Reusable: escena principal y mini-canvas del
-// retrato del diálogo (mismo patrón que SlimeMesh / SlimeSlugDOM).
-// `lookAtRef`: Object3D a seguir con cabeza/cuello (Skulley). Es PROCEDURAL,
-// encima del idle: cada frame el mixer escribe la pose y después le sumamos
-// yaw/pitch clampeados a neck+head. Cuando el target sale de rango (lejos o
-// muy de espaldas) el peso se desvanece y regresa solito a su pose.
-// `pushRef`: timeline compartida del EMPUJÓN procedural ({ t: -1 } = idle;
-// el NPC la arranca poniendo t=0 y este componente la avanza y posa los
-// huesos). No hay clip en el GLB — la animación es 100% aditiva sobre el
-// idle, igual que el head-tracking: windup (brazos atrás + lean atrás) →
-// thrust (brazos disparados al frente + lean adelante) → recover.
-// `pitchMax`: cuánto puede levantar la cabeza (rad). En escena basta 0.45; el
-// retrato del diálogo pide más para que el idle encorvado no lo deje mirando al
-// piso.
-// `outlineWorld`: grosor del contorno en unidades del mundo. 0.02 es el de la
-// escena (Argus se ve chico); un retrato grande pide uno más fino según su
-// zoom, o el trazo se vuelve una franja gruesa y dentada.
-export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColor = '#000000', outlineWorld = 0.02, pushRef = null, onMeasured, toon = null, pitchMax = 0.45 }) {
+// Clips (ver acciones_lista.py). Los de una vez regresan solos a la base.
+const UNA_VEZ = new Set(['IdleMirar', 'IdleImpaciente', 'IdleComer', 'Saludo', 'Risa', 'Impresionado', 'Empujon',
+  'Trato', 'Senalar', 'Presumir', 'Encogerse', 'Celebrar'])
+const VARIEDAD = [['IdleComer', 0.45], ['IdleMirar', 0.3], ['IdleImpaciente', 0.25]]
+// Una reacción no interrumpe a otra de más peso.
+const PESO_REACCION = { Saludo: 1, Impresionado: 2, Risa: 3, Empujon: 4 }
+const TRANSICION = 0.35
+// Cuánto manda el head tracking en cada clip: los que mueven la cabeza a
+// propósito (mirar alrededor, comer, reírse) casi no lo dejan.
+const SEGUIR_EN = { Idle: 1, Hablar: 1, Saludo: 0.9, Impresionado: 0.6, IdleImpaciente: 0.5, IdleMirar: 0.15, IdleComer: 0.12, Risa: 0.2, Empujon: 0.3,
+  Trato: 0.8, Senalar: 1, Presumir: 0.5, Encogerse: 0.7, Celebrar: 0.3 }
+
+// Cada párpado son tres huesos a lo ancho del ojo; cada uno cierra hasta la línea
+// medida de la cuenca en su lugar (grados, de armar_argus.py), así el filo sigue la
+// almendra inclinada del ojo a cualquier altura. 1 = cerrado. El hueso 0 es la
+// orilla de afuera en el ojo izquierdo y la de adentro en el derecho (ADENTRO).
+const CIERRE = {
+  L: { sup: [80.13, 56.98, 28.19], inf: [52.21, 38.02, 20.37] },
+  R: { sup: [28.18, 56.98, 79.71], inf: [20.37, 38.02, 51.95] },
+}
+const ADENTRO = { L: 2, R: 0 }
+// Abiertos se guardan este tanto más adentro de la cuenca (grados): desde arriba la
+// cámara alcanzaba a ver el filo debajo de la ceja.
+const ABIERTO_EXTRA = 14
+// La carita de la mochila ve a Skulley si está más cerca que `lejos` (unidades del
+// mundo) y dentro de un cono de ~75° alrededor de hacia donde ve la pantalla.
+const MOCHILA_VE = { lejos: 16, cono: Math.cos(THREE.MathUtils.degToRad(75)) }
+// La pupila queda a ~30 % de la orilla de arriba: con más de ~0.4 el párpado la tapa.
+// Al mirar arriba el párpado sube con el ojo (por radián de mirada).
+const SUBE_CON_MIRADA = 1.3
+const ESFERA_R = 0.09 // radio de la esfera de comer, en el espacio del modelo
+
+// Expresiones: párpados (0..1; supInt/supExt cierran de más la orilla de adentro o
+// la de afuera: enojo y tristeza), cejas (en unidades del modelo, + = arriba; int =
+// solo la de adentro; L/R = de un lado) y boca (son = sonrisa, + arriba y afuera,
+// - abajo; junta = boca en "o"; grune = labio de arriba arriba).
+const EXPR = {
+  neutral: {},
+  feliz: { inf: 0.4, ceja: 0.02, cejaInt: 0.015, son: 0.8 },
+  carcajada: { sup: 0.3, inf: 0.55, ceja: 0.03, son: 1.2 },
+  sorpresa: { ceja: 0.06, cejaInt: 0.01, junta: 0.6 },
+  furia: { sup: 0.15, supInt: 0.25, supExt: -0.15, ceja: -0.02, cejaInt: -0.025, grune: 0.8, son: -0.4 },
+  aburrido: { sup: 0.36, ceja: -0.005, son: -0.3 },
+  sospecha: { sup: 0.28, cejaL: 0.05, cejaR: -0.02, son: 0.3 },
+  apretados: { sup: 1, inf: 1, ceja: -0.02, junta: 0.3 },
+  encoge: { ceja: 0.04, inf: 0.12, son: -0.2 },
+}
+const CLAVES_EXPR = ['sup', 'inf', 'supInt', 'supExt', 'ceja', 'cejaInt', 'cejaL', 'cejaR', 'son', 'junta', 'grune']
+// La cara de cada momento de cada clip: [segundo, expresión].
+const CARA_CLIP = {
+  IdleComer: [[0, 'neutral'], [0.3, 'sorpresa'], [1.3, 'feliz'], [3.7, 'sorpresa'], [4.6, 'apretados'], [4.78, 'feliz'],
+    [6.05, 'apretados'], [6.45, 'feliz'], [8.15, 'sorpresa'], [8.7, 'feliz'], [9.5, 'neutral']],
+  IdleMirar: [[0, 'neutral'], [0.6, 'sospecha'], [4.5, 'encoge'], [5.2, 'neutral']],
+  IdleImpaciente: [[0, 'neutral'], [0.5, 'aburrido'], [5.6, 'neutral']],
+  Saludo: [[0, 'neutral'], [0.3, 'feliz'], [2.2, 'neutral']],
+  Risa: [[0, 'feliz'], [0.25, 'carcajada'], [2.6, 'feliz'], [3.1, 'neutral']],
+  Impresionado: [[0, 'sorpresa'], [0.6, 'feliz'], [2.4, 'neutral']],
+  // los de la escena del trato (si el renglón no trae cara)
+  Trato: [[0, 'sospecha'], [1.5, 'feliz'], [2.6, 'neutral']],
+  Senalar: [[0, 'neutral']],
+  Presumir: [[0, 'feliz'], [2.1, 'neutral']],
+  Encogerse: [[0, 'encoge'], [1.4, 'neutral']],
+  Celebrar: [[0, 'carcajada'], [1.5, 'feliz']],
+}
+// Hacia dónde mira cada clip (si no, sigue a Skulley o pasea la mirada):
+// [desde, hasta, 'esfera' | [yaw, pitch] en radianes respecto a su frente].
+const MIRADA_CLIP = {
+  IdleComer: [[0.25, 1.3, [-0.3, 0.6]], [1.3, 4.5, 'esfera'], [8.1, 8.6, [0, 0.4]]],
+  IdleMirar: [[0.4, 1.9, [-0.45, 0.05]], [2.2, 3.2, [0.45, 0.0]], [3.2, 4.4, [0.2, 0.45]]],
+  IdleImpaciente: [[0.4, 2.1, [0.3, -0.4]], [2.5, 3.0, [0.0, 0.3]], [4.6, 5.6, [0.0, -0.05]]],
+}
+
+const _v1 = new THREE.Vector3()
+const _v2 = new THREE.Vector3()
+const _v3 = new THREE.Vector3()
+const _v4 = new THREE.Vector3()
+const _mir = new THREE.Vector3()
+const _q1 = new THREE.Quaternion()
+const _q2 = new THREE.Quaternion()
+const _q3 = new THREE.Quaternion()
+const _e = new THREE.Euler()
+const EJE_X = new THREE.Vector3(1, 0, 0)
+const EJE_Z = new THREE.Vector3(0, 0, 1)
+const ARRIBA = new THREE.Vector3(0, 1, 0)
+const _q4 = new THREE.Quaternion()
+
+// Aplica un giro en ejes del MUNDO a un hueso, encima de lo que ya tiene.
+function girarEnMundo(bone, qMundo) {
+  bone.getWorldQuaternion(_q2)
+  _q3.copy(_q2).invert().multiply(qMundo).multiply(_q2)
+  bone.quaternion.multiply(_q3)
+}
+
+function valorExpr(nombre, k) {
+  const e = EXPR[nombre] || EXPR.neutral
+  return e[k] || 0
+}
+
+// Modelo + capas. Reusable: escena principal y retrato del diálogo.
+// `lookAtRef`: Object3D a seguir con cabeza, cuello y ojos (Skulley).
+// `pushRef`: timeline del EMPUJÓN procedural ({ t: -1 } = sin empujón).
+// `ctrlRef`: aquí se cuelga { reaccionar(nombre) } para el NPC.
+// `hablaRef`: { ultimo } = performance.now() de la última letra que dijo; mientras
+//   escribe, mueve la quijada y gesticula (clip Hablar).
+// `variedad`: idles de variedad cada tanto (en el retrato no).
+// `pitchMax`: cuánto puede levantar la cabeza (rad).
+// `outlineWorld`: grosor del contorno en unidades del mundo.
+export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColor = '#000000', outlineWorld = 0.02, pushRef = null, onMeasured, toon = null, pitchMax = 0.45, ctrlRef = null, hablaRef = null, variedad = false, dialogoRef = null }) {
   const groupRef = useRef()
   const { scene: srcScene, animations } = useGLTF(ZOIDIAN_URL, true, true, extendGLTFLoaderKTX2)
 
@@ -49,41 +150,34 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
     const c = SkeletonUtils.clone(srcScene)
     // Contorno de hull invertido — MISMA receta que el outline de Skulley
     // (Player.jsx): MeshBasicMaterial negro BackSide extruido a lo largo de la
-    // normal DESPUÉS del skinning, así el trazo se deforma con el idle y el
-    // head-tracking. El grosor va en unidades del objeto (pre-escala del fit).
+    // normal DESPUÉS del skinning, así el trazo se deforma con los clips, la
+    // cara y el head-tracking. El grosor va en unidades del objeto.
     const outlineMat = new THREE.MeshBasicMaterial({
-      color: 0x000000,
-      side: THREE.BackSide,
-      transparent: false,
-      depthWrite: true,
-      depthTest: true,
-      fog: false,
-      toneMapped: false,
+      color: 0x000000, side: THREE.BackSide, transparent: false, depthWrite: true, depthTest: true, fog: false, toneMapped: false,
     })
     outlineMat.onBeforeCompile = (shader) => {
       shader.uniforms.outlineThickness = { value: c.userData.__outlineThickness || 0.012 }
-      // Referencia viva para cambiar el grosor sin recompilar.
       c.userData.__outlineUniform = shader.uniforms.outlineThickness
-      shader.vertexShader = shader.vertexShader.replace(
-        '#include <common>',
-        `#include <common>
-        uniform float outlineThickness;`
-      )
-      shader.vertexShader = shader.vertexShader.replace(
-        '#include <project_vertex>',
-        `#ifdef USE_SKINNING
+      shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>
+        uniform float outlineThickness;`)
+      shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', `#ifdef USE_SKINNING
         transformed += normalize(objectNormal) * outlineThickness;
         #else
         transformed += normalize(normal) * outlineThickness;
         #endif
-        #include <project_vertex>`
-      )
+        #include <project_vertex>`)
     }
     const skinnedMeshes = []
     c.traverse((o) => {
       if (!(o.isMesh || o.isSkinnedMesh)) return
-      // Material propio por instancia (escena + retrato conviven) + el toon
-      // banding del personaje para que se sienta del mismo universo.
+      if (o.name.includes('pantalla')) {
+        // la carita de la mochila: su propio shader (sin toon ni contorno)
+        o.material = crearMaterialMochila(o.geometry)
+        o.frustumCulled = false
+        o.raycast = () => { }
+        c.userData.__mochila = o
+        return
+      }
       const mats = Array.isArray(o.material) ? o.material : [o.material]
       const out = mats.map((m) => {
         const mm = m.clone()
@@ -91,15 +185,13 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
         return mm
       })
       o.material = Array.isArray(o.material) ? out : out[0]
-      // La pose animada se sale del bbox de bind → sin esto parpadea al culear.
       o.frustumCulled = false
-      // El raycast va contra el hitbox del wrapper, no contra 40k tris.
       o.raycast = () => { }
       if (o.isSkinnedMesh) skinnedMeshes.push(o)
     })
-    // Hermanos _outline con el MISMO esqueleto (el sufijo hace que
-    // SilhouetteShadow los ignore en el RTT de la sombra).
-    for (const o of skinnedMeshes) {
+    // los párpados (su propia malla) no llevan contorno: escondidos en la cuenca, su
+    // contorno se salía de la piel como mancha negra
+    for (const o of skinnedMeshes.filter((m) => !m.name.includes('parpado') && !m.name.includes('pantalla'))) {
       const hull = new THREE.SkinnedMesh(o.geometry, outlineMat)
       hull.name = `${o.name || 'zoid'}_outline`
       hull.bindMode = o.bindMode
@@ -111,50 +203,56 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
       hull.raycast = () => { }
       o.parent.add(hull)
     }
-    // Pose de reposo de cada hueso. Imprescindible para el rig procedural:
-    // ver `animatedBones` abajo.
-    c.traverse((o) => { if (o.isBone) o.userData.__restQ = o.quaternion.clone() })
+    // Reposo de cada hueso (la cara y las antenas se ponen desde aquí cada cuadro)
+    c.traverse((o) => {
+      if (!o.isBone && !o.isObject3D) return
+      o.userData.__restQ = o.quaternion.clone()
+      o.userData.__restP = o.position.clone()
+    })
     c.userData.__outlineMat = outlineMat
+    // La esfera luminosa del idle de comer: hija del hueso `esfera` (el clip la
+    // mueve y la escala; fuera del clip va en escala 0). Mismo material y
+    // contorno que las esferas del juego, así que no compila nada propio, y se
+    // dibuja desde el principio (con escala 0) para entrar al warm-up.
+    const huesoEsfera = c.getObjectByName('esfera')
+    if (huesoEsfera) {
+      const mat = new THREE.MeshStandardMaterial({ color: '#000000', emissive: sectionColors.section1, emissiveIntensity: 1, roughness: 1, metalness: 0, transparent: true, opacity: 1 })
+      applyNeonOrb(mat, { steps: 3, rimMul: 0.45, coreMul: 1.8, power: 1.4 })
+      const esfera = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 24), mat)
+      esfera.scale.setScalar(ESFERA_R)
+      esfera.frustumCulled = false
+      esfera.raycast = () => { }
+      const borde = new THREE.Mesh(esfera.geometry, makeHullOutline({ color: 0x000000, thickness: 0.03 }))
+      borde.renderOrder = -1
+      borde.frustumCulled = false
+      borde.raycast = () => { }
+      esfera.add(borde)
+      huesoEsfera.add(esfera)
+      c.userData.__esfera = esfera
+    }
     return c
   }, [srcScene])
 
-  // Huesos que el clip `Idle` SÍ anima. Los que NO anima hay que devolverlos a
-  // su pose de reposo cada frame ANTES de aplicarles el offset procedural:
-  // `bone.quaternion.multiply(off)` sobre un hueso que nadie reescribe ACUMULA
-  // frame tras frame. Así se fue girando la cadera hasta dejar a Argus tumbado
-  // horizontal en el piso (2026-08-28). Los brazos/cabeza no lo sufrían porque
-  // el mixer los sobreescribe cada frame.
-  const animatedBones = useMemo(() => {
-    const s = new Set()
-    for (const clip of animations || []) {
-      for (const tr of (clip?.tracks || [])) {
-        const i = String(tr.name).lastIndexOf('.')
-        if (i > 0) s.add(tr.name.slice(0, i))
-      }
-    }
-    return s
-  }, [animations])
-
   // Auto-fit: escala a `targetHeight` y apoya los pies en y=0.
   const fit = useMemo(() => {
+    // El reposo del rig es la pose que se ve: basta la caja de la geometría en bind
+    // (la de SkinnedMesh depende de que el esqueleto ya se haya actualizado).
     cloned.updateMatrixWorld(true)
-    const box = new THREE.Box3().setFromObject(cloned)
+    const box = new THREE.Box3()
+    const caja = new THREE.Box3()
+    cloned.traverse((o) => {
+      if (!o.isSkinnedMesh || o.name.endsWith('_outline')) return
+      if (!o.geometry.boundingBox) o.geometry.computeBoundingBox()
+      box.union(caja.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld))
+    })
     const size = new THREE.Vector3()
     const center = new THREE.Vector3()
     box.getSize(size)
     box.getCenter(center)
-    const rawH = Math.max(size.y, 0.001)
-    const scale = targetHeight / rawH
-    return {
-      scale,
-      offset: [-center.x * scale, -box.min.y * scale, -center.z * scale],
-      height: targetHeight,
-    }
+    const scale = targetHeight / Math.max(size.y, 0.001)
+    return { scale, offset: [-center.x * scale, -box.min.y * scale, -center.z * scale], height: targetHeight }
   }, [cloned, targetHeight])
 
-  // Grosor del contorno en unidades del objeto (el hull se extruye antes de la
-  // escala del fit): outlineWorld / scale. Se lee en el onBeforeCompile (el
-  // primer render) y después se actualiza en vivo por el uniform.
   useMemo(() => {
     const t = outlineWorld / fit.scale
     cloned.userData.__outlineThickness = t
@@ -162,33 +260,19 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
   }, [cloned, fit.scale, outlineWorld])
 
   useEffect(() => { try { onMeasured?.(fit) } catch { } }, [fit, onMeasured])
+  useEffect(() => {
+    if (!import.meta.env.DEV) return undefined
+    window.__argusModelo = { cloned, fit, est, animations }
+    return () => { if (window.__argusModelo?.cloned === cloned) delete window.__argusModelo }
+  }, [cloned, fit])
 
-  // Feedback de hover del NPC: el outline cambia de color (negro → blanco).
-  // Es un uniform del material compartido de los hulls — cero recompilación.
+  // Hover: el contorno cambia de color (uniform del material compartido).
   useEffect(() => {
     try { cloned.userData.__outlineMat?.color?.set(outlineColor) } catch { }
   }, [cloned, outlineColor])
 
-  const { actions } = useAnimations(animations, groupRef)
-  useEffect(() => {
-    // Siempre en idle — es su único estado.
-    const idle = actions?.Idle || Object.values(actions || {})[0]
-    if (!idle) return undefined
-    idle.reset().setLoop(THREE.LoopRepeat, Infinity).fadeIn(0.2).play()
-    return () => { try { idle.stop() } catch { } }
-  }, [actions])
-
-  // ── Head-tracking hacia lookAtRef ──
-  const bonesRef = useRef(null)
-  useEffect(() => {
-    const head = cloned.getObjectByName(ZOIDIAN_HEAD_BONE)
-    const neck = cloned.getObjectByName(ZOIDIAN_NECK_BONE)
-    // OJO con los nombres: GLTFLoader los SANITIZA y borra los puntos
-    // (THREE.PropertyBinding.sanitizeNodeName), así que el `upper_arm.L_09`
-    // del rig llega como `upper_armL_09`. Buscar con el nombre original
-    // devolvía undefined y los brazos NUNCA se movían — el empujón se leía
-    // como cabezazo porque solo quedaba el lean del pecho (chest_03 y head_05
-    // no tienen punto, por eso esos sí funcionaban). Probamos ambas formas.
+  // ── Huesos ──
+  const bones = useMemo(() => {
     const findBone = (...names) => {
       for (const n of names) {
         const b = cloned.getObjectByName(n)
@@ -196,29 +280,25 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
       }
       return null
     }
-    // Dedos: 4 cadenas por mano (pulgar, índice, medio, anular) × 3 falanges.
-    // Se recogen por prefijo porque el sanitizado de nombres varía; se excluye
-    // el `_end` (locator sin geometría). Los micro-movimientos de los dedos son
-    // lo que le quita el aire acartonado a una pose procedural.
+    // OJO: GLTFLoader sanitiza los nombres y borra los puntos
+    // (`upper_arm.L_09` llega como `upper_armL_09`). Se prueban las dos formas.
     const fingerChains = (side) => ['thumb', 'index', 'middle', 'ring'].map((f) => {
       const out = []
       cloned.traverse((o) => {
         if (!o.isBone || o.name.includes('_end')) return
         if (!o.name.startsWith(`${f}_`)) return
-        // `.L_` sin sanitizar, `L_` sanitizado — ambos terminan en `<side>_NN`.
         if (new RegExp(`\\.?${side}_\\d+$`).test(o.name)) out.push(o)
       })
-      // proximal → intermediate → distal (el índice numérico del rig ya lo da)
       return out
     })
-    bonesRef.current = head || neck ? {
-      head,
-      neck,
+    const b = {
+      head: findBone(ZOIDIAN_HEAD_BONE),
+      neck: findBone(ZOIDIAN_NECK_BONE),
       hips: findBone('hips_01'),
       spine: findBone('spine_02'),
+      chest: findBone('chest_03'),
       fingersL: fingerChains('L'),
       fingersR: fingerChains('R'),
-      chest: findBone('chest_03'),
       shL: findBone('shoulderL_08', 'shoulder.L_08'),
       shR: findBone('shoulderR_024', 'shoulder.R_024'),
       uaL: findBone('upper_armL_09', 'upper_arm.L_09'),
@@ -227,262 +307,554 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
       laR: findBone('lower_armR_026', 'lower_arm.R_026'),
       hL: findBone('handL_011', 'hand.L_011'),
       hR: findBone('handR_027', 'hand.R_027'),
-    } : null
+      quijada: findBone('quijada'),
+      comisuraL: findBone('comisura_L'),
+      comisuraR: findBone('comisura_R'),
+      labioSup: findBone('labio_sup'),
+      esfera: findBone('esfera'),
+      cara: {},
+      todos: [],
+    }
+    cloned.traverse((o) => {
+      if (!o.isBone) return
+      o.userData.__mixQ = o.quaternion.clone()
+      o.userData.__mixP = o.position.clone()
+      b.todos.push(o)
+    })
+    for (const lado of ['L', 'R']) {
+      b.cara[lado] = {
+        ojo: findBone(`ojo_${lado}`),
+        sup: [0, 1, 2].map((k) => findBone(`parpado_sup_${lado}_${k}`)),
+        inf: [0, 1, 2].map((k) => findBone(`parpado_inf_${lado}_${k}`)),
+        cejaInt: findBone(`ceja_int_${lado}`),
+        cejaExt: findBone(`ceja_ext_${lado}`),
+        antena: [1, 2, 3].map((k) => findBone(`antena_${lado}_${k}`)),
+      }
+    }
+    return b
   }, [cloned])
-  const trackRef = useRef({ yaw: 0, pitch: 0, w: 0 })
-  const _headPos = useRef(null)
-  const _target = useRef(null)
-  const _dir = useRef(null)
-  const _q = useRef(null)
-  const _qOff = useRef(null)
-  const _e = useRef(null)
-  // Scratch del empujón (aimBone) — ver la pose del push más abajo.
-  const _fwd = useRef(null)
-  const _dirLocal = useRef(null)
-  const _axis = useRef(null)
-  const _qw = useRef(null)
-  const _boneAxis = useRef(null)
-  const _up = useRef(null)
+
+  // ── La carita de la mochila: centro, ejes y normal de la pantalla en el espacio
+  // del hueso del pecho (la pantalla va entera con él), para medir cada cuadro
+  // hacia dónde queda Skulley sin leer la malla deformada.
+  const mochila = useMemo(() => {
+    const m = cloned.userData.__mochila
+    const pecho = bones.chest
+    if (!m || !pecho || !m.skeleton) return null
+    const i = m.skeleton.bones.indexOf(pecho)
+    if (i < 0) return null
+    const bb = m.geometry.boundingBox
+    const c = new THREE.Vector3(); bb.getCenter(c)
+    const rx = (bb.max.x - bb.min.x) / 2
+    const ry = (bb.max.y - bb.min.y) / 2
+    const aHueso = new THREE.Matrix4().multiplyMatrices(m.skeleton.boneInverses[i], m.bindMatrix)
+    const pt = (x, y, z) => new THREE.Vector3(c.x + x, c.y + y, c.z + z).applyMatrix4(aHueso)
+    // la pantalla ve hacia atrás de Argus (-Z del GLB)
+    return { pecho, c: pt(0, 0, 0), x: pt(rx, 0, 0), y: pt(0, ry, 0), n: pt(0, 0, -0.1), cara: crearCaraMochila(m.material.userData.pantalla) }
+  }, [cloned, bones])
+
+  // ── El holograma de la hora sobre la muñeca (idle impaciente) ──
+  const puntosMano = useRef([])
+  const reloj = useMemo(() => {
+    const r = crearRelojHolograma()
+    cloned.add(r.grupo)
+    return r
+  }, [cloned])
+  useEffect(() => () => { reloj.grupo.removeFromParent(); reloj.dispose() }, [reloj])
+
+  // ── Clips ──
+  const mixer = useMemo(() => new THREE.AnimationMixer(cloned), [cloned])
+  const clips = useMemo(() => {
+    const m = {}
+    for (const a of animations || []) {
+      const act = mixer.clipAction(a)
+      if (UNA_VEZ.has(a.name)) { act.setLoop(THREE.LoopOnce, 1); act.clampWhenFinished = true } else act.setLoop(THREE.LoopRepeat, Infinity)
+      m[a.name] = act
+    }
+    return m
+  }, [mixer, animations])
+  const est = useRef(null)
+  if (!est.current) {
+    est.current = {
+      actual: null, uno: null, base: 'Idle', proximaVariedad: 6 + Math.random() * 6, ultimaVariedad: null, reloj: 0,
+      expr: Object.fromEntries(CLAVES_EXPR.map((k) => [k, 0])),
+      parpadeo: { t: -1, prox: 1.5 + Math.random() * 3, doble: false },
+      mirada: { yaw: 0, pitch: 0, metaYaw: 0, metaPitch: 0, prox: 0.5 },
+      ojos: { yaw: 0, pitch: 0 },
+      quijada: 0, habla: 0, ancho: 0, silaba: { t: 0, dur: 0.2, abre: 0, ancho: 0, labio: 0, lado: 0 },
+      labio: { p: new THREE.Vector3(), v: new THREE.Vector3() },
+      track: { yaw: 0, pitch: 0, w: 0 },
+      antenas: null,
+    }
+  }
+  const cambiar = useRef(null)
+  cambiar.current = (nombre) => {
+    const e = est.current
+    const nueva = clips[nombre]
+    if (!nueva) return
+    const vieja = e.actual ? clips[e.actual] : null
+    if (vieja === nueva && !UNA_VEZ.has(nombre)) return
+    nueva.reset().setEffectiveWeight(1).play()
+    if (vieja && vieja !== nueva) nueva.crossFadeFrom(vieja, TRANSICION, false)
+    e.actual = nombre
+    e.uno = UNA_VEZ.has(nombre) ? nombre : null
+    if (nombre === 'IdleComer') {
+      // la esfera sale de un color de portal cada vez
+      const cols = ['section1', 'section2', 'section3', 'section4', 'section5'].map((k) => sectionColors[k]).filter(Boolean)
+      try { cloned.userData.__esfera?.material.emissive.set(cols[Math.floor(Math.random() * cols.length)]) } catch { }
+    }
+  }
+  useEffect(() => {
+    cambiar.current('Idle')
+    const alTerminar = (ev) => {
+      const e = est.current
+      if (e.uno && ev.action === clips[e.uno]) {
+        e.uno = null
+        cambiar.current(e.base)
+        e.proximaVariedad = e.reloj + 8 + Math.random() * 8
+      }
+    }
+    mixer.addEventListener('finished', alTerminar)
+    return () => { mixer.removeEventListener('finished', alTerminar); mixer.stopAllAction() }
+  }, [mixer, clips])
+
+  // Lo que el NPC le pide (reacciones)
+  useEffect(() => {
+    if (!ctrlRef) return undefined
+    ctrlRef.current = {
+      reaccionar: (nombre) => {
+        const e = est.current
+        const actualPeso = PESO_REACCION[e.uno] || 0
+        if ((PESO_REACCION[nombre] || 0) < actualPeso) return
+        cambiar.current(nombre)
+      },
+      ocupado: () => Boolean(est.current.uno && PESO_REACCION[est.current.uno]),
+      // la escena del trato manda la acción de cada renglón: va aunque haya otra
+      // reacción encima
+      forzar: (nombre) => { if (clips[nombre]) cambiar.current(nombre) },
+    }
+    return () => { if (ctrlRef) ctrlRef.current = null }
+  }, [ctrlRef])
+
+
   useFrame((state, delta) => {
-    const bones = bonesRef.current
+    const g = groupRef.current
+    if (!g) return
+    const dt = Math.min(Math.max(delta, 0), 1 / 20)
+    const e = est.current
+    e.reloj += dt
+    const ahora = performance.now()
+    const dlg = dialogoRef?.current
+    const ultimaLetra = Math.max(hablaRef?.current?.ultimo || 0, dlg ? argus.hablaUltimo || 0 : 0)
+    const hablando = ahora - ultimaLetra < 260
+
+    // ── qué clip toca ──
+    const base = hablando ? 'Hablar' : 'Idle'
+    if (base !== e.base) {
+      e.base = base
+      if (!e.uno) cambiar.current(base)
+    }
+    if (variedad && !dlg?.on && !e.uno && !hablando && e.reloj > e.proximaVariedad && !(pushRef?.current?.t >= 0)) {
+      let total = 0
+      const opciones = VARIEDAD.filter(([n]) => n !== e.ultimaVariedad && clips[n])
+      for (const [, w] of opciones) total += w
+      let r = Math.random() * total
+      let elegido = opciones[0]?.[0]
+      for (const [n, w] of opciones) { r -= w; if (r <= 0) { elegido = n; break } }
+      if (elegido) { e.ultimaVariedad = elegido; cambiar.current(elegido) }
+      e.proximaVariedad = e.reloj + 30
+    }
+    // three solo reescribe un hueso cuando el valor de su pista cambia: lo que las
+    // capas de abajo le suman (head tracking, quijada, empujón) se quedaba pegado en
+    // los tramos quietos del clip y se acumulaba cuadro tras cuadro (la cabeza
+    // acababa girando). Antes del mixer se repone la pose que dejó el cuadro
+    // anterior, y después se guarda la nueva antes de sumarle nada.
+    const huesos = bones.todos
+    for (let i = 0; i < huesos.length; i += 1) {
+      const b = huesos[i]
+      b.quaternion.copy(b.userData.__mixQ)
+      b.position.copy(b.userData.__mixP)
+    }
+    // Desarrollo: window.__argusCongela = { clip, t } deja un clip quieto en un segundo
+    const congela = import.meta.env.DEV && typeof window !== 'undefined' ? window.__argusCongela : null
+    if (congela && clips[congela.clip]) {
+      const act = clips[congela.clip]
+      if (e.congelado !== congela.clip) {
+        mixer.stopAllAction()
+        act.reset().setEffectiveWeight(1).play()
+        e.congelado = congela.clip
+      }
+      act.paused = true
+      act.time = congela.t
+      e.actual = congela.clip
+      e.uno = UNA_VEZ.has(congela.clip) ? congela.clip : null
+      mixer.update(0)
+    } else {
+      if (e.congelado) { e.congelado = null; mixer.stopAllAction(); e.actual = null; e.uno = null; cambiar.current('Idle') }
+      mixer.update(dt)
+    }
+    for (let i = 0; i < huesos.length; i += 1) {
+      const b = huesos[i]
+      b.userData.__mixQ.copy(b.quaternion)
+      b.userData.__mixP.copy(b.position)
+    }
+    const tClip = e.uno && clips[e.uno] ? clips[e.uno].time : 0
+    g.updateMatrixWorld(true)
+
+    // ── EMPUJÓN: el clip Empujon (brazos rectos al frente, palmas al frente) y un
+    // pasito con rebote del cuerpo entero. La línea de tiempo la lleva pushRef (el
+    // golpe que despieza a Skulley cae a los 0.13 s, ver ZoidianNPC).
+    const push = pushRef?.current
+    const enEmpujon = Boolean(push && push.t >= 0)
+    if (enEmpujon) {
+      const cfg = (typeof window !== 'undefined' && window.__argusPushCfg) || null
+      if (!e.empujando) { e.empujando = true; cambiar.current('Empujon') }
+      if (!cfg?.hold) push.t += Math.min(delta, 0.05)
+      const DUR = 0.86
+      if (!cfg?.hold && push.t >= DUR) push.t = -1
+      // se echa atrás (0.1 s), da el paso en el golpe y rebota hacia atrás
+      const tt = Math.max(0, push.t)
+      let z = tt < 0.1 ? -0.05 * Math.sin((tt / 0.1) * Math.PI / 2) : 0.16 * Math.min(1, (tt - 0.1) / 0.1) * Math.max(0, 1 - (tt - 0.3) / 0.56)
+      if (tt > 0.2) z -= 0.075 * Math.exp(-(tt - 0.2) * 6.5) * Math.sin((tt - 0.2) * 19)
+      g.position.z = z
+      g.position.y = -Math.max(0, z) * 0.2
+    } else {
+      e.empujando = false
+      if (g.position.z !== 0 || g.position.y !== 0) g.position.set(0, 0, 0)
+    }
+
+    // ── head tracking hacia lookAtRef (giro en ejes del mundo, encima del clip) ──
     const target = lookAtRef?.current
-    if (!bones) return
-    // RESET de los huesos que el mixer no toca (ver `animatedBones`). Va antes
-    // de cualquier offset y corre SIEMPRE, también fuera del empujón: si no,
-    // el último offset se queda congelado en la pose.
-    if (!bones.__resetList) {
-      bones.__resetList = [
-        bones.head, bones.neck, bones.hips, bones.spine, bones.chest,
-        bones.shL, bones.shR, bones.uaL, bones.uaR,
-        bones.laL, bones.laR, bones.hL, bones.hR,
-        ...(bones.fingersL || []).flat(), ...(bones.fingersR || []).flat(),
-      ].filter((b) => b && !animatedBones.has(b.name))
-    }
-    for (let i = 0; i < bones.__resetList.length; i += 1) {
-      const b = bones.__resetList[i]
-      if (b.userData.__restQ) b.quaternion.copy(b.userData.__restQ)
-    }
-    if (!_headPos.current) {
-      _headPos.current = new THREE.Vector3()
-      _target.current = new THREE.Vector3()
-      _dir.current = new THREE.Vector3()
-      _q.current = new THREE.Quaternion()
-      _qOff.current = new THREE.Quaternion()
-      _e.current = new THREE.Euler()
-    }
-    const st = trackRef.current
+    const tr = e.track
     let wantYaw = 0
     let wantPitch = 0
     let wantW = 0
+    let tieneTarget = false
     const headBone = bones.head || bones.neck
-    if (target && groupRef.current) {
-      headBone.getWorldPosition(_headPos.current)
-      target.getWorldPosition(_target.current)
-      _target.current.y += 1.4 // a la cara de Skulley, no a los pies
-      _dir.current.copy(_target.current).sub(_headPos.current)
-      const dist = _dir.current.length()
+    g.getWorldQuaternion(_q1)
+    // a quién ve: Skulley (a su cara, no a los pies), o lo que pida la escena del trato
+    let hayMira = false
+    if (dlg?.mirar === 'camara') { _mir.copy(state.camera.position); hayMira = true }
+    else if (Array.isArray(dlg?.mirar)) { _mir.set(dlg.mirar[0], dlg.mirar[1], dlg.mirar[2]); hayMira = true }
+    else if (target) { target.getWorldPosition(_mir); _mir.y += 1.4; hayMira = true }
+    if (hayMira && headBone) {
+      headBone.getWorldPosition(_v1)
+      _v2.copy(_mir)
+      _v3.copy(_v2).sub(_v1)
+      const dist = _v3.length()
       if (dist > 0.6 && dist < 14) {
-        _dir.current.normalize()
-        // A espacio local del modelo (incluye la rotación del NPC en escena).
-        groupRef.current.getWorldQuaternion(_q.current).invert()
-        _dir.current.applyQuaternion(_q.current)
+        _v3.normalize().applyQuaternion(_q2.copy(_q1).invert())
         // El GLB mira hacia +Z en su propio espacio.
-        const yaw = Math.atan2(_dir.current.x, _dir.current.z)
-        const pitch = Math.asin(THREE.MathUtils.clamp(_dir.current.y, -1, 1))
+        const yaw = Math.atan2(_v3.x, _v3.z)
+        const pitch = Math.asin(THREE.MathUtils.clamp(_v3.y, -1, 1))
         if (Math.abs(yaw) < 1.25) {
           wantYaw = THREE.MathUtils.clamp(yaw, -0.8, 0.8)
-          wantPitch = THREE.MathUtils.clamp(pitch, -0.55, pitchMax)
-          wantW = 1
+          wantPitch = THREE.MathUtils.clamp(pitch, -0.4, pitchMax)
+          wantW = SEGUIR_EN[e.actual] ?? 1
+          tieneTarget = true
         }
       }
     }
-    // ── Pose del EMPUJÓN (aditiva, corre aunque el head-track esté en 0) ──
-    // Curva: windup (brazos atrás, A negativa) → thrust con overshoot (A>1)
-    // → recover suave. Los ejes/amplitudes admiten override en
-    // window.__argusPushCfg para afinar en vivo sin rebuild.
-    const push = pushRef?.current
-    if (push && push.t >= 0 && bones) {
-      const cfgEarly = (typeof window !== 'undefined' && window.__argusPushCfg) || null
-      // cfg.hold congela la pose en el pico — para afinar ejes/amplitudes en
-      // vivo sin recompilar (la animación dura 0.7s, imposible de inspeccionar).
-      if (!cfgEarly?.hold) push.t += Math.min(delta, 0.05)
-      // Timeline con ANTICIPACIÓN: el golpe seco sin preparación se lee
-      // acartonado porque no hay energía acumulada. Ahora: recoge (A<0, breve
-      // y suave) → dispara (ease-out cúbico) → asienta el overshoot → vuelve.
-      const ANTIC = 0.17  // recoge brazos/torso hacia atrás
-      const T = 0.09      // thrust: MUY rápido = golpe seco
-      const HOLD = 0.09   // brazos extendidos
-      const DUR = 0.86
-      const PEAK = 1.18
-      const BACK = -0.34
-      // Curva compartida: cada brazo la evalúa con su propio desfase.
-      const ampAt = (tt) => {
-        if (tt < 0) return 0
-        if (tt < ANTIC) {
-          const r = tt / ANTIC
-          // ease-in-out: la recogida entra suave, no de golpe
-          return BACK * (r < 0.5 ? 2 * r * r : 1 - Math.pow(-2 * r + 2, 2) / 2)
-        }
-        if (tt < ANTIC + T) {
-          const r = (tt - ANTIC) / T
-          return THREE.MathUtils.lerp(BACK, PEAK, 1 - Math.pow(1 - r, 3))
-        }
-        if (tt < ANTIC + T + HOLD) {
-          // el overshoot se asienta: 1.18 → 1.0 (peso del golpe)
-          return THREE.MathUtils.lerp(PEAK, 1.0, (tt - ANTIC - T) / HOLD)
-        }
-        if (tt < DUR) {
-          const r = (tt - ANTIC - T - HOLD) / (DUR - ANTIC - T - HOLD)
-          return 1.0 * (1 - r * r * (3 - 2 * r))
-        }
-        return 0
+    const k = 1 - Math.exp(-6 * Math.max(dt, 0.001))
+    tr.yaw += (wantYaw - tr.yaw) * k
+    tr.pitch += (wantPitch - tr.pitch) * k
+    tr.w += (wantW - tr.w) * k
+    if (tr.w > 0.01) {
+      const lateral = _v1.set(1, 0, 0).applyQuaternion(_q1)
+      const arriba = _v2.copy(ARRIBA)
+      const aplicar = (bone, f) => {
+        if (!bone) return
+        _q3.setFromAxisAngle(lateral, -tr.pitch * tr.w * f)
+        _q4.setFromAxisAngle(arriba, tr.yaw * tr.w * f).multiply(_q3)
+        girarEnMundo(bone, _q4)
+        bone.updateMatrixWorld(true)
       }
-      // ASIMETRÍA: el brazo izquierdo llega ~40ms tarde. Dos brazos idénticos
-      // en el mismo frame es la firma visual de "esto lo hizo un for loop".
-      const LAG_L = cfgEarly?.lagL ?? 0.042
-      const A = cfgEarly?.hold ? PEAK : ampAt(push.t)
-      const AL = cfgEarly?.hold ? PEAK : ampAt(push.t - LAG_L)
-      if (!cfgEarly?.hold && push.t >= DUR + LAG_L) push.t = -1
-      if (A !== 0 && groupRef.current) {
-        const cfg = cfgEarly
-        const armAmp = cfg?.armAmp ?? 1.0
-        const foreAmp = cfg?.foreAmp ?? 0.75
-        const leanAmp = cfg?.leanAmp ?? 0.12
-        // Nada de adivinar ejes locales (el primer intento rotaba en el eje
-        // equivocado y la pose leía como CABEZAZO): APUNTAMOS cada hueso del
-        // brazo hacia el frente del NPC. Todos estos huesos crecen en +Y local
-        // (sus hijos están en [0, +y, 0]), así que basta rotar ese +Y hacia la
-        // dirección de empuje — correcto sea cual sea el roll del rig.
-        if (!_fwd.current) { _fwd.current = new THREE.Vector3(); _dirLocal.current = new THREE.Vector3(); _axis.current = new THREE.Vector3(); _qw.current = new THREE.Quaternion() }
-        // El GLB mira a +Z en su espacio (ver head-tracking) → frente en mundo.
-        groupRef.current.getWorldQuaternion(_qw.current)
-        _fwd.current.set(0, 0, 1).applyQuaternion(_qw.current)
-        const BONE_AXIS = _boneAxis.current || (_boneAxis.current = new THREE.Vector3(0, 1, 0))
-        // `dirWorld` por defecto = frente del NPC. Las MUÑECAS apuntan hacia
-        // ARRIBA: con el brazo extendido al frente eso deja la palma de cara
-        // al empujón (pose clásica de "alto ahí"), no la mano colgando.
-        // `amp` permite que cada brazo use su propia fase (asimetría) y que
-        // los dedos pidan un ángulo fijo en vez del "apunta al frente".
-        const aimBone = (bone, weight, dirWorld, amp = A, fixedAngle = null) => {
-          if (!bone || !weight) return
-          bone.getWorldQuaternion(_qw.current)
-          _qw.current.invert()
-          _dirLocal.current.copy(dirWorld || _fwd.current).applyQuaternion(_qw.current).normalize()
-          _axis.current.crossVectors(BONE_AXIS, _dirLocal.current)
-          const len = _axis.current.length()
-          if (len < 1e-4) return
-          _axis.current.multiplyScalar(1 / len)
-          // Ángulo completo hasta apuntar al frente; amp lo modula (negativo en
-          // el windup = brazos atrás, >1 en el thrust = overshoot).
-          const base = fixedAngle != null
-            ? fixedAngle
-            : Math.acos(THREE.MathUtils.clamp(BONE_AXIS.dot(_dirLocal.current), -1, 1))
-          _qOff.current.setFromAxisAngle(_axis.current, amp * weight * base)
-          bone.quaternion.multiply(_qOff.current)
-        }
-        // Brazos: el derecho con la curva base, el izquierdo con su retraso.
-        aimBone(bones.uaR, armAmp, null, A)
-        aimBone(bones.uaL, armAmp, null, AL)
-        aimBone(bones.laR, foreAmp, null, A)
-        aimBone(bones.laL, foreAmp, null, AL)
-        // Hombros: se adelantan un poco (el empujón nace en la espalda, no en
-        // el codo). Peso bajo para no deformar el torso.
-        const shoulderAmp = cfg?.shoulderAmp ?? 0.28
-        aimBone(bones.shR, shoulderAmp, null, A)
-        aimBone(bones.shL, shoulderAmp, null, AL)
-        // Muñecas quebradas hacia arriba → palmas al frente. SOLO en el empuje:
-        // con A negativa (la anticipación, brazos yendo atrás) la muñeca se
-        // doblaba al revés y se veía rarísima — una mano no se quiebra hacia
-        // atrás al tomar impulso, se relaja. De ahí el clamp a positivo.
-        const wristAmp = cfg?.wristAmp ?? 0.85
-        const UP = _up.current || (_up.current = new THREE.Vector3(0, 1, 0))
-        aimBone(bones.hR, wristAmp, UP, Math.max(0, A))
-        aimBone(bones.hL, wristAmp, UP, Math.max(0, AL))
-        // ── DEDOS ──
-        // Curl = rotar el hueso hacia la normal de la palma (el frente, con la
-        // palma encarada al empujón). Negativo = se abren/estiran.
-        // Perfil: recogidos en la anticipación → se ABREN de golpe en el
-        // impacto (palma plana) → se relajan. Encima, un tembleque fino
-        // desfasado por dedo y por falange: es el detalle que mata lo robótico.
-        const fingerAmp = cfg?.fingerAmp ?? 1.0
-        if (fingerAmp > 0 && (bones.fingersR?.length || bones.fingersL?.length)) {
-          const now = state.clock.elapsedTime
-          const curlAt = (tt) => {
-            if (tt < 0) return 0
-            if (tt < ANTIC) return 0.62 * (tt / ANTIC)          // se recogen
-            if (tt < ANTIC + T) return THREE.MathUtils.lerp(0.62, -0.30, (tt - ANTIC) / T) // se abren de golpe
-            if (tt < DUR) {
-              const r = (tt - ANTIC - T) / (DUR - ANTIC - T)
-              return THREE.MathUtils.lerp(-0.30, 0, r * r)
-            }
-            return 0
-          }
-          const applyHand = (chains, phase) => {
-            if (!chains) return
-            for (let fi = 0; fi < chains.length; fi += 1) {
-              const chain = chains[fi]
-              if (!chain || !chain.length) continue
-              // Desfase por dedo: la mano se abre en abanico, no de un golpe.
-              const fingerLag = fi * 0.018
-              const c = curlAt(push.t - phase - fingerLag)
-              for (let bi = 0; bi < chain.length; bi += 1) {
-                // Tembleque: amplitud chica, frecuencia distinta por falange.
-                const tremor = Math.sin(now * (17 + fi * 3.1 + bi * 2.3) + fi * 1.7 + bi) * 0.035
-                const w = (bi === 0 ? 0.55 : bi === 1 ? 0.75 : 0.6) * fingerAmp
-                aimBone(chain[bi], w, null, (c + tremor * Math.min(1, Math.abs(c) * 3 + 0.35)), 0.85)
-              }
-            }
-          }
-          applyHand(bones.fingersR, 0)
-          applyHand(bones.fingersL, LAG_L)
-        }
-        // ── CUERPO ──
-        // Cadera + espina acompañan el gesto (el empujón sale del cuerpo
-        // entero). Pesos bajos y escalonados: cadera < espina < pecho.
-        aimBone(bones.hips, (cfg?.hipsAmp ?? 0.05), null, A)
-        aimBone(bones.spine, (cfg?.spineAmp ?? 0.08), null, A)
-        // Lean discreto del pecho: acompaña, no protagoniza.
-        aimBone(bones.chest, leanAmp)
-      }
-      // ── PASO + RETROCESO (traslación del modelo) ──
-      // El cuerpo entero se echa atrás en la anticipación y da un pasito al
-      // frente en el thrust; después del impacto rebota hacia atrás con una
-      // oscilación amortiguada (acción-reacción: empujar algo te empuja).
-      if (groupRef.current) {
-        const stepAmp = cfgEarly?.stepAmp ?? 0.16
-        let z = A * stepAmp
-        const tImpact = ANTIC + T
-        if (push.t > tImpact) {
-          const e = push.t - tImpact
-          z -= 0.075 * Math.exp(-e * 6.5) * Math.sin(e * 19)
-        }
-        groupRef.current.position.z = z
-        // Micro-bob vertical: el peso baja al plantarse y sube al extender.
-        groupRef.current.position.y = -Math.max(0, A) * 0.035
-      }
-    } else if (groupRef.current && (groupRef.current.position.z !== 0 || groupRef.current.position.y !== 0)) {
-      // Fuera del empujón, el modelo vuelve a su sitio exacto.
-      groupRef.current.position.set(0, 0, 0)
+      aplicar(bones.neck, 0.35)
+      aplicar(bones.head, 0.65)
     }
 
-    // Suavizado exponencial independiente del framerate.
-    const k = 1 - Math.exp(-6 * Math.max(delta, 0.001))
-    st.yaw += (wantYaw - st.yaw) * k
-    st.pitch += (wantPitch - st.pitch) * k
-    st.w += (wantW - st.w) * k
-    if (st.w < 0.01) return
-    // Reparto cuello/cabeza (35/65). Ejes del rig: Y = a lo largo del hueso
-    // (girar izq/der), Z = lateral (asentir). Se MULTIPLICA sobre la pose que
-    // el mixer ya escribió este frame (useAnimations corre antes en el orden
-    // de suscripción) → aditivo, no pisa el idle.
-    const applyTo = (bone, factor) => {
-      if (!bone) return
-      _e.current.set(0, st.yaw * st.w * factor, -st.pitch * st.w * factor, 'YZX')
-      _qOff.current.setFromEuler(_e.current)
-      bone.quaternion.multiply(_qOff.current)
+    // ── cara ──
+    // expresión: la del clip, o furia en el empujón
+    let exprNombre = 'neutral'
+    const tl = e.uno ? CARA_CLIP[e.uno] : null
+    if (tl) for (const [t0, n] of tl) if (tClip >= t0) exprNombre = n
+    if (dlg?.cara && EXPR[dlg.cara]) exprNombre = dlg.cara
+    if (enEmpujon) exprNombre = 'furia'
+    const ex = e.expr
+    const kx = 1 - Math.exp(-dt * (exprNombre === 'apretados' ? 30 : 9))
+    for (const key of CLAVES_EXPR) {
+      ex[key] += (valorExpr(exprNombre, key) - ex[key]) * kx
     }
-    applyTo(bones.neck, 0.35)
-    applyTo(bones.head, 0.65)
+    // hablando: las cejas acompañan los acentos
+    const habla = e.habla
+    e.habla += ((hablando ? 1 : 0) - habla) * (1 - Math.exp(-dt * 10))
+    // parpadeo
+    const pb = e.parpadeo
+    let blink = 0
+    if (pb.t < 0) {
+      pb.prox -= dt
+      if (pb.prox <= 0) { pb.t = 0; pb.doble = Math.random() < 0.2 }
+    } else {
+      pb.t += dt
+      const D = 0.17
+      const fase = pb.t / D
+      blink = fase < 0.35 ? fase / 0.35 : fase < 0.5 ? 1 : Math.max(0, 1 - (fase - 0.5) / 0.5)
+      if (pb.t >= D) {
+        if (pb.doble) { pb.t = 0; pb.doble = false } else { pb.t = -1; pb.prox = 2.2 + Math.random() * 4 }
+      }
+    }
+    // mirando arriba (pitch negativo) el párpado de arriba sube con el ojo
+    const subeMirada = Math.max(0, -e.ojos.pitch) * SUBE_CON_MIRADA
+    for (const lado of ['L', 'R']) {
+      const cb = bones.cara[lado]
+      for (let k = 0; k < 3; k += 1) {
+        const bs = cb.sup[k]
+        const bi = cb.inf[k]
+        if (!bs || !bi) continue
+        const wIn = k === ADENTRO[lado] ? 1 : k === 1 ? 0.5 : 0
+        const sup = Math.max(THREE.MathUtils.clamp(ex.sup + ex.supInt * wIn + ex.supExt * (1 - wIn) - subeMirada, 0, 1), blink)
+        const inf = Math.max(ex.inf, blink)
+        _q1.setFromAxisAngle(EJE_X, THREE.MathUtils.degToRad(-ABIERTO_EXTRA + (CIERRE[lado].sup[k] + ABIERTO_EXTRA) * sup))
+        bs.quaternion.copy(bs.userData.__restQ).multiply(_q1)
+        _q1.setFromAxisAngle(EJE_X, THREE.MathUtils.degToRad(-ABIERTO_EXTRA + (CIERRE[lado].inf[k] + ABIERTO_EXTRA) * inf))
+        bi.quaternion.copy(bi.userData.__restQ).multiply(_q1)
+      }
+      const acento = e.habla * 0.012 * Math.max(0, Math.sin(e.reloj * 4.3 + (lado === 'L' ? 0 : 0.4)))
+      const ce = ex.ceja + (lado === 'L' ? ex.cejaL : ex.cejaR) + acento
+      for (const [b, extra] of [[cb.cejaInt, ex.cejaInt], [cb.cejaExt, 0]]) {
+        if (!b) continue
+        _v1.set(0, ce + extra, 0).applyQuaternion(b.userData.__restQ)
+        b.position.copy(b.userData.__restP).add(_v1)
+      }
+    }
+    // mirada: lo que pide el clip, o Skulley, o pasea
+    const mi = e.mirada
+    let objetivo = null
+    let metaYaw = null
+    let metaPitch = null
+    const mc = e.uno ? MIRADA_CLIP[e.uno] : null
+    if (mc) {
+      for (const [t0, t1, que] of mc) {
+        if (tClip >= t0 && tClip <= t1) {
+          if (que === 'esfera') objetivo = 'esfera'
+          else { metaYaw = que[0]; metaPitch = que[1] }
+        }
+      }
+    }
+    if (!objetivo && metaYaw === null) {
+      if (tieneTarget && (SEGUIR_EN[e.actual] ?? 1) > 0.3) objetivo = 'target'
+      else {
+        mi.prox -= dt
+        if (mi.prox <= 0) {
+          mi.metaYaw = (Math.random() - 0.5) * 0.7
+          mi.metaPitch = (Math.random() - 0.5) * 0.3
+          mi.prox = 0.6 + Math.random() * 2.2
+        }
+        metaYaw = mi.metaYaw
+        metaPitch = mi.metaPitch
+      }
+    }
+    // Los ojos saltan (sacádicos): muy rápido hacia la meta. En el espacio del ojo
+    // en reposo la pupila es +Y, X es su izquierda y Z abajo: girar +Z voltea a su
+    // derecha y girar +X baja la mirada.
+    const ko = 1 - Math.exp(-dt * 22)
+    const ojoL = bones.cara.L.ojo
+    if (ojoL) {
+      g.getWorldQuaternion(_q1)
+      ojoL.parent.getWorldQuaternion(_q2)
+      _q2.multiply(ojoL.userData.__restQ)
+      ojoL.getWorldPosition(_v1)
+      if (objetivo === 'esfera' && bones.esfera) {
+        bones.esfera.getWorldPosition(_v2)
+      } else if (objetivo === 'target') {
+        _v2.copy(_mir)
+      } else {
+        _e.set(-(metaPitch || 0), metaYaw || 0, 0, 'YXZ')
+        _v2.set(0, 0, 1).applyEuler(_e).applyQuaternion(_q1).multiplyScalar(6).add(_v1)
+      }
+      _v3.copy(_v2).sub(_v1).normalize().applyQuaternion(_q3.copy(_q2).invert())
+      const yaw = THREE.MathUtils.clamp(Math.atan2(-_v3.x, _v3.y), -0.45, 0.45)
+      const pitch = THREE.MathUtils.clamp(Math.atan2(_v3.z, Math.hypot(_v3.x, _v3.y)), -0.35, 0.35)
+      const o = e.ojos
+      o.yaw += (yaw - o.yaw) * ko
+      o.pitch += (pitch - o.pitch) * ko
+      _q3.setFromAxisAngle(EJE_Z, o.yaw)
+      _q1.setFromAxisAngle(EJE_X, o.pitch)
+      for (const lado of ['L', 'R']) {
+        const ojo = bones.cara[lado].ojo
+        if (ojo) ojo.quaternion.copy(ojo.userData.__restQ).multiply(_q3).multiply(_q1)
+      }
+    }
+    // boca al hablar: sílabas de ~0.15 a 0.28 s, cada una de su tamaño (abre y
+    // cierra), con pausas, y las comisuras se estiran o se juntan según la sílaba.
+    // Encima de la quijada del clip y de la boca de la expresión.
+    const sil = e.silaba
+    let metaQ = 0
+    let metaAncho = 0
+    if (hablando) {
+      sil.t += dt
+      if (sil.t >= sil.dur) {
+        const pausa = Math.random() < 0.12
+        sil.t = 0
+        sil.dur = pausa ? 0.1 + Math.random() * 0.08 : 0.15 + Math.random() * 0.13
+        sil.abre = pausa ? 0 : 0.35 + Math.random() * 0.65
+        sil.ancho = Math.random() * 2 - 1
+        // el labio de arriba con vida propia: cada sílaba sube distinto (enseña los
+        // dientes en las abiertas), a veces de un lado, y se adelanta en las "o"
+        sil.labio = pausa ? 0 : Math.min(1, sil.abre * (0.4 + Math.random() * 0.9))
+        sil.lado = Math.random() < 0.35 ? (Math.random() < 0.5 ? -1 : 1) : 0
+      }
+      const lomo = Math.pow(Math.sin(Math.PI * Math.min(1, sil.t / sil.dur)), 0.8)
+      metaQ = sil.abre * lomo * 22
+      metaAncho = sil.ancho * lomo
+    }
+    e.quijada += (metaQ - e.quijada) * (1 - Math.exp(-dt * 28))
+    e.ancho += (metaAncho - e.ancho) * (1 - Math.exp(-dt * 20))
+    const abre = e.quijada / 22
+    if (bones.quijada && e.quijada > 0.05) {
+      _q1.setFromAxisAngle(EJE_X, THREE.MathUtils.degToRad(e.quijada))
+      bones.quijada.quaternion.multiply(_q1)
+    }
+    // las comisuras: X local = izquierda de Argus (afuera en la izquierda, adentro en
+    // la derecha), Y arriba, Z al frente
+    for (const [b, s] of [[bones.comisuraL, 1], [bones.comisuraR, -1]]) {
+      if (!b) continue
+      const fuera = 0.016 * ex.son - 0.02 * ex.junta + 0.012 * e.ancho
+      _v1.set(s * fuera, 0.022 * ex.son + 0.004 * abre, 0.004 * ex.junta).applyQuaternion(b.userData.__restQ)
+      b.position.copy(b.userData.__restP).add(_v1)
+    }
+    if (bones.labioSup) {
+      // meta del labio (en el espacio de la cabeza: X izquierda, Y arriba, Z al frente)
+      // y un resorte con sobrepaso que lo sigue: así no va pegado a la quijada
+      const lomoL = hablando ? Math.pow(Math.sin(Math.PI * Math.min(1, (sil.t + 0.03) / sil.dur)), 0.7) : 0
+      const sube = 0.022 * ex.grune + (0.006 * abre + 0.026 * sil.labio * lomoL) * (hablando ? 1 : 0)
+      const frente = 0.004 * ex.grune + 0.012 * Math.max(0, -e.ancho) + 0.004 * abre
+      const lado = 0.007 * sil.lado * lomoL
+      const lb = e.labio
+      _v2.set(lado, sube, frente)
+      const wl = 2 * Math.PI * 9
+      const hl = Math.min(dt, 0.05) / 3
+      for (let n = 0; n < 3; n += 1) {
+        _v3.copy(_v2).sub(lb.p).multiplyScalar(wl * wl).addScaledVector(lb.v, -2 * 0.42 * wl)
+        lb.v.addScaledVector(_v3, hl)
+        lb.p.addScaledVector(lb.v, hl)
+      }
+      _v1.copy(lb.p).applyQuaternion(bones.labioSup.userData.__restQ)
+      bones.labioSup.position.copy(bones.labioSup.userData.__restP).add(_v1)
+    }
+    // y la cabeza acompaña cada sílaba con un cabeceo chiquito
+    if (abre > 0.01 && bones.head) {
+      g.getWorldQuaternion(_q1)
+      _v1.set(1, 0, 0).applyQuaternion(_q1)
+      _q4.setFromAxisAngle(_v1, THREE.MathUtils.degToRad(2.2 * abre))
+      girarEnMundo(bones.head, _q4)
+    }
+
+    // ── antenas: resorte que se queda atrás de la cabeza y latiguea ──
+    g.updateMatrixWorld(true)
+    if (!e.antenas) {
+      e.antenas = {}
+      for (const lado of ['L', 'R']) {
+        e.antenas[lado] = bones.cara[lado].antena.map(() => ({ p: new THREE.Vector3(), v: new THREE.Vector3(), listo: false }))
+      }
+    }
+    const HZ = [5.2, 4.4, 3.8]
+    const ZETA = 0.3
+    for (const lado of ['L', 'R']) {
+      const cadena = bones.cara[lado].antena
+      const sim = e.antenas[lado]
+      for (let i = 0; i < cadena.length; i += 1) {
+        const b = cadena[i]
+        if (!b) break
+        const s = sim[i]
+        b.quaternion.copy(b.userData.__restQ)
+        b.updateMatrixWorld(true)
+        b.getWorldPosition(_v1) // base del tramo
+        const hijo = cadena[i + 1]
+        if (hijo) hijo.getWorldPosition(_v2)
+        else _v2.set(0, hijo ? 0 : (cadena[i - 1] ? cadena[i].position.length() : 0.1), 0).applyMatrix4(b.matrixWorld)
+        const largo = _v2.distanceTo(_v1)
+        if (!s.listo || largo < 1e-5) { s.p.copy(_v2); s.v.set(0, 0, 0); s.listo = true; continue }
+        const w = 2 * Math.PI * HZ[i]
+        const pasos = 3
+        const h = dt / pasos
+        for (let n = 0; n < pasos; n += 1) {
+          _v3.copy(_v2).sub(s.p).multiplyScalar(w * w).addScaledVector(s.v, -2 * ZETA * w)
+          s.v.addScaledVector(_v3, h)
+          s.p.addScaledVector(s.v, h)
+        }
+        _v3.copy(s.p).sub(_v1)
+        if (_v3.lengthSq() < 1e-10) continue
+        _v3.setLength(largo)
+        s.p.copy(_v1).add(_v3)
+        // girar el tramo de donde lo dejó el clip hacia donde quedó el resorte
+        const de = _v2.sub(_v1).normalize()
+        const a = _v3.normalize()
+        const ang = Math.acos(THREE.MathUtils.clamp(de.dot(a), -1, 1))
+        if (ang > 1e-4) {
+          _q1.setFromUnitVectors(de, a)
+          if (ang > 0.6) _q1.slerp(_q3.identity(), 1 - 0.6 / ang)
+          girarEnMundo(b, _q1)
+          b.updateMatrixWorld(true)
+        }
+      }
+    }
+
+    // ── la carita de la mochila: sigue a Skulley con la vista si lo tiene enfrente ──
+    if (mochila) {
+      const mw = mochila.pecho.matrixWorld
+      const c = _v1.copy(mochila.c).applyMatrix4(mw)
+      if (target) {
+        target.getWorldPosition(_v2)
+        _v2.y += 1.1 * (fit.height / 1.7)
+        _v2.sub(c)
+        const dist = _v2.length()
+        _v2.divideScalar(Math.max(dist, 1e-5))
+        const n = _v3.copy(mochila.n).applyMatrix4(mw).sub(c).normalize()
+        if (dist < MOCHILA_VE.lejos && _v2.dot(n) > MOCHILA_VE.cono) {
+          const ex = _v4.copy(mochila.x).applyMatrix4(mw).sub(c).normalize()
+          const mx = THREE.MathUtils.clamp(_v2.dot(ex) / 0.75, -1, 1)
+          const ey = ex.copy(mochila.y).applyMatrix4(mw).sub(c).normalize()
+          const my = THREE.MathUtils.clamp(_v2.dot(ey) / 0.6, -1, 1)
+          mochila.cara.mirar(mx, my)
+        }
+      }
+      mochila.cara.actualizar(dt)
+    }
+
+    // ── el holograma de la hora: prende cuando alza la muñeca, falla mientras la
+    // sacude y se apaga en una raya al bajarla (tiempos del clip, a 30 cuadros) ──
+    let enc = 0
+    let falla = 0
+    if (e.uno === 'IdleImpaciente') {
+      const t = tClip
+      enc = THREE.MathUtils.smoothstep(t, 0.55, 0.85) * (1 - THREE.MathUtils.smoothstep(t, 1.97, 2.17))
+      if (t > 1.13 && t < 1.6) falla = 0.55 + 0.45 * Math.abs(Math.sin(t * 23))
+      else if (t < 0.95) falla = THREE.MathUtils.clamp((0.95 - t) * 3, 0, 1)
+    }
+    if (enc > 0.001 && bones.hL) {
+      bones.hL.getWorldPosition(_v1)
+      g.getWorldQuaternion(_q1)
+      _v2.set(0, 0, 1).applyQuaternion(_q1)
+      // la mano: la muñeca y cada coyuntura de los dedos (las puntas van con margen)
+      const mano = puntosMano.current
+      let n = 0
+      const poner = (b) => { if (!mano[n]) mano[n] = new THREE.Vector3(); b.getWorldPosition(mano[n]); n += 1 }
+      poner(bones.hL)
+      for (const cadena of bones.fingersL || []) {
+        for (const b of cadena) poner(b)
+        // la punta: la última falange otra vez más allá de su coyuntura
+        if (cadena.length >= 2) {
+          if (!mano[n]) mano[n] = new THREE.Vector3()
+          mano[n].copy(mano[n - 1]).sub(mano[n - 2]).multiplyScalar(0.9).add(mano[n - 1])
+          n += 1
+        }
+      }
+      mano.length = n
+      reloj.actualizar(dt, { muneca: _v1, frente: _v2, mano, margen: 0.08 * fit.height, ancho: 0.24 * fit.height, brillo: 1, encendido: enc, falla })
+    } else {
+      reloj.actualizar(dt, { brillo: 0, encendido: 0, falla: 0 })
+    }
   })
 
   return (
@@ -502,21 +874,41 @@ export default function ZoidianNPC({
   visible = true,
   // Object3D a seguir con la cabeza (Skulley) — ver ZoidianModel.
   lookAtRef = null,
-  // Ref externo al group raíz — lo usa SilhouetteShadow (HomeScene) para
-  // renderle su sombra de contacto igual que al personaje.
+  // Ref externo al group raíz — lo usa SilhouetteShadow (HomeScene).
   groupRef = null,
 }) {
   const wrapRef = useRef()
   const [hovered, setHovered] = useState(false)
+  const hoveredRef = useRef(false)
   const { gl } = useThree()
+  const ctrlRef = useRef(null)
+  const hablaRef = useRef({ ultimo: 0 })
+  // La escena del trato (ZoidianDialog, lib/argusNpc.js): con `dialogo` no hay
+  // idles de variedad, empujón ni saludo automático; cara y mirada pedidas mandan
+  // hasta el siguiente renglón y la acción de cada renglón se fuerza.
+  const dialogoRef = useRef({ on: false, cara: null, mirar: null })
+  useEffect(() => escucharArgus((msg) => {
+    if (!msg) return
+    const d = dialogoRef.current
+    if (msg.dialogo !== undefined) {
+      d.on = Boolean(msg.dialogo)
+      if (!d.on) { d.cara = null; d.mirar = null }
+    }
+    if (msg.cara !== undefined) d.cara = msg.cara
+    if (msg.mirar !== undefined) d.mirar = msg.mirar
+    if (msg.accion) { try { ctrlRef.current?.forzar(msg.accion) } catch { } }
+  }), [])
+  const reaccionar = (nombre, delay = 0) => {
+    const go = () => { try { ctrlRef.current?.reaccionar(nombre) } catch { } }
+    if (delay > 0) mockTimersRef.current.push(setTimeout(go, delay))
+    else go()
+  }
 
   // ── Burlas cuando algo despieza a Skulley ──
-  // Dos caminos con línea propia:
-  // · 'character-disassembled-by-bolt' — el rayo de la esfera corrupta (lo
-  //   emite Player en el shatter exacto, mismo evento de la skin Inferno).
-  // · 'bolt-strike' — la activación del easter egg (Player lo emite al caer
-  //   el rayo; el despiece llega ~230ms después).
-  // Argus espera un beat (que el flash y las piezas registren) y remata.
+  // · Un rayo que despieza a Skulley ('character-disassembled-by-bolt' / '-by-madre'
+  //   / '-by-egg') o el de la esfera del portal que quema a M.A.D.R.E. ('madre-quemada').
+  // · 'character-disassembled-by-argus' — su propio empujón.
+  // Argus espera un beat (que el flash y las piezas registren), se carcajea y remata.
   const { t } = useLanguage()
   const mockAnchorRef = useRef(null)
   const [mock, setMock] = useState({ on: false, typed: '', full: '' })
@@ -528,12 +920,9 @@ export default function ZoidianNPC({
     }
     const sayMock = (key, { delay = 700, dura = 5600, tecleo = 60 } = {}) => {
       clearTimers()
-      // La key puede resolver a un string o a un POOL de frases (mockEgg):
-      // con pool, cada despiece saca una burla distinta al azar.
+      // La key puede resolver a un string o a un POOL de frases (rayo.skulley).
       const resolved = t(key)
-      const full = Array.isArray(resolved)
-        ? resolved[Math.floor(Math.random() * resolved.length)]
-        : resolved
+      const full = Array.isArray(resolved) ? resolved[Math.floor(Math.random() * resolved.length)] : resolved
       if (!full) return
       mockTimersRef.current.push(setTimeout(() => {
         let i = 0
@@ -541,6 +930,8 @@ export default function ZoidianNPC({
         const typeId = setInterval(() => {
           i += 1
           setMock({ on: true, typed: full.slice(0, i), full })
+          // la quijada se mueve mientras escribe (no en espacios ni puntuación)
+          if (/[\p{L}\p{N}]/u.test(full[i - 1] || '')) hablaRef.current.ultimo = performance.now()
           if (i >= full.length) clearInterval(typeId)
         }, tecleo)
         mockTimersRef.current.push(typeId)
@@ -549,63 +940,92 @@ export default function ZoidianNPC({
         }, dura))
       }, delay))
     }
-    const onBoltShatter = () => sayMock('zoidian.mock')
-    const onEggShatter = () => sayMock('zoidian.mockEgg')
-    const onPushShatter = () => sayMock('zoidian.mockPush')
-    window.addEventListener('character-disassembled-by-bolt', onBoltShatter)
-    window.addEventListener('bolt-strike', onEggShatter)
+    const burla = (key) => { sayMock(key); reaccionar('Risa', 450) }
+    // Los rayos (Oscar, 2026-11-19): solo comenta si le pegan a alguien. A
+    // Skulley, cualquiera que lo despiece (la esfera que cae en un portal, el
+    // castigo de M.A.D.R.E., el easter egg); a M.A.D.R.E., solo el de la esfera
+    // del portal; si ese pega a los dos, una para ambos. Antes se burlaba con el
+    // 'bolt-strike', el destello de cualquier rayo, aunque no le pegara a nadie.
+    const RAYO_AMBOS_MS = 1500
+    let skulleyEn = -Infinity, madreEn = -Infinity, madreTimer = 0
+    const onRayoSkulley = () => {
+      const ahora = performance.now()
+      skulleyEn = ahora
+      burla(ahora - madreEn < RAYO_AMBOS_MS ? 'zoidian.rayo.ambos' : 'zoidian.rayo.skulley')
+    }
+    const onMadreQuemada = (e) => {
+      if (e?.detail?.fuente !== 'portal') return
+      madreEn = performance.now()
+      clearTimeout(madreTimer)
+      // A Skulley el mismo rayo lo despieza 230 ms después: se espera a ver si
+      // también le tocó, para no cambiar la frase a media escritura.
+      madreTimer = setTimeout(() => { if (skulleyEn < madreEn) burla('zoidian.rayo.madre') }, 400)
+    }
+    const onPushShatter = () => burla('zoidian.mockPush')
+    window.addEventListener('character-disassembled-by-bolt', onRayoSkulley)
+    window.addEventListener('character-disassembled-by-madre', onRayoSkulley)
+    window.addEventListener('character-disassembled-by-egg', onRayoSkulley)
+    window.addEventListener('madre-quemada', onMadreQuemada)
     window.addEventListener('character-disassembled-by-argus', onPushShatter)
 
-    // El juego de esferas: Argus es quien ofreció el trato, así que comenta la
-    // partida (rachas, fiebre, carambolas, dorada, fuego, tiempo). Las grandes
-    // interrumpen; las chicas esperan a que termine la anterior.
+    // El juego de esferas: Argus comenta la partida. Las grandes interrumpen; las
+    // chicas esperan a que termine la anterior. Lo que impresiona, lo celebra.
     let ocupadoHasta = 0
-    const comenta = (key, grande = false) => {
+    const comenta = (key, grande = false, celebra = false) => {
       const ahora = performance.now()
+      if (celebra) reaccionar('Impresionado')
       if (!grande && ahora < ocupadoHasta) return
       ocupadoHasta = ahora + 2400
       sayMock(`zoidian.juego.${key}`, { delay: 0, dura: 2600, tecleo: 35 })
     }
     const quitarJuego = escucharJuego((tipo, d) => {
       if (tipo === 'captura') {
-        if (d.fiebre) comenta('fiebre', true)
-        else if (d.dorada) comenta('doradaAtrapada', true)
-        else if (d.subioMult && d.mult >= 3) comenta(`x${d.mult}`)
+        if (d.fiebre) comenta('fiebre', true, true)
+        else if (d.dorada) comenta('doradaAtrapada', true, true)
+        else if (d.subioMult && d.mult >= 3) comenta(`x${d.mult}`, false, true)
         else if (d.oleada) comenta('oleada')
         else if (d.carambola) comenta('carambola')
         else if (d.rompioRacha) comenta('rompe')
-      } else if (tipo === 'doblete') comenta('doblete', true)
+      } else if (tipo === 'doblete') comenta('doblete', true, true)
       else if (tipo === 'dorada') comenta('dorada', true)
       else if (tipo === 'dorada-fin') comenta('doradaFin')
       else if (tipo === 'fuego') comenta('fuego')
       else if (tipo === 'tiempo') comenta('tiempo', true)
     })
     return () => {
-      window.removeEventListener('character-disassembled-by-bolt', onBoltShatter)
-      window.removeEventListener('bolt-strike', onEggShatter)
+      window.removeEventListener('character-disassembled-by-bolt', onRayoSkulley)
+      window.removeEventListener('character-disassembled-by-madre', onRayoSkulley)
+      window.removeEventListener('character-disassembled-by-egg', onRayoSkulley)
+      window.removeEventListener('madre-quemada', onMadreQuemada)
       window.removeEventListener('character-disassembled-by-argus', onPushShatter)
+      clearTimeout(madreTimer)
       quitarJuego()
       clearTimers()
     }
   }, [t])
 
   // ── Collider sólido + empujón por contacto ──
-  // El collider lo consume Player (clamp del movimiento, ver simPos). El
-  // trigger de contacto queda apenas AFUERA del radio sólido: solo dispara
-  // cuando Skulley está empujando contra Argus, no al pasar cerca.
+  // El collider lo consume Player (clamp del movimiento). El trigger de contacto
+  // queda apenas AFUERA del radio sólido: solo dispara cuando Skulley está
+  // empujando contra Argus, no al pasar cerca.
   const COLLIDER_R = 1.2
   const PUSH_TRIGGER_R = 1.26
   const REARM_R = 2.3
+  // Saludo: cada vez que Skulley entra a su radio (Oscar, 2026-11-19); para el
+  // siguiente tiene que salir más allá de SALUDO_SALE. Ese mismo radio es el de
+  // poder platicar con él: fuera de él no se le puede picar (la cámara del trato
+  // se arma con Skulley ahí). `argus.cerca` lo avisa a la escena del trato.
+  const SALUDO_R = 6
+  const SALUDO_SALE = 7.5
+  const SALUDO_PAUSA_S = 3
   useEffect(() => {
     try { window.__argusCollider = { x: position[0], z: position[2], r: COLLIDER_R } } catch { }
     return () => { try { delete window.__argusCollider } catch { } }
   }, [position[0], position[2]])
-  // Timeline del empujón: t=-1 idle; el modelo la avanza y posa los huesos.
-  // `hit` marca el dispatch del despiece en el frame del thrust (t≈0.24).
   const pushTimelineRef = useRef({ t: -1, hit: false, armed: true, lastAt: -Infinity })
-  // Helper de tuning: `__argusPush()` dispara el empujón sin tener que
-  // caminar hasta él; `__argusPush(true)` reproduce solo la animación (sin
-  // despiezar a Skulley) para iterar la pose en loop.
+  const saludoRef = useRef({ lejos: true, ultimo: -Infinity })
+  // Helpers de desarrollo: `__argusPush()` dispara el empujón; `__argusPush(true)`
+  // solo la animación. `__argus('Risa')` (o IdleComer, Saludo…) pone un clip.
   useEffect(() => {
     try {
       window.__argusPush = (animOnly = false) => {
@@ -616,9 +1036,10 @@ export default function ZoidianNPC({
         p.lastAt = -Infinity
       }
       window.__argusPushState = () => ({ ...pushTimelineRef.current })
+      if (import.meta.env.DEV) window.__argus = (n) => ctrlRef.current?.reaccionar(n)
     } catch { }
     return () => {
-      try { delete window.__argusPush; delete window.__argusPushState } catch { }
+      try { delete window.__argusPush; delete window.__argusPushState; delete window.__argus } catch { }
     }
   }, [])
   const _playerPos = useRef(new THREE.Vector3())
@@ -629,46 +1050,66 @@ export default function ZoidianNPC({
     if (groupRef && groupRef.current !== g) groupRef.current = g
 
     const push = pushTimelineRef.current
-    // Momento del impacto: el thrust del brazo conecta a t≈0.24 → recién ahí
-    // se despieza a Skulley (Player escucha 'argus-push-strike').
-    // El impacto va al final del thrust (T=0.14), no a mitad del recorrido.
+    // Momento del impacto: el thrust del brazo conecta a t≈0.13 → recién ahí se
+    // despieza a Skulley (Player escucha 'argus-push-strike').
     if (push.t >= 0 && !push.hit && push.t >= 0.13) {
       push.hit = true
       try { playSfx('sparkleBom', { volume: 0.9 }) } catch { }
       try { window.dispatchEvent(new CustomEvent('argus-push-strike', { detail: { x: position[0], z: position[2] } })) } catch { }
     }
-    // Trigger por contacto, con histéresis: tras un empujón hay que ALEJARSE
-    // (REARM_R) antes de poder comerse otro — sin esto, el reensamble ocurre
-    // pegado a Argus y el loop de empujones no termina nunca.
-    if (push.t < 0 && lookAtRef?.current) {
+    if (lookAtRef?.current) {
       lookAtRef.current.getWorldPosition(_playerPos.current)
       const dx = _playerPos.current.x - position[0]
       const dz = _playerPos.current.z - position[2]
       const dist = Math.hypot(dx, dz)
       const now = state.clock.elapsedTime
-      if (!push.armed) {
-        if (dist > REARM_R) push.armed = true
-      } else if (dist < PUSH_TRIGGER_R && now - push.lastAt > 3) {
-        push.t = 0
-        push.hit = false
-        push.armed = false
-        push.lastAt = now
+      // Trigger por contacto, con histéresis: tras un empujón hay que ALEJARSE
+      // (REARM_R) antes de poder comerse otro.
+      if (push.t < 0) {
+        if (!push.armed) {
+          if (dist > REARM_R) push.armed = true
+        } else if (dist < PUSH_TRIGGER_R && now - push.lastAt > 3 && !dialogoRef.current.on) {
+          push.t = 0
+          push.hit = false
+          push.armed = false
+          push.lastAt = now
+        }
       }
-    }
+      const sal = saludoRef.current
+      const cerca = dist < SALUDO_R
+      if (cerca !== argus.cerca) argus.cerca = cerca
+      // si se aleja con el cursor encima, se apaga el contorno blanco
+      if (!cerca && hoveredRef.current) {
+        hoveredRef.current = false
+        setHovered(false)
+        try { gl.domElement.style.cursor = '' } catch { }
+      }
+      if (dist > SALUDO_SALE) sal.lejos = true
+      else if (sal.lejos && cerca && now - sal.ultimo > SALUDO_PAUSA_S && !dialogoRef.current.on) {
+        sal.lejos = false
+        sal.ultimo = now
+        reaccionar('Saludo')
+      }
+    } else if (argus.cerca) argus.cerca = false
   })
 
   if (!visible) return null
 
+  // solo se le puede picar con Skulley dentro de su radio (argus.cerca)
   const handleClick = (e) => {
     e.stopPropagation()
+    if (!argus.cerca) return
     try { onClick?.() } catch { }
   }
   const handlePointerOver = (e) => {
     e.stopPropagation()
+    if (!argus.cerca) return
+    hoveredRef.current = true
     setHovered(true)
     try { gl.domElement.style.cursor = 'pointer' } catch { }
   }
   const handlePointerOut = () => {
+    hoveredRef.current = false
     setHovered(false)
     try { gl.domElement.style.cursor = '' } catch { }
   }
@@ -687,14 +1128,13 @@ export default function ZoidianNPC({
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
         </mesh>
         {/* Hover = outline blanco (nada de escalar al NPC, se veía raro) */}
-        <ZoidianModel targetHeight={targetHeight} lookAtRef={lookAtRef} outlineColor={hovered ? '#ffffff' : '#000000'} pushRef={pushTimelineRef} />
-        {/* Ancla de la viñeta a la altura del pecho: con el offset lateral el
-            globo queda AL LADO y despegado, como el de Skulley. */}
+        <ZoidianModel targetHeight={targetHeight} lookAtRef={lookAtRef} outlineColor={hovered ? '#ffffff' : '#000000'} pushRef={pushTimelineRef}
+          ctrlRef={ctrlRef} hablaRef={hablaRef} dialogoRef={dialogoRef} variedad />
+        {/* Ancla de la viñeta a la altura del pecho */}
         <object3D ref={mockAnchorRef} position={[0, targetHeight * 0.55, 0]} />
       </group>
       {/* La viñeta va FUERA del group rotado π: SpeechBubble3D arma su base
-          mirando a cámara asumiendo padre sin rotación — adentro salía el
-          texto volteado 180° y el globo con las normales culled. */}
+          mirando a cámara asumiendo padre sin rotación. */}
       <SpeechBubble3D
         anchorRef={mockAnchorRef}
         visible={mock.on}
@@ -708,6 +1148,6 @@ export default function ZoidianNPC({
 
 // SIN useGLTF.preload a nivel módulo: este chunk se evalúa durante el boot y
 // la descarga se colaría al DefaultLoadingManager — la barra del preloader
-// esperaría también estos 3.3MB antes de habilitar el ENTER. El Suspense del
+// esperaría también este GLB antes de habilitar el ENTER. El Suspense del
 // mount (post-bootAllDone, detrás del preloader) dispara la carga en el
 // momento correcto.

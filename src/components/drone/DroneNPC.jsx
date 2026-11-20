@@ -6,8 +6,10 @@ import SpeechBubble3D from '../SpeechBubble3D.jsx'
 import SilhouetteShadow from '../SilhouetteShadow.jsx'
 import DomeShield from '../fx/DomeShield.jsx'
 import HumoDron from './HumoDron.jsx'
-import { dron, escucharDron } from '../../lib/droneNpc.js'
+import { dron, escucharDron, juntoArgus } from '../../lib/droneNpc.js'
 import { dialogoMadre } from '../../lib/dialogoMadre.js'
+import { escuchar as escucharJuego } from '../../lib/juegoEsferas.js'
+import scoreStore from '../../lib/scoreStore.js'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 
 // El drone de M.A.D.R.E. como NPC de la home (Oscar, 2026-11-19). Anda por ahí
@@ -25,6 +27,12 @@ import { useLanguage } from '../../i18n/LanguageContext.jsx'
 // con cara de duda y dice algo de ella (`CURIOSA`). El rayo de la esfera
 // corrupta sí le hace daño: la deja quemada un rato, humeando, mareada y con
 // ojos de tache (`QUEMADA`), y eso da el logro de los lentes 3D (App).
+//
+// En la partida del juego de esferas (Oscar, 2026-11-19) se va junto a Argus
+// (`juntoArgus`, desde que se acepta el trato en su escena) y desde ahí ve a
+// Skulley y lo juzga en su viñeta cada tanto (`JUEGO`): bien si va bien, mal si
+// va mal (aciertos y fallas recientes, rato sin meter nada, puntaje negativo).
+// Habla solo si se ve en cámara; si no, espera. Al acabar regresa a pasear.
 //
 // Monta desde el warm-up con Argus (comoHome), así sus programas se compilan
 // detrás del preloader. Todo lo que anima va por refs; el estado de React solo
@@ -62,6 +70,12 @@ const LETRAS = 34
 // bajo ella); queda quemada `dura` segundos, más abajo y meciéndose, y al final
 // se sacude (`sacude` segundos) y el hollín se va solo.
 const QUEMADA = { radio: 2.3, dura: 11, alto: 1.95, sacude: 0.7 }
+// La partida: la primera viñeta y cada cuánto (segundos), cuánto espera si Argus
+// acaba de comentar una captura o si ella no sale en cámara (y hasta cuándo deja
+// de esperar), y con qué juzga: aciertos y fallas de los últimos `ventana`
+// segundos, y `sinAcierto` segundos sin meter nada cuenta como ir mal. Si la
+// mandaron y la partida no empieza en `sinPartida` segundos, regresa a pasear.
+const JUEGO = { primera: [9, 13], cada: [14, 22], tapaArgus: 1.4, esperaMax: 10, ventana: 15, sinAcierto: 15, sinPartida: 8 }
 
 const azar = (a, b) => a + Math.random() * (b - a)
 const angulo = (a) => Math.atan2(Math.sin(a), Math.cos(a))
@@ -138,9 +152,15 @@ export default function DroneNPC({
       ultimaCur: -1,
       tQuemada: 0,
       sacudida: 0,
+      juegoPedido: 0,           // cuándo la mandaron junto a Argus
+      comentaEn: 0,             // cuándo toca la siguiente viñeta de la partida
+      esperaDesde: 0,           // desde cuándo espera para decirla
+      bolsas: { bien: [], mal: [] },
     }
   }
   const pedir = (nombre) => setAccion((a) => ({ nombre, n: a.n + 1 }))
+  const juegoActivoRef = useRef(juegoActivo)
+  juegoActivoRef.current = juegoActivo
   const cercaPortalRef = useRef(nearPortalId)
   cercaPortalRef.current = nearPortalId
 
@@ -182,6 +202,11 @@ export default function DroneNPC({
     if (msg.voltear && cara) cara.voltear()
     if (msg.accion) pedir(msg.accion)
     if (msg.fin) { cara?.poner('normal'); pedir('IdleTranquilo') }
+    if (msg.alJuego === true && e.modo !== 'castigo' && e.modo !== 'quemada' && e.modo !== 'dialogo') {
+      e.juegoPedido = performance.now() / 1000
+      if (e.modo !== 'juego') entrarAJuego()
+    }
+    if (msg.alJuego === false && e.modo === 'juego' && !juegoActivoRef.current) salirDeJuego()
     if (msg.escudo) {
       const { x, y, z, fuerza } = msg.escudo
       escudoRef.current?.hit({ x, y, z }, 0.6 + 0.4 * fuerza)
@@ -230,11 +255,11 @@ export default function DroneNPC({
     const cerca = (x, z) => Math.hypot(x - est.current.pos.x, z - est.current.pos.z) < QUEMADA.radio
     const onTrueno = (ev) => {
       const pts = ev?.detail?.points || []
-      if (pts.some((q) => cerca(q.x, q.z))) quemar()
+      if (pts.some((q) => cerca(q.x, q.z))) quemar('trueno')
     }
     const onAntimateria = (ev) => {
       const d = ev?.detail || {}
-      if (Number.isFinite(d.x) && Number.isFinite(d.z) && cerca(d.x, d.z)) quemar()
+      if (Number.isFinite(d.x) && Number.isFinite(d.z) && cerca(d.x, d.z)) quemar('portal')
     }
     window.addEventListener('thunder-strike', onTrueno)
     window.addEventListener('antimatter-orb-strike', onAntimateria)
@@ -258,7 +283,7 @@ export default function DroneNPC({
       }
     }
     // window.__dronQuemar() hace como si le cayera el rayo de la esfera corrupta
-    window.__dronQuemar = () => quemar()
+    window.__dronQuemar = (fuente = 'portal') => quemar(fuente)
     // y window.__dronEscudo(fuerza) enciende el escudo del lado de Skulley, sin contar
     window.__dronEscudo = (fuerza = 1) => {
       const e = est.current
@@ -316,8 +341,10 @@ export default function DroneNPC({
     if (nombre === 'IdleJugueton') caraRef.current?.poner('feliz')
   }
 
-  // ---- el rayo de la esfera corrupta: quemada, humeando y con ojos de tache
-  function quemar() {
+  // ---- el rayo de la esfera corrupta: quemada, humeando y con ojos de tache.
+  // `fuente`: 'portal' (la esfera que cae en un portal) o 'trueno' (el que lanza
+  // Skulley); Argus solo se burla del de portal.
+  function quemar(fuente) {
     const e = est.current
     if (!dron.montado || e.modo === 'dialogo') return
     if (e.modo === 'curiosa') terminarCuriosa(false)
@@ -338,7 +365,7 @@ export default function DroneNPC({
     cara?.poner('tache')
     cara?.quemar(1)
     pedir('Detenerse')
-    try { window.dispatchEvent(new CustomEvent('madre-quemada')) } catch { }
+    try { window.dispatchEvent(new CustomEvent('madre-quemada', { detail: { fuente } })) } catch { }
   }
 
   // ---- la esfera corrupta: se queda a un lado y arriba de ella, viéndola
@@ -369,6 +396,74 @@ export default function DroneNPC({
       caraRef.current?.poner('normal')
       quieto(azar(1.5, 2.5), 'IdleTranquilo')
     }
+  }
+
+  // ---- la partida: lo que va metiendo el jugador, para juzgarlo
+  const partidaRef = useRef({ capturas: [], ultimaCaptura: 0, ultimoAcierto: 0 })
+  useEffect(() => escucharJuego((tipo, d) => {
+    const P = partidaRef.current
+    const ahora = performance.now() / 1000
+    if (tipo === 'inicio') {
+      P.capturas = []
+      P.ultimaCaptura = 0
+      P.ultimoAcierto = ahora
+      est.current.comentaEn = ahora + azar(JUEGO.primera[0], JUEGO.primera[1])
+      est.current.esperaDesde = 0
+    } else if (tipo === 'captura') {
+      P.capturas.push({ t: ahora, bien: d.puntos > 0 })
+      if (P.capturas.length > 40) P.capturas.shift()
+      P.ultimaCaptura = ahora
+      if (d.puntos > 0) P.ultimoAcierto = ahora
+    }
+  }), [])
+  // > 0: va bien
+  const comoVa = (ahora) => {
+    const P = partidaRef.current
+    let bien = 0
+    let mal = 0
+    for (const c of P.capturas) {
+      if (ahora - c.t > JUEGO.ventana) continue
+      if (c.bien) bien += 1
+      else mal += 1
+    }
+    let n = bien - mal * 1.5
+    if (ahora - P.ultimoAcierto > JUEGO.sinAcierto) n -= 2
+    if (scoreStore.get() < 0) n -= 2
+    return n
+  }
+  // de una bolsa revuelta, sin repetir hasta que se acabe
+  const sacar = (tipo) => {
+    const e = est.current
+    const lista = textosRef.current.juego[tipo]
+    if (!e.bolsas[tipo].length) e.bolsas[tipo] = lista.map((_, i) => i).sort(() => Math.random() - 0.5)
+    return lista[e.bolsas[tipo].pop()] || lista[0]
+  }
+  const _enCuadro = useMemo(() => new THREE.Vector3(), [])
+  const enCuadro = () => {
+    const e = est.current
+    _enCuadro.set(e.pos.x, e.pos.y, e.pos.z).project(camera)
+    return _enCuadro.z < 1 && Math.abs(_enCuadro.x) < 0.85 && Math.abs(_enCuadro.y) < 0.85
+  }
+  // junto a Argus, de prisa; se queda ahí viendo a Skulley
+  function entrarAJuego() {
+    const e = est.current
+    if (e.modo === 'curiosa') terminarCuriosa(false)
+    e.modo = 'juego'
+    e.ofertaTexto = ''
+    const j = juntoArgus()
+    const meta = new THREE.Vector3(j.x, j.y, j.z)
+    viajar(meta, VEL.oferta, 'skulley')
+    e.fase = 'viaje'
+    pedir(e.pos.distanceTo(meta) > 6 ? 'Arrancar' : 'Avanzar')
+    caraRef.current?.poner('feliz')
+  }
+  function salirDeJuego() {
+    const e = est.current
+    e.modo = 'deambular'
+    e.juegoPedido = 0
+    caraRef.current?.poner('normal')
+    caraRef.current?.mirar(0, 0)
+    quieto(azar(1.5, 3), 'IdleTranquilo')
   }
 
   // ---- la viñeta de la tienda
@@ -455,8 +550,35 @@ export default function DroneNPC({
         cara?.mirar(0, 0)
       }
     }
+    // la partida: desde pasear (o al acabar un castigo o la quemada) se va junto a Argus
+    if (juegoActivo && e.modo === 'deambular') entrarAJuego()
     let corrupta = null
-    if (e.modo === 'deambular') {
+    if (e.modo === 'juego') {
+      if (!juegoActivo && ahora - e.juegoPedido > JUEGO.sinPartida) salirDeJuego()
+      else if (juegoActivo && e.fase === 'quieto' && !e.dice && ahora > e.comentaEn) {
+        const P = partidaRef.current
+        // Argus acaba de comentar una captura, o ella no sale en cámara: espera
+        if (!e.esperaDesde) e.esperaDesde = ahora
+        const tapa = ahora - P.ultimaCaptura < JUEGO.tapaArgus
+        if (!P.capturas.length && ahora - P.ultimoAcierto < JUEGO.sinAcierto) {
+          // todavía no hay con qué juzgarlo (nada metido y poco rato)
+          e.comentaEn = ahora + 1.5
+          e.esperaDesde = 0
+        } else if (ahora - e.esperaDesde > JUEGO.esperaMax) {
+          e.esperaDesde = 0
+          e.comentaEn = ahora + azar(JUEGO.cada[0], JUEGO.cada[1]) * 0.5
+        } else if (!tapa && enCuadro()) {
+          const bien = comoVa(ahora) > 0
+          const texto = sacar(bien ? 'bien' : 'mal')
+          decir(texto, 3.2 + texto.length / LETRAS)
+          if (bien) { cara?.poner('feliz'); pedir('IdleJugueton') }
+          else if (Math.random() < 0.5) cara?.poner('confundida')
+          else { cara?.poner('normal'); cara?.voltear() }
+          e.esperaDesde = 0
+          e.comentaEn = ahora + azar(JUEGO.cada[0], JUEGO.cada[1])
+        }
+      }
+    } else if (e.modo === 'deambular') {
       if (e.fase === 'quieto' && e.t > e.hasta) {
         // muy de vez en cuando, en lugar de pasear, va a ver la esfera corrupta
         if (!juegoActivo && ahora > e.curiosaCuando) {
@@ -629,7 +751,7 @@ export default function DroneNPC({
       yawMeta = Math.atan2(mx - e.pos.x, mz - e.pos.z)
     }
     // detenida por Skulley (o pregonando): lo sigue con el cuerpo, y los ojos se adelantan al giro
-    const loSigue = (e.modo === 'deambular' && e.viendo) || (e.modo === 'oferta' && e.fase === 'quieto')
+    const loSigue = (e.modo === 'deambular' && e.viendo) || ((e.modo === 'oferta' || e.modo === 'juego') && e.fase === 'quieto')
     if (loSigue && s && cara) {
       const hacia = Math.atan2(s.x - e.pos.x, s.z - e.pos.z)
       yawMeta = hacia
@@ -722,7 +844,7 @@ export default function DroneNPC({
         accionN={accion.n}
         onAccion={(n) => { est.current.sonando = n }}
         contornoColor={hover && !dialogo ? '#ffffff' : '#000000'}
-        fuegoEscala={est.current.modo === 'deambular' || est.current.modo === 'quemada' ? 0.55 : 1}
+        fuegoEscala={est.current.modo === 'deambular' || est.current.modo === 'quemada' || est.current.modo === 'juego' ? 0.55 : 1}
       >
         {/* el área para picarlo: más grande que el drone, barata de raycastear */}
         <mesh onClick={clic} onPointerOver={sobre} onPointerOut={fuera} raycast={puedeHablar ? THREE.Mesh.prototype.raycast : () => null}>

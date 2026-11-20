@@ -1,589 +1,420 @@
-import React, { useEffect, useId, useRef, useState, Suspense } from 'react'
-import useFocoModal from '../hooks/useFocoModal.js'
-import { Canvas, useThree, useFrame } from '@react-three/fiber'
-import * as THREE from 'three'
-import { XMarkIcon } from '@heroicons/react/24/solid'
-import { playSfx } from '../lib/sfx.js'
-import { useShopData } from '../lib/shopDataContext.jsx'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
-import { ZoidianModel, ZOIDIAN_HEAD_BONE } from './ZoidianNPC.jsx'
-import GlyphedText from './GlyphedText.jsx'
-import { GoldenTicketArt, TicketArt } from './GoldenTicketBadge.jsx'
+import { useShopData } from '../lib/shopDataContext.jsx'
+import { dialogoArgus } from '../lib/dialogoArgus.js'
+import { argus, avisarArgus } from '../lib/argusNpc.js'
+import { caminarA, caminata, soltarCaminata } from '../lib/caminataAuto.js'
+import { blipArgus } from '../lib/blipArgus.js'
+import { blipMadre } from '../lib/blipMadre.js'
+import { dron, avisarDron, juntoArgus } from '../lib/droneNpc.js'
+import { useGlitchSolo, textoGlitch } from '../hooks/useGlitchRunas.js'
+import RenglonRunas from './drone/RenglonRunas.jsx'
+import { TicketArt } from './GoldenTicketBadge.jsx'
 import { PRIZE_RAYS, Sparkle } from './argusArt.jsx'
-import { useGlitchRunas, textoGlitch } from '../hooks/useGlitchRunas.js'
-import { useTituloOrilla } from '../hooks/useTituloOrilla.js'
+import { Tecla, Raton, GlifoTactil } from './TutorialModal.jsx'
 
-// ZoidianDialog — Argus (el NPC del juego de esferas) te presenta el juego
-// antes de las reglas (SphereGameModal). Modal estándar del sitio
-// (.site-modal) con la anatomía de la pieza destacada de la tienda: Argus en
-// 3D grande a la izquierda (su "foto", sobre el azul de home y sin borde: no
-// es una caja dentro de otra), y a la derecha su nombre en runas de orilla a
-// orilla (ese bloque es solo para él), abajo las pestañas, lo que dice, el premio en una banda de alto fijo pegada abajo y una barra
-// fija con la acción de color al final.
-// En mobile el retrato va arriba. Se monta SOLO mientras está abierto: el
-// canvas del retrato vive y muere con el diálogo.
+// La escena del trato de Argus (Oscar, 2026-11-19: "cinemática, como la de
+// M.A.D.R.E."). Mismo lenguaje que su diálogo (DialogoMadre): la UI del sitio se
+// va (App), entran las barras de cine, Skulley camina hasta quedar enfrente de
+// Argus (lib/caminataAuto.js) y la cámara se pone sobre su hombro viéndolo
+// (CameraController `dialogo` con Argus). Abajo el globo con tinta; cada renglón
+// llega en SKULLEYGLYPH y se revela con la voz de Argus (blipArgus), y le pide
+// clip, cara y mirada (lib/argusNpc.js; los anima ZoidianNPC). Lo que el renglón
+// enseña (el boleto, las teclas, el reloj) sale en una tarjeta arriba a la derecha.
 //
-// Flujo: click a Argus/"!" en escena → este diálogo → "jugar" → onPlay
-// (App cierra esto y abre SphereGameModal).
+// La primera vez en la pestaña cuenta el trato completo; después, un saludo.
+// Luego el menú: a jugar (arranca la partida al cerrar), cómo se juega, qué
+// gano, ahora no. Clic, Espacio o Enter pasan el renglón; flechas y Enter
+// eligen; Escape sale en cualquier momento. Al aceptar, el drone de M.A.D.R.E.
+// vuela junto a Argus (avisarDron alJuego) y ella dice su renglón: apaga los
+// portales y empieza la partida.
 
-// Encuadre a la CABEZA: la cámara ortográfica se centra en el hueso head_05
-// durante el primer medio segundo (mientras Argus levanta la cabeza para
-// mirarte) y después se QUEDA QUIETA. Antes lo seguía cada frame: en el
-// círculo chiquito no se notaba, pero en el retrato grande cada balanceo de la
-// cabeza movía el cuerpo entero y Argus parecía flotar. El prop `camera` del
-// Canvas no basta para el zoom ortográfico (igual que en CharacterPortrait):
-// hay que aplicarlo con updateProjectionMatrix.
-const FRAME_SETTLE_FRAMES = 30
-// `viewHeight` = unidades de mundo visibles en el lado corto del cuadro.
-// `headLift` < 0 baja la cámara: la cara queda en el tercio de arriba.
-const PORTRAIT_VIEW = 1.0
-// Grosor del contorno en PIXELES de pantalla: el retrato es grande y el
-// grosor de la escena (0.02 de mundo) aquí daba una franja de ~10px dentada.
-const PORTRAIT_INK_PX = 2.5
-// La misma receta del Skulley del preloader: la key cálida le da el volumen, con
-// tres bandas y un piso para que la sombra sea su color y no una mancha negra, y el
-// contraluz cálido de filo duro lo recorta del azul (uno frío se perdería en él).
-const PORTRAIT_TOON = {
-  steps: 3,
-  minBand: 0.22,
-  rimStrength: 1.3,
-  rimColor: [1.0, 0.76, 0.34],
-  rimThreshold: 0.74,
-  rimWidth: 0.05,
-  rimDirection: [0.75, 0.4, -0.55],
+const ENTRADA_MS = 700
+const SALIDA_MS = 650
+// La tarjeta que se va espera su salida antes de que entre la otra.
+const MUESTRA_SALE_MS = 220
+// Los renglones que cierran (a jugar, ahora no) se pasan solos.
+const CIERRE_SOLO_MS = 1100
+// El renglón de M.A.D.R.E. espera a que el drone llegue junto a Argus (a esta
+// distancia), a lo más este tiempo.
+const MADRE_LLEGA = { dist: 2.2, maxMs: 2600 }
+const VISTO = 'skulley_argus_trato'
+const FIRMA_GLITCH = { primeraMs: 1600, cadaMs: 4600, sostieneMs: 1300 }
+// Dónde se para Skulley: enfrente de Argus a esta distancia, dentro de un cono
+// alrededor de hacia donde ve Argus (de lado se veía su perfil).
+const FRENTE_DIST = 3.6
+const FRENTE_CONO = (35 * Math.PI) / 180
+const PORTAL_Y = 2.2
+
+const quietoPreferido = () => {
+  try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch { return false }
 }
 
-// En este rig el pitch positivo del head-tracking AGACHA la cabeza: con el tope
-// de la escena (0.45 rad) y el target alto, Argus se sentía mirando al piso
-// (Oscar, 2026-11-10). En 0 se queda con la cabeza del idle, de frente, y solo
-// gira hacia el target.
-const PORTRAIT_PITCH_MAX = 0
-// Inclinación de la toma (rad). Con cámara ortográfica girar el modelo es lo
-// mismo que girar la cámara: positivo = la cámara lo ve un poco desde arriba.
-const PORTRAIT_TILT = 0.22
-
-// Argus con el contorno medido contra el zoom del retrato.
-function PortraitModel(props) {
-  const size = useThree((s) => Math.min(s.size.width, s.size.height))
-  return <ZoidianModel {...props} toon={PORTRAIT_TOON} pitchMax={PORTRAIT_PITCH_MAX} outlineWorld={(PORTRAIT_INK_PX * PORTRAIT_VIEW) / Math.max(1, size)} />
+function lugarFrente(px, pz) {
+  const fx = Math.sin(argus.rotY)
+  const fz = Math.cos(argus.rotY)
+  let dx = px - argus.pos.x
+  let dz = pz - argus.pos.z
+  if (Math.hypot(dx, dz) < 1e-3) { dx = fx; dz = fz }
+  const frente = Math.atan2(fx, fz)
+  let a = Math.atan2(dx, dz) - frente
+  a = Math.atan2(Math.sin(a), Math.cos(a))
+  a = Math.max(-FRENTE_CONO, Math.min(FRENTE_CONO, a)) + frente
+  return { x: argus.pos.x + Math.sin(a) * FRENTE_DIST, z: argus.pos.z + Math.cos(a) * FRENTE_DIST }
 }
 
-function HeadFramer({ targetHeight, viewHeight = PORTRAIT_VIEW, headLift = -0.12 }) {
-  const camera = useThree((s) => s.camera)
-  const scene = useThree((s) => s.scene)
-  const size = useThree((s) => Math.min(s.size.width, s.size.height))
-  const headRef = useRef(null)
-  const _v = useRef(null)
-  const framesRef = useRef(0)
-  useFrame(() => {
-    if (!_v.current) _v.current = new THREE.Vector3()
-    if (!headRef.current) headRef.current = scene.getObjectByName(ZOIDIAN_HEAD_BONE) || null
-    // R3F hace lookAt(0,0,0) al crear la cámara → quedaba INCLINADA hacia
-    // abajo y subir position.y no subía el encuadre (solo la ladeaba más).
-    // Ortográfica de retrato = mirada recta al frente, siempre.
-    camera.rotation.set(0, 0, 0)
-    if (headRef.current) {
-      if (framesRef.current < FRAME_SETTLE_FRAMES) {
-        framesRef.current += 1
-        headRef.current.getWorldPosition(_v.current)
-        camera.position.x = _v.current.x
-        camera.position.y = _v.current.y + headLift
-      }
-    } else {
-      // Fallback si el rig cambiara de nombres: busto genérico.
-      camera.position.x = 0
-      camera.position.y = targetHeight * 0.7
-    }
-    const zoom = size / viewHeight
-    if (Math.abs(camera.zoom - zoom) > 0.5) {
-      camera.zoom = zoom
-      camera.updateProjectionMatrix()
-    }
-  })
-  return null
-}
-
-// Argus se gira arrastrándolo (Oscar, 2026-11-10) y al soltarlo regresa solo a su
-// pose con un resorte que se pasa un poquito, como de caricatura. Mientras gira, el
-// head-tracking le deja la cabeza viéndote hasta donde le da el cuello. Todo va por
-// ref y useFrame: arrastrar no hace renders.
-const GIRO_RAD_POR_PX = 0.012
-const GIRO_RESORTE = 70
-const GIRO_FRENO = 10
-const TAU = Math.PI * 2
-
-function GiroArgus({ giroRef, children }) {
-  const ref = useRef(null)
-  useFrame((_, delta) => {
-    const g = giroRef.current
-    const dt = Math.min(delta, 1 / 30)
-    if (g.arrastrando) {
-      g.vel = 0
-      g.actual += (g.objetivo - g.actual) * (1 - Math.exp(-25 * dt))
-    } else if (g.actual !== 0 || g.vel !== 0) {
-      g.vel += (-GIRO_RESORTE * g.actual - GIRO_FRENO * g.vel) * dt
-      g.actual += g.vel * dt
-      if (Math.abs(g.actual) < 1e-4 && Math.abs(g.vel) < 1e-3) { g.actual = 0; g.vel = 0 }
-    }
-    if (ref.current) ref.current.rotation.y = g.actual
-  })
-  return <group ref={ref}>{children}</group>
-}
-
-function ZoidianPortrait() {
-  const targetHeight = 1.7
-  // El idle lo tiene encorvado con la cabeza agachada — de frente se le ve el
-  // pecho. Un target de mirada EN LA CÁMARA reusa el head-tracking del NPC:
-  // levanta la cabeza y te mira mientras te habla.
-  const lookTarget = useRef(null)
-  const giroRef = useRef({ objetivo: 0, actual: 0, vel: 0, arrastrando: false, x0: 0, base: 0 })
-  const soltar = () => {
-    const g = giroRef.current
-    if (!g.arrastrando) return
-    g.arrastrando = false
-    // Regresa por el camino corto aunque le hayas dado varias vueltas.
-    g.actual = ((((g.actual + Math.PI) % TAU) + TAU) % TAU) - Math.PI
-  }
-  return (
-    <div
-      className="argus-giro absolute inset-0"
-      aria-hidden
-      onPointerDown={(e) => {
-        if (e.button !== 0) return
-        const g = giroRef.current
-        g.arrastrando = true
-        g.x0 = e.clientX
-        g.base = g.actual
-        g.objetivo = g.actual
-        try { e.currentTarget.setPointerCapture(e.pointerId) } catch { }
-      }}
-      onPointerMove={(e) => {
-        const g = giroRef.current
-        if (g.arrastrando) g.objetivo = g.base + (e.clientX - g.x0) * GIRO_RAD_POR_PX
-      }}
-      onPointerUp={soltar}
-      onPointerCancel={soltar}
-      onLostPointerCapture={soltar}
-    >
-      <Canvas
-        dpr={[1, 2]}
-        orthographic
-        camera={{ position: [0, targetHeight * 0.55, 10], zoom: 300, near: -100, far: 100 }}
-        frameloop="always"
-        // Antialias: en un retrato de este tamaño el contorno se veía dentado.
-        gl={{ antialias: true, powerPreference: 'high-performance', alpha: true, stencil: false, preserveDrawingBuffer: false }}
-      >
-        <HeadFramer targetHeight={targetHeight} />
-        <ambientLight intensity={0.6} />
-        <directionalLight intensity={2.6} position={[-2.5, 3.5, 4]} color="#fff1dc" />
-        <directionalLight intensity={0.5} position={[3, 1, 2]} color="#9fd0ff" />
-        {/* Target al frente de Argus. Con PORTRAIT_PITCH_MAX en 0 solo cuenta
-            para el giro. El -1.4 en Y compensa el +1.4 que el tracking suma
-            para mirar "a la cara" de Skulley. */}
-        <object3D ref={lookTarget} position={[0, 2.6 - 1.4, 1.6]} />
-        <Suspense fallback={null}>
-          {/* La cámara lo ve un poco desde arriba (Oscar, 2026-11-10). Había un
-              tilt de -0.15, una toma de ángulo bajo que compensaba la cabeza que
-              el head-tracking agachaba; con PORTRAIT_PITCH_MAX en 0 ya no hace
-              falta, y desde abajo se sentía raro. */}
-          <group rotation={[PORTRAIT_TILT, 0, 0]}>
-            <GiroArgus giroRef={giroRef}>
-              <PortraitModel targetHeight={targetHeight} lookAtRef={lookTarget} />
-            </GiroArgus>
-          </group>
-        </Suspense>
-      </Canvas>
-    </div>
-  )
-}
-
-
-// Colorea la ÚLTIMA palabra con el acento (como "¿Quieres JUGAR?" del mock).
-// Solo cuando el texto ya está completo — durante el typewriter va plano.
-function AccentLastWord({ text }) {
-  const idx = text.lastIndexOf(' ')
-  if (idx < 0) return <span className="text-[#f5ff00]">{text}</span>
-  return (
-    <>
-      {text.slice(0, idx + 1)}
-      <span className="text-[#f5ff00]">{text.slice(idx + 1)}</span>
-    </>
-  )
-}
-
-const fmtNum = (n, lang) => Number(n || 0).toLocaleString(lang === 'es' ? 'es-MX' : 'en-US')
-
-// "2026-11-01" → "1 de noviembre" / "November 1"
-function fmtResetDate(iso, lang) {
-  if (!iso) return ''
-  const [y, m] = String(iso).split('-').map(Number)
-  if (!y || !m) return ''
-  return new Date(y, m - 1, 1).toLocaleDateString(lang === 'es' ? 'es-MX' : 'en-US', { day: 'numeric', month: 'long' })
-}
-
-// Cuánto pide y da cada ticket (catálogo de la tienda) y cuántos Golden
-// quedan este mes (profile.php?action=tickets, se pide al abrir: el conteo
-// cambia mientras otros juegan).
-function useTicketStats(open) {
+// Cuánto pide y da cada boleto (catálogo de la tienda) y cuántos dorados quedan
+// este mes (profile.php?action=tickets, se pide al abrir: cambia mientras otros juegan).
+function useTicketStats() {
   const { tickets } = useShopData()
   const [stats, setStats] = useState(null)
   useEffect(() => {
-    if (!open) return undefined
-    let alive = true
+    let vivo = true
     fetch('/api/profile.php?action=tickets')
       .then((r) => r.json())
-      .then((j) => { if (alive && j?.ok) setStats(j) })
-      .catch(() => { /* sin conteo: se muestran solo los niveles */ })
-    return () => { alive = false }
-  }, [open])
+      .then((j) => { if (vivo && j?.ok) setStats(j) })
+      .catch(() => { })
+    return () => { vivo = false }
+  }, [])
   const tiers = stats?.tiers || tickets
-  return { gold: tiers.gold, silver: tiers.silver, resetsAt: stats?.resets_at || null }
+  return { gold: tiers?.gold || {}, silver: tiers?.silver || {}, resetsAt: stats?.resets_at || null, listo: Boolean(stats) }
 }
 
-// Un premio de la pestaña Premios: el boleto en su paspartú (como la foto de
-// una pieza, §14.7), su nombre en el color del metal, cuánto da y cómo se gana.
-// Columna, no tarjeta: el modal ya es la caja.
-const TIER_COLOR = { gold: '#FFC21A', silver: '#DCE2EA' }
-function PrizeColumn({ tier, info, lang, t, children }) {
-  return (
-    <div className="min-w-0">
-      <div className="relative aspect-[16/10] rounded-2xl bg-[#150a1d] grid place-items-center">
-        <TicketArt tier={tier} pct={info.pct} className="golden-ticket--idle w-[64%]" />
+// La tarjeta de lo que enseña el renglón.
+function Muestra({ tipo, D, gold, silver }) {
+  if (tipo === 'dorado' || tipo === 'plateado') {
+    const tier = tipo === 'dorado' ? 'gold' : 'silver'
+    const info = tier === 'gold' ? gold : silver
+    return (
+      <div className="trato-muestra__premio">
+        <svg className="argus-prize-rays" viewBox="-50 -50 100 100" aria-hidden>
+          <path d={PRIZE_RAYS} fill="#fff" opacity="0.07" />
+        </svg>
+        <Sparkle style={{ left: '0.6rem', top: '0.5rem', width: 18 }} />
+        <Sparkle style={{ right: '0.8rem', bottom: '0.7rem', width: 22, animationDelay: '-0.7s' }} />
+        <TicketArt tier={tier} pct={info.pct || (tier === 'gold' ? 35 : 10)} className="golden-ticket--idle trato-muestra__boleto" />
       </div>
-      <h3 className="argus-display text-[1.75rem] leading-none mt-6" style={{ color: TIER_COLOR[tier] }}>{info.name}</h3>
-      <p className="text-white font-semibold text-base mt-2">{t('zoidian.pctOff', { pct: info.pct })}</p>
-      <p className="text-white/70 text-[0.9375rem] leading-relaxed mt-1">{t('zoidian.howTo', { score: fmtNum(info.score, lang) })}</p>
-      {children}
-    </div>
-  )
+    )
+  }
+  if (tipo === 'boletos') {
+    return (
+      <div className="trato-muestra__premio trato-muestra__premio--dos">
+        <svg className="argus-prize-rays" viewBox="-50 -50 100 100" aria-hidden>
+          <path d={PRIZE_RAYS} fill="#fff" opacity="0.07" />
+        </svg>
+        <TicketArt tier="silver" pct={silver.pct || 10} className="golden-ticket--idle trato-muestra__boleto" />
+        <TicketArt tier="gold" pct={gold.pct || 35} className="golden-ticket--idle trato-muestra__boleto" />
+      </div>
+    )
+  }
+  if (tipo === 'stock') {
+    const cap = gold.monthly_cap || 10
+    const quedan = gold.left_this_month ?? cap
+    return (
+      <div className="trato-muestra__stock">
+        <TicketArt tier="gold" pct={gold.pct || 35} className="golden-ticket--idle trato-muestra__boleto trato-muestra__boleto--chico" />
+        <div className="ticket-stock" aria-hidden>
+          {Array.from({ length: cap }, (_, i) => (
+            <span key={i} className={`ticket-stock__stub ${i >= quedan ? 'ticket-stock__stub--taken' : ''}`} />
+          ))}
+        </div>
+        <p className="trato-muestra__dato">{quedan > 0 ? D.boleto.quedan : D.boleto.agotados}</p>
+      </div>
+    )
+  }
+  if (tipo === 'reloj') {
+    return (
+      <div className="trato-muestra__reloj">
+        <svg viewBox="0 0 64 70" aria-hidden className="trato-muestra__cronometro">
+          <rect x="26" y="1" width="12" height="9" rx="2" />
+          <circle cx="32" cy="40" r="27" />
+          <path d="M32 40 L32 22" />
+          <path d="M32 40 L44 46" />
+        </svg>
+        <span className="argus-display trato-muestra__cifra">60<small>{D.segundos}</small></span>
+      </div>
+    )
+  }
+  if (tipo === 'racha') {
+    return (
+      <div className="trato-muestra__racha argus-display">
+        <span>×2</span><span>×3</span><span>×4</span>
+      </div>
+    )
+  }
+  if (tipo === 'dorada') {
+    return (
+      <div className="trato-muestra__dorada">
+        <span className="trato-muestra__orbe" aria-hidden />
+        <span className="argus-display trato-muestra__cifra">500</span>
+      </div>
+    )
+  }
+  if (tipo === 'espacio' || tipo === 'raton' || tipo === 'teclaE') {
+    return (
+      <div className="trato-muestra__glifos">
+        {tipo === 'espacio' && <Tecla ancha>{D.espacio}</Tecla>}
+        {tipo === 'teclaE' && <Tecla>E</Tecla>}
+        {tipo !== 'espacio' && <Raton />}
+      </div>
+    )
+  }
+  if (tipo === 'botonPatada' || tipo === 'joystick' || tipo === 'botonRayo') {
+    const id = tipo === 'botonPatada' ? 'kick' : tipo === 'botonRayo' ? 'laser' : 'move'
+    return <div className="trato-muestra__glifos"><GlifoTactil id={id} /></div>
+  }
+  return null
 }
 
-// Lo que dice Argus en El trato: se presenta (Oscar le quitó el subtítulo al
-// nombre) y propone el trato.
-const LINEAS = ['zoidian.line1', 'zoidian.line2']
-// Lo que dura .argus-sale (index.css).
-const SALIDA_MS = 420
-
-export default function ZoidianDialog({ t, open, onClose, onPlay }) {
-  // Salida: el modal se desarma (argus-sale en index.css) y luego avisa. Toda
-  // salida pasa por aquí: X, Escape, clic afuera, Not now y Let's play.
-  const [saliendo, setSaliendo] = useState(false)
-  const salidaRef = useRef(0)
-  useEffect(() => () => clearTimeout(salidaRef.current), [])
-  const salir = (despues) => {
-    if (salidaRef.current) return
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { despues?.(); return }
-    setSaliendo(true)
-    salidaRef.current = setTimeout(() => { try { despues?.() } catch { } }, SALIDA_MS)
-  }
-  const salirRef = useRef(salir)
-  salirRef.current = salir
-
-  useEffect(() => {
-    if (!open) return undefined
-    const onKeyDown = (e) => {
-      if (e?.key === 'Escape') salirRef.current(onClose)
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [open, onClose])
-
-  // Typewriter estilo preloader: las líneas se ACUMULAN, cada una entra con
-  // beat propio y los caracteres nacen como runas (GlyphedText) que se
-  // resuelven a latin. Cuando Argus termina de hablar aparecen abajo el
-  // "¿Trato?" y los botones; un click en el texto antes de eso lo completa de
-  // golpe (mismo rol que SKIP), así que nadie tiene que esperar (H03).
-  const [tw, setTw] = useState({ line: 0, chars: 0, done: false, skipped: false })
-  const twSkippedRef = useRef(false)
-  useEffect(() => {
-    if (!open) return undefined
-    const texts = LINEAS.map((k) => t(k))
-    twSkippedRef.current = false
-    setTw({ line: 0, chars: 0, done: false, skipped: false })
-    let line = 0
-    let chars = 0
-    // Argus empieza a hablar cuando el modal ya se armó (ver argus-arma).
-    let pause = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 22 : 56
-    const id = setInterval(() => {
-      if (twSkippedRef.current) { clearInterval(id); return }
-      if (pause > 0) { pause -= 1; return }
-      const ln = texts[line] || ''
-      chars = Math.min(ln.length, chars + 2)
-      setTw({ line, chars, done: false, skipped: false })
-      if (chars >= ln.length) {
-        if (line >= texts.length - 1) {
-          setTw({ line, chars, done: true, skipped: false })
-          clearInterval(id)
-        } else {
-          pause = 16 // respiro corto entre beats (~260ms)
-          line += 1
-          chars = 0
-        }
-      }
-    }, 16)
-    return () => clearInterval(id)
-  }, [open, t])
-
-  const skipTypewriter = () => {
-    if (tw.done) return
-    twSkippedRef.current = true
-    setTw({ line: 1, chars: Number.MAX_SAFE_INTEGER, done: true, skipped: true })
-  }
-
+export default function ZoidianDialog({ onClose, onPlay, playerRef, portals, tactil = false }) {
   const { lang } = useLanguage()
-  const tickets = useTicketStats(open)
-  // Su nombre va en runas, de orilla a orilla, y un clic lo glitchea a Luckiest
-  // Guy (easter egg, Oscar).
-  const nombre = useGlitchRunas(open)
-  const orilla = useTituloOrilla(t('zoidian.title'))
-  // Mientras se arma (argus-arma en index.css). Después se quita la clase para
-  // que volver a la pestaña del trato no repita la entrada del premio.
-  const [armando, setArmando] = useState(true)
+  const tickets = useTicketStats()
+  const D = useMemo(() => dialogoArgus(lang, { gold: tickets.gold, silver: tickets.silver, resetsAt: tickets.resetsAt, tactil }), [lang, tickets.gold, tickets.silver, tickets.resetsAt, tactil])
+  const [fase, setFase] = useState('entra') // entra | texto | menu | sale
+  const [cola, setCola] = useState(null)   // { clave, i, despues: 'menu' | 'salir' | 'jugar', n }
+  const [completo, setCompleto] = useState(false)
+  const [sel, setSel] = useState(0)
+  const [vistos, setVistos] = useState(() => new Set())
+  const nombreRef = useRef(null)
+  const firma = useGlitchSolo(nombreRef, FIRMA_GLITCH)
+  const renglonesRef = useRef(0)
+  const salidaRef = useRef(null)
+
+  // Los renglones se leen del guion vivo (el conteo de dorados llega después de abrir).
+  const linea = cola ? D[cola.clave]?.[cola.i] : null
+  const opciones = useMemo(() => ['jugar', 'como', 'premios', 'adios'].map((id) => ({ id, label: D.opciones[id] })), [D])
+
+  // El portal al que señala: el más cercano a Skulley.
+  const portalRef = useRef(null)
   useEffect(() => {
-    if (!open) return undefined
-    setArmando(true)
-    const id = setTimeout(() => setArmando(false), 1900)
+    const p = playerRef?.current?.position
+    let mejor = null
+    let dMin = Infinity
+    for (const o of portals || []) {
+      if (!o?.position || o.antimatter) continue
+      const d = p ? Math.hypot(o.position[0] - p.x, o.position[2] - p.z) : Math.hypot(o.position[0] - argus.pos.x, o.position[2] - argus.pos.z)
+      if (d < dMin) { dMin = d; mejor = o }
+    }
+    portalRef.current = mejor ? [mejor.position[0], PORTAL_Y, mejor.position[2]] : null
+  }, [playerRef, portals])
+
+  const empezar = useCallback((clave, despues) => {
+    renglonesRef.current += 1
+    setCola({ clave, i: 0, despues, n: renglonesRef.current })
+    setCompleto(false)
+    setFase('texto')
+  }, [])
+
+  const cerrar = useCallback((despues = null) => {
+    if (salidaRef.current) return
+    avisarArgus({ dialogo: false })
+    // sin partida, el drone regresa a lo suyo
+    if (despues !== 'jugar') avisarDron({ alJuego: false })
+    soltarCaminata()
+    setFase('sale')
+    salidaRef.current = setTimeout(() => {
+      if (despues === 'jugar') onPlay?.()
+      else onClose?.()
+    }, quietoPreferido() ? 1 : SALIDA_MS)
+  }, [onClose, onPlay])
+  useEffect(() => () => clearTimeout(salidaRef.current), [])
+
+  // Entrada: Argus voltea a verlo, Skulley camina hasta enfrente de él y, ya
+  // llegado (y con las barras puestas), empieza a hablar.
+  useEffect(() => {
+    avisarArgus({ dialogo: true, cara: null, mirar: 'skulley' })
+    const p = playerRef?.current?.position
+    if (p) {
+      const l = lugarFrente(p.x, p.z)
+      caminarA(l.x, l.z, argus.pos.x, argus.pos.z)
+    }
+    let primera = true
+    try { primera = !sessionStorage.getItem(VISTO); sessionStorage.setItem(VISTO, '1') } catch { }
+    const t0 = performance.now()
+    let raf = 0
+    const espera = () => {
+      const listo = !caminata.activa || caminata.llego
+      if (performance.now() - t0 >= ENTRADA_MS && listo) {
+        empezar(primera ? 'trato' : 'otraVez', 'menu')
+        return
+      }
+      raf = requestAnimationFrame(espera)
+    }
+    raf = requestAnimationFrame(espera)
+    return () => {
+      cancelAnimationFrame(raf)
+      // si se desmonta sin pasar por cerrar (App lo quitó), que nada se quede pegado
+      avisarArgus({ dialogo: false })
+      soltarCaminata()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Cada renglón le pide a Argus su clip, su cara y a dónde ve.
+  const lineaId = cola ? `${cola.n}` : ''
+  useEffect(() => {
+    if (!linea) return
+    if (linea.quien === 'madre') {
+      // habla ella: su cara y Argus la voltea a ver
+      avisarDron({ cara: linea.cara || 'feliz', accion: 'IdleJugueton' })
+      avisarArgus({ cara: 'feliz', mirar: [dron.pos.x, dron.pos.y, dron.pos.z] })
+      return
+    }
+    const mirar = linea.mirar === 'portal' ? (portalRef.current || 'skulley') : (linea.mirar || 'skulley')
+    const msg = { cara: linea.cara || null, mirar }
+    if (linea.accion) msg.accion = linea.accion
+    avisarArgus(msg)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lineaId])
+
+  const avanzar = useCallback(() => {
+    if (fase !== 'texto' || !linea) return
+    if (!completo) { setCompleto(true); return }
+    const lista = D[cola.clave] || []
+    if (cola.i + 1 < lista.length) {
+      renglonesRef.current += 1
+      setCola({ ...cola, i: cola.i + 1, n: renglonesRef.current })
+      setCompleto(false)
+      return
+    }
+    if (cola.despues === 'salir' || cola.despues === 'jugar') { cerrar(cola.despues); return }
+    avisarArgus({ cara: null, mirar: 'skulley' })
+    setFase('menu')
+  }, [fase, linea, completo, cola, cerrar, D])
+
+  // Los renglones que cierran se pasan solos al terminar de leerse; antes del de
+  // M.A.D.R.E. se espera a que el drone llegue junto a Argus.
+  const avanzarRef = useRef(avanzar)
+  avanzarRef.current = avanzar
+  useEffect(() => {
+    if (fase !== 'texto' || !completo || !cola || cola.despues === 'menu') return undefined
+    const lista = D[cola.clave] || []
+    const sigue = lista[cola.i + 1]
+    let raf = 0
+    const id = setTimeout(() => {
+      if (!sigue) { cerrar(cola.despues); return }
+      if (sigue.quien !== 'madre') { avanzarRef.current(); return }
+      const t0 = performance.now()
+      const j = juntoArgus()
+      const espera = () => {
+        const llego = Math.hypot(dron.pos.x - j.x, dron.pos.z - j.z) < MADRE_LLEGA.dist
+        if (llego || !dron.montado || performance.now() - t0 > MADRE_LLEGA.maxMs) { avanzarRef.current(); return }
+        raf = requestAnimationFrame(espera)
+      }
+      espera()
+    }, CIERRE_SOLO_MS)
+    return () => { clearTimeout(id); cancelAnimationFrame(raf) }
+  }, [fase, completo, cola, D, cerrar])
+
+  const elegir = useCallback((i) => {
+    const o = opciones[i]
+    if (!o) return
+    try { blipArgus(1.3) } catch { }
+    setSel(i)
+    if (o.id === 'jugar') {
+      // el drone de M.A.D.R.E. sale ya hacia Argus: llega mientras él celebra
+      avisarDron({ alJuego: true })
+      empezar('jugar', 'jugar')
+      return
+    }
+    if (o.id === 'adios') { empezar('adios', 'salir'); return }
+    setVistos((v) => new Set(v).add(o.id))
+    empezar(o.id, 'menu')
+  }, [opciones, empezar])
+
+  // teclado: va en captura y no deja pasar nada al juego mientras dura
+  useEffect(() => {
+    const tecla = (e) => {
+      const k = e.key
+      if (!['Escape', ' ', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 's', 'a', 'd', 'W', 'S', 'A', 'D'].includes(k)) return
+      e.preventDefault()
+      e.stopImmediatePropagation()
+      if (k === 'Escape') { cerrar(); return }
+      if (fase === 'texto' && (k === ' ' || k === 'Enter')) { avanzar(); return }
+      if (fase === 'menu') {
+        // el menú va en dos columnas (una en pantalla angosta): ←→ en el renglón, ↑↓ entre renglones
+        const n = opciones.length
+        let cols = 2
+        try { if (window.matchMedia('(max-width: 700px)').matches) cols = 1 } catch { }
+        const paso = ['ArrowUp', 'w', 'W'].includes(k) ? -cols
+          : ['ArrowDown', 's', 'S'].includes(k) ? cols
+            : ['ArrowLeft', 'a', 'A'].includes(k) ? -1
+              : ['ArrowRight', 'd', 'D'].includes(k) ? 1 : 0
+        if (paso) setSel((s) => (s + paso + n) % n)
+        else if (k === ' ' || k === 'Enter') elegir(sel)
+      }
+    }
+    window.addEventListener('keydown', tecla, true)
+    return () => window.removeEventListener('keydown', tecla, true)
+  }, [fase, avanzar, elegir, sel, opciones.length, cerrar])
+
+  // La tarjeta: la que pide el renglón; si cambia, la de antes sale primero.
+  const pedida = fase === 'texto' ? (linea?.muestra || null) : null
+  const [muestra, setMuestra] = useState({ tipo: null, sale: false })
+  useEffect(() => {
+    if (pedida === muestra.tipo && !muestra.sale) return undefined
+    if (!muestra.tipo) { setMuestra({ tipo: pedida, sale: false }); return undefined }
+    if (!muestra.sale) setMuestra((m) => ({ ...m, sale: true }))
+    const id = setTimeout(() => setMuestra({ tipo: pedida, sale: false }), MUESTRA_SALE_MS)
     return () => clearTimeout(id)
-  }, [open])
-  // Dos pestañas: el trato (lo que dice Argus y el gran premio) y Premios
-  // (los dos tickets, cómo se gana cada uno, cuántos Golden quedan y las
-  // reglas). Cada vez que se abre, empieza en el trato.
-  const [tab, setTab] = useState('deal')
-  useEffect(() => { if (open) setTab('deal') }, [open])
-  const tabsId = useId()
-  const raizRef = useRef(null)
-  useFocoModal(raizRef, open)
+  }, [pedida, muestra.tipo, muestra.sale])
 
-  if (!open) return null
-
-  const handlePlay = () => {
-    try { playSfx('click', { volume: 0.8 }) } catch { }
-    salir(onPlay)
-  }
-  const handleClose = () => {
-    try { playSfx('click', { volume: 0.8 }) } catch { }
-    salir(onClose)
-  }
-
-  // Ir a Premios termina de golpe lo que Argus estaba diciendo: así el
-  // "¿Trato?" y los botones ya están abajo (H03).
-  const selectTab = (id) => {
-    if (id === tab) return
-    try { playSfx('click', { volume: 0.6 }) } catch { }
-    if (id === 'prizes') skipTypewriter()
-    setTab(id)
-  }
-  const TABS = [
-    { id: 'deal', label: t('zoidian.tabDeal') },
-    { id: 'prizes', label: t('zoidian.tabPrizes') },
-  ]
-  const onTabsKeyDown = (e) => {
-    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
-    e.preventDefault()
-    const next = tab === 'deal' ? 'prizes' : 'deal'
-    selectTab(next)
-    document.getElementById(`${tabsId}-${next}`)?.focus()
-  }
-
-  const gold = tickets.gold
-  const silver = tickets.silver
-  const goldLeft = gold?.left_this_month
-  const goldCap = gold?.monthly_cap || 0
-  // Sin conteo todavía (o sin red) no se promete nada: solo los niveles.
-  const stockText = goldLeft === undefined || goldLeft === null
-    ? null
-    : goldLeft > 0
-      ? t('zoidian.goldLeft', { left: goldLeft, cap: goldCap })
-      : t('zoidian.goldSoldOut', { date: fmtResetDate(tickets.resetsAt, lang) })
-  const goldScore = fmtNum(gold.score, lang)
+  const quieto = quietoPreferido()
+  const clase = `dlg-raiz dlg-raiz--argus is-${fase}${quieto ? ' is-quieto' : ''}`
+  const enojo = fase === 'texto' && linea?.cara === 'furia'
+  const habla = fase === 'texto' && linea?.quien === 'madre' ? 'madre' : 'argus'
+  const nombre = habla === 'madre' ? 'M.A.D.R.E.' : D.nombre
+  const pregunta = vistos.size ? D.preguntaOtra : D.pregunta
 
   return (
-    <div
-      ref={raizRef}
-      tabIndex={-1}
-      className={`fixed inset-0 z-modal flex items-stretch sm:items-center justify-center p-0 sm:p-4 lg:p-8 outline-none${armando ? ' argus-arma' : ''}${saliendo ? ' argus-sale pointer-events-none' : ''}`}
-      role="dialog"
-      aria-modal="true"
-      aria-label={t('zoidian.dialogAria')}
-      onPointerDown={(e) => {
-        if (e.target === e.currentTarget) salir(onClose)
-      }}
-    >
-      {/* Backdrop — §6.1: con /70 el blur sí se nota */}
-      <div className="argus-arma__fondo absolute inset-0 bg-black/70 backdrop-blur-xl pointer-events-none" />
-
-      <div className="site-modal text-white" onPointerDown={(e) => e.stopPropagation()}>
-        <button
-          type="button"
-          onClick={handleClose}
-          className="argus-arma__x absolute top-4 left-4 z-[10] w-11 h-11 grid place-items-center rounded-full border-2 border-white/40 bg-black/50 text-white hover:bg-white hover:text-black hover:border-white active:scale-90 transition-all"
-          aria-label={lang === 'es' ? 'Cerrar' : 'Close'}
-        >
-          <XMarkIcon className="w-5 h-5" />
+    <div className={clase} role="dialog" aria-modal="true" aria-label={D.nombre} onClick={() => { if (fase === 'texto') avanzar() }}>
+      <div className="dlg-barra dlg-barra--arriba">
+        <button type="button" className="dlg-salir" onClick={(e) => { e.stopPropagation(); cerrar() }}>
+          <span className="dlg-tecla">Esc</span>{D.saltar}
         </button>
-
-        <div className="flex-1 min-h-0 flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
-          {/* Retrato: la "foto" de Argus, sobre el azul de home y sin borde. */}
-          <div className="argus-arma__retrato relative shrink-0 h-[24vh] sm:h-[28vh] lg:h-auto bg-[#022dd6]">
-            <ZoidianPortrait />
-          </div>
-
-          <div className="flex-1 min-h-0 flex flex-col">
-            {/* La X va en la esquina del retrato: el bloque del nombre es solo para él,
-                con el mismo aire arriba y abajo (la tinta, no la caja: useTituloOrilla). */}
-            <header className="@container argus-linea argus-linea--abajo px-5 sm:px-8 lg:px-10 py-8 sm:py-10">
-              <h2
-                className={`display-title select-none ${orilla ? 'titulo-orilla' : 'display-title--lg'}${nombre.fase?.letras ? '' : ' display-title--runas'}${nombre.fase?.tiembla ? ' glitch-runas' : ''}`}
-                style={orilla || undefined}
-                onClick={nombre.disparar}
-              >
-                <span>
-                  {armando && !nombre.fase
-                    ? [...t('zoidian.title')].map((c, i) => <span key={i} className="argus-arma__runa" style={{ '--i': i }}>{c}</span>)
-                    : textoGlitch(t('zoidian.title'), nombre.fase)}
-                </span>
-              </h2>
-            </header>
-            <div
-              role="tablist"
-              aria-label={t('zoidian.title')}
-              onKeyDown={onTabsKeyDown}
-              className="flex gap-2 px-5 sm:px-8 lg:px-10 pt-5 sm:pt-6"
-            >
-              {TABS.map(({ id, label }, i) => (
-                <button
-                  key={id}
-                  id={`${tabsId}-${id}`}
-                  type="button"
-                  role="tab"
-                  aria-selected={tab === id}
-                  aria-controls={`${tabsId}-panel`}
-                  tabIndex={tab === id ? 0 : -1}
-                  onClick={() => selectTab(id)}
-                  style={{ '--i': i }}
-                  className="argus-arma__pestana shop-chip inline-flex items-center min-h-[44px] px-5 text-xs whitespace-nowrap focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f5ff00]"
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {tab === 'prizes' ? (
-              <div
-                key="prizes"
-                id={`${tabsId}-panel`}
-                role="tabpanel"
-                aria-labelledby={`${tabsId}-prizes`}
-                className="flex-1 min-h-0 overflow-y-auto modal-scroll px-5 sm:px-8 lg:px-10 py-6 sm:py-8 flex flex-col gap-9"
-              >
-                <p className="text-white/80 text-base sm:text-[1.0625rem] leading-relaxed max-w-[62ch]">{t('zoidian.prizesIntro')}</p>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-10">
-                  <PrizeColumn tier="gold" info={gold} lang={lang} t={t}>
-                    {/* Un talón por Golden del mes: los ganados quedan
-                        arrancados. Es el indicador de cuántos van. */}
-                    {stockText && (
-                      <div className="mt-4">
-                        <div className="ticket-stock" aria-hidden>
-                          {Array.from({ length: goldCap }, (_, i) => (
-                            <span key={i} className={`ticket-stock__stub ${i >= goldLeft ? 'ticket-stock__stub--taken' : ''}`} />
-                          ))}
-                        </div>
-                        <p className={`text-sm font-semibold mt-2.5 ${goldLeft > 0 ? 'text-[#FFC21A]' : 'text-white/60'}`}>{stockText}</p>
-                      </div>
-                    )}
-                  </PrizeColumn>
-                  <PrizeColumn tier="silver" info={silver} lang={lang} t={t}>
-                    <p className="text-sm font-semibold text-white/60 mt-4">{t('zoidian.noLimit')}</p>
-                  </PrizeColumn>
-                </div>
-
-                <section aria-labelledby={`${tabsId}-rules`} className="pt-7 border-t-2 border-white/10">
-                  <h3 id={`${tabsId}-rules`} className="text-base font-bold text-white">{t('zoidian.rulesTitle')}</h3>
-                  <ul className="mt-3 space-y-2.5 list-disc pl-5 marker:text-white/30 text-white/70 text-[0.9375rem] leading-relaxed max-w-[62ch]">
-                    {['rule1', 'rule2', 'rule3', 'rule4', 'rule5', 'rule6'].map((k) => (
-                      <li key={k}>{t(`zoidian.${k}`, { gold: goldScore })}</li>
-                    ))}
-                  </ul>
-                </section>
-              </div>
-            ) : (
-            /* Lo que dice — typewriter acumulado con glifos (mismo lenguaje
-               que el preloader). Click en el texto = completar ya. */
-            <div
-              key="deal"
-              id={`${tabsId}-panel`}
-              role="tabpanel"
-              aria-labelledby={`${tabsId}-deal`}
-              className="flex-1 min-h-0 flex flex-col"
-            >
-              <div
-                className="flex-1 min-h-0 overflow-y-auto modal-scroll px-5 sm:px-8 lg:px-10 py-6 sm:py-8 space-y-4 cursor-pointer"
-                onPointerDown={skipTypewriter}
-              >
-              {LINEAS.map((k) => t(k)).map((txt, i) => {
-                if (i > tw.line) return null
-                const display = (i === tw.line && !tw.done) ? txt.slice(0, tw.chars) : txt
-                if (!display) return null
-                return (
-                  <p key={i} className="argus-beat text-white/80 text-base sm:text-[1.0625rem] leading-relaxed max-w-[62ch]">
-                    <GlyphedText text={display} complete={Boolean(tw.skipped)} />
-                  </p>
-                )
-              })}
-              </div>
-
-              {/* EL PREMIO — banda de alto fijo pegada abajo: lo que varía con la
-                  pantalla es el texto de arriba, que corre solo. Rayos de sol toon
-                  detrás del boleto y destellos, como en la pleca de "¡Ojo!". */}
-              <div className="argus-premio argus-arma__premio">
-                <svg className="argus-prize-rays" viewBox="-50 -50 100 100" aria-hidden>
-                  <path d={PRIZE_RAYS} fill="#0a0510" opacity="0.07" />
-                </svg>
-                <Sparkle style={{ left: '0.75rem', top: '0.6rem', width: 16 }} />
-                <Sparkle style={{ right: '1rem', top: '0.75rem', width: 20, animationDelay: '-0.7s' }} />
-                <div className="argus-arma__boleto">
-                  <GoldenTicketArt pct={gold.pct} className="golden-ticket--idle argus-premio__boleto" />
-                </div>
-                <div className="argus-premio__texto">
-                  <p className="argus-display argus-premio__titulo">{t('zoidian.prizeTitle')}</p>
-                  <p className="argus-premio__dato">{t('zoidian.prizeLabel', { pct: gold.pct, score: goldScore })}</p>
-                  {stockText && <p className="argus-premio__quedan">{stockText}</p>}
-                </div>
-              </div>
-            </div>
-            )}
-
-            {/* Barra fija: el "¿Trato?" pegado a la izquierda y la acción de
-                color al final. Entran juntos cuando Argus termina de hablar;
-                el alto de la barra se reserva para que nada brinque. */}
-            <div className="argus-linea argus-linea--arriba shrink-0 min-h-[77px] px-5 sm:px-8 lg:px-10 py-4 flex items-center justify-between gap-4">
-              {tw.done && (
-                <p className="argus-actions-in argus-display text-white text-[1.75rem] sm:text-3xl leading-none min-w-0">
-                  <AccentLastWord text={t('zoidian.question')} />
-                </p>
-              )}
-              {tw.done && (
-              <div className="argus-actions-in flex items-center gap-3 shrink-0 ml-auto">
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  className="shop-btn shop-btn--ghost min-h-[44px] px-5 text-xs"
-                >
-                  {t('zoidian.notNow')}
-                </button>
-                <button
-                  type="button"
-                  onClick={handlePlay}
-                  className="shop-btn argus-btn--primary min-h-[44px] px-6 text-xs"
-                >
-                  {t('zoidian.play')}
-                </button>
-              </div>
-              )}
-            </div>
-          </div>
+      </div>
+      <div className="dlg-barra dlg-barra--abajo" />
+      {muestra.tipo && (
+        <div key={muestra.tipo} className={`trato-muestra${muestra.sale ? ' is-sale' : ''}`} aria-hidden="true">
+          <Muestra tipo={muestra.tipo} D={D} gold={tickets.gold} silver={tickets.silver} />
         </div>
+      )}
+      <div className={`dlg-globo${enojo ? ' is-enojo' : ''}`}>
+        <span ref={nombreRef} className={`dlg-nombre${firma?.letras ? ' display-title--runas' : ''}${firma?.tiembla ? ' glitch-runas' : ''}`}>{textoGlitch(nombre, firma)}</span>
+        {fase === 'menu' ? (
+          <div className="dlg-menu">
+            <RenglonRunas key={`pregunta-${renglonesRef.current}`} texto={pregunta} completo={false} className="dlg-texto--pregunta" bip={blipArgus} alBip={() => { argus.hablaUltimo = performance.now() }} />
+            <ul role="listbox" aria-label={pregunta}>
+              {opciones.map((o, i) => (
+                <li key={o.id}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={sel === i}
+                    className={`dlg-opcion${vistos.has(o.id) ? ' is-visto' : ''}`}
+                    onMouseEnter={() => setSel(i)}
+                    onClick={(e) => { e.stopPropagation(); elegir(i) }}
+                  >
+                    <span className="dlg-cursor" aria-hidden="true">▶</span>
+                    {o.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          linea && (
+            <RenglonRunas
+              key={cola.n}
+              texto={linea.t}
+              completo={completo}
+              alTerminar={() => setCompleto(true)}
+              bip={habla === 'madre' ? blipMadre : blipArgus}
+              alBip={habla === 'madre' ? undefined : () => { argus.hablaUltimo = performance.now() }}
+            />
+          )
+        )}
+        {fase === 'texto' && completo && <span className="dlg-sigue" aria-label={D.continuar}>▼</span>}
       </div>
     </div>
   )

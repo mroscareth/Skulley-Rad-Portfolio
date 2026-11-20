@@ -3117,7 +3117,7 @@ body.shop-cart-open > #root {
 /* ═══════════════════════════════════════════════════════════════════
    ARGUS (juego de esferas) — mismo sistema toon de la Store (§14),
    con acento propio: el amarillo del "!" que flota sobre el NPC.
-   Aplica a ZoidianDialog + SphereGameModal. Superficies planas, borde
+   Aplica a los controles, el fin de partida y los premios. Superficies planas, borde
    sólido 2px, display Luckiest Guy, cero glow en el chrome (el bloom
    de los orbes vive DENTRO del icono: es la foto del producto).
    ═══════════════════════════════════════════════════════════════════ */
@@ -7395,3 +7395,85 @@ div:has(> #privy-dialog-backdrop) {
 .dlg-raiz.is-quieto .dlg-globo { transition-duration: 1ms; transition-delay: 0ms; }
 .dlg-raiz.is-quieto .dlg-sigue,
 .dlg-raiz.is-quieto .dlg-cursor { animation: none; }
+
+/* La escena del trato de Argus (ZoidianDialog.jsx): el mismo globo, y encima la
+   tarjeta de lo que enseña cada renglón (el boleto con sus rayos, las teclas, el
+   reloj…), en el paspartú oscuro de los premios, con la tinta y la sombra dura
+   del globo. Va arriba a la derecha, donde la toma sobre el hombro de Skulley
+   deja el fondo libre (sobre el globo tapaba a Argus). Entra de golpe con rebote
+   y sale antes de que entre otra. */
+.trato-muestra {
+  position: absolute;
+  right: clamp(1rem, 4vw, 4rem);
+  top: calc(var(--dlg-barra) + clamp(1rem, 4vh, 2.6rem));
+  display: grid;
+  place-items: center;
+  padding: 1.1rem 1.4rem;
+  overflow: hidden;
+  background: #150a1d;
+  color: #fff;
+  border: 3px solid #000;
+  border-radius: 1.4rem;
+  box-shadow: 7px 7px 0 #000;
+  rotate: 2.5deg;
+  transform-origin: 70% 0%;
+  animation: trato-muestra-entra 520ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.trato-muestra.is-sale { animation: trato-muestra-sale 220ms cubic-bezier(0.36, 0, 0.66, -0.56) both; }
+@keyframes trato-muestra-entra {
+  from { opacity: 0; transform: translateY(-35%) scale(0.6) rotate(8deg); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes trato-muestra-sale {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(-30%) scale(0.7) rotate(-6deg); }
+}
+.trato-muestra__premio {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 15rem;
+  aspect-ratio: 16 / 10;
+}
+.trato-muestra__premio--dos { width: 23rem; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+.trato-muestra__boleto { position: relative; width: 76%; }
+.trato-muestra__premio--dos .trato-muestra__boleto { width: 100%; }
+.trato-muestra__boleto--chico { width: 9rem; }
+.trato-muestra__stock { display: flex; flex-direction: column; align-items: center; gap: 0.8rem; width: 15rem; }
+.trato-muestra__stock .ticket-stock { width: 100%; justify-content: center; }
+.trato-muestra__dato { margin: 0; color: #FFC21A; font-family: var(--font-body); font-weight: 700; font-size: 0.95rem; }
+.trato-muestra__reloj,
+.trato-muestra__dorada { display: flex; align-items: center; gap: 1rem; padding: 0.2rem 0.4rem; }
+.trato-muestra__cronometro { width: 3.4rem; overflow: visible; fill: #fff; stroke: #0a0510; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+.trato-muestra__cronometro path { fill: none; }
+.trato-muestra__cifra { color: var(--amarillo); font-size: 3.6rem; }
+.trato-muestra__cifra small { margin-left: 0.08em; font-size: 0.45em; }
+.trato-muestra__racha { display: flex; align-items: baseline; gap: 0.9rem; padding: 0.2rem 0.4rem; color: var(--amarillo); }
+.trato-muestra__racha span:nth-child(1) { font-size: 2rem; }
+.trato-muestra__racha span:nth-child(2) { font-size: 2.8rem; }
+.trato-muestra__racha span:nth-child(3) { font-size: 3.6rem; }
+.trato-muestra__orbe {
+  width: 3.2rem;
+  height: 3.2rem;
+  border: 3px solid #000;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 36% 32%, #fff6bf 0 16%, #ffc21a 17% 52%, #b98600 53% 86%, #6b4d00 87% 100%);
+  animation: trato-orbe 900ms cubic-bezier(0.3, 0, 0.6, 1) infinite alternate;
+}
+@keyframes trato-orbe { from { transform: translateY(4px) scale(1.06, 0.94); } to { transform: translateY(-10px); } }
+.trato-muestra__glifos { display: flex; align-items: center; gap: 0.5rem; zoom: 1.8; }
+/* La tecla se deja apretada y se suelta, como pide el renglón (cargar y soltar). */
+.trato-muestra .tecla__cara { animation: trato-tecla 1.8s steps(1, end) infinite; }
+@keyframes trato-tecla {
+  0%, 22% { transform: none; background: #fff; }
+  24%, 78% { transform: translateY(3px); background: var(--amarillo); }
+  80%, 100% { transform: none; background: #fff; }
+}
+@media (max-width: 700px) {
+  .trato-muestra { padding: 0.8rem 1rem; }
+  .trato-muestra__premio { width: 11rem; }
+  .trato-muestra__premio--dos { width: 16rem; }
+  .trato-muestra__glifos { zoom: 1.4; }
+}
+.dlg-raiz.is-quieto .trato-muestra,
+.dlg-raiz.is-quieto .trato-muestra__orbe { animation: none; }

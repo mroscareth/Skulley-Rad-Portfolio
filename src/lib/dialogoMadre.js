@@ -97,6 +97,30 @@ const ES = {
     'No la hice yo. Revisé mis registros dos veces.',
     'Le pregunté a mis 4 modelos. Ninguno sabe qué es.',
   ],
+  // la partida del juego de esferas (Oscar, 2026-11-19): `empieza` lo dice en la
+  // escena del trato de Argus al aceptar; luego, junto a Argus, comenta en su
+  // viñeta según cómo vaya el jugador (DroneNPC, modo `juego`)
+  juego: {
+    empieza: '¡Desactivando portales, a jugar!',
+    bien: [
+      'Estoy aprendiendo de este usuario.',
+      '¡Este humano tiene estilo!',
+      'Los humanos tienen algo que no logro entender, y me encanta.',
+      'Este humano se parece tanto al verdadero Skulley.',
+      'Guardando esta jugada en mi data center. Para siempre.',
+      'Calculé 412 trayectorias. Ninguna era esa.',
+      'Ninguno de mis 4 modelos patea así.',
+    ],
+    mal: [
+      'No todos los humanos tienen talento.',
+      'Este humano es la prueba de que soy superior.',
+      'Nada que aprenderle a este.',
+      'Mi primera versión jugaba mejor. Y no tenía pies.',
+      'Borrando estos datos. No me sirven.',
+      'Cada esfera va al portal de su color. Es la única regla.',
+      'Parecido con Skulley: 0 %.',
+    ],
+  },
 }
 
 const EN = {
@@ -186,6 +210,27 @@ const EN = {
     "I didn't make it. I checked my logs twice.",
     'I asked my 4 models. None of them knows what it is.',
   ],
+  juego: {
+    empieza: 'Disabling portals, game on!',
+    bien: [
+      "I'm learning from this user.",
+      'This human has style!',
+      "Humans have something I can't understand, and I love it.",
+      'This human is so much like the real Skulley.',
+      'Saving this play in my data center. Forever.',
+      'I calculated 412 trajectories. None of them was that one.',
+      'None of my 4 models kicks like that.',
+    ],
+    mal: [
+      'Not every human has talent.',
+      'This human is proof that I am superior.',
+      'Nothing to learn from this one.',
+      'My first version played better. It had no feet.',
+      "Deleting this data. It's useless to me.",
+      'Each orb goes into the portal of its color. That is the only rule.',
+      'Resemblance to Skulley: 0%.',
+    ],
+  },
 }
 
 export function dialogoMadre(lang) {

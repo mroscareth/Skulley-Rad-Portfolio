@@ -48,6 +48,7 @@ const FASE_PISA_CORRER = 0
 import { applyCharacterSkinShader, materialTakesSkin, skinLineColor, SKIN_LINE_COLOR_EVENT, getSkinForcedColors, getCurrentSkinMode } from '../lib/skinShaders.js'
 import LlamaMano from './fx/LlamaMano.jsx'
 import { rayoTocaDron, bolaAlEscudo, golpeEscudo } from '../lib/droneNpc.js'
+import { pasoCaminata } from '../lib/caminataAuto.js'
 
 // Identidad fija para un componente definido dentro de otro: `render` cambia en cada
 // render del padre, pero React ve siempre el mismo tipo y no lo vuelve a montar.
@@ -57,6 +58,13 @@ const ComponenteEstable = ({ render }) => render()
 // allocate a new array each render (the bolt geometry keys off these values).
 const LIGHTNING_TOP = [0, 22, 0]
 const LIGHTNING_BOTTOM = [0, 0.05, 0]
+
+// Viñetas: cuántos clics seguidos sobre Skulley y cuánto puede pasar entre uno y otro.
+const CLICS_PARA_HABLAR = 3
+const CLIC_VENTANA_MS = 1200
+// Lo que la viñeta no debe tapar, desde su ancla (a 1.85 del piso): medido con
+// los vértices, Skulley llega a 2.81 con la cresta y la cabeza abre 0.70.
+const VINETA_EVITA = { abajo: 1.85, arriba: 1.05, radio: 0.75 }
 
 // Expose a module-level global helper so it runs even if the component never mounts.
 // This avoids the case where a render/Canvas error prevents useEffect from running.
@@ -866,16 +874,48 @@ export default function Player({
   // Speech bubble scheduler: uses existing i18n phrases (portrait.phrases)
   // Paused in orb mode to avoid a floating bubble with no character.
   const bubble = useSpeechBubbles({
-    // El reloj de viñetas arranca al aterrizar (homeLanded), no detrás del preloader:
-    // si no, la primera viñeta (firstDelayMs) expira oculta y el user cae en el gap largo.
     enabled: homeLanded && !orbActive && !customizeActive, // pausa también en orb mode y customize
     phrasesKey: 'portrait.phrases',
     typingCps: 14,
-    firstDelayMs: 350,
-    // Gap de silencio 18-40s entre viñetas ambient (~8x menos frecuente); la primera sigue saliendo rápido al aterrizar.
-    delayMinMs: 18000,
-    delayRandMs: 22000,
+    // Ya no salen solas (Oscar, 2026-11-19: "salen en el peor momento"): una
+    // frase por cada CLICS_PARA_HABLAR clics seguidos sobre Skulley.
+    automatico: false,
   })
+  const puedeHablar = homeLanded && !orbActive && !customizeActive && powerEnabled && !prewarm
+  const clicsRef = useRef({ n: 0, t: 0 })
+  // La cápsula es generosa para que sea fácil picarlo, pero detrás puede haber otra
+  // cosa que se pica (Argus: con Skulley enfrente, un clic en sus piernas se lo
+  // quedaba la cápsula). Si el rayo sigue hacia otro objetivo, la cápsula solo se
+  // queda el clic cuando de veras cae en el cuerpo visible de Skulley (raycast
+  // contra su malla, solo en ese clic); si no, el clic sigue de largo.
+  const rayoSkulley = useMemo(() => new THREE.Raycaster(), [])
+  const tocaCuerpoSkulley = (ray) => {
+    const raiz = modelRootRef.current
+    if (!raiz) return true
+    rayoSkulley.ray.copy(ray)
+    return rayoSkulley.intersectObject(raiz, true).some(({ object }) => {
+      for (let o = object; o; o = o.parent) if (!o.visible) return false
+      const m = Array.isArray(object.material) ? object.material[0] : object.material
+      return !m || m.opacity > 0.1
+    })
+  }
+  const clicSkulley = (ev) => {
+    const otroDetras = ev.intersections?.some((i) => i.eventObject !== ev.eventObject)
+    if (otroDetras && !tocaCuerpoSkulley(ev.ray)) return
+    ev.stopPropagation()
+    if (!puedeHablar || disassembleActiveRef.current) return
+    const c = clicsRef.current
+    // Con una frase en pantalla (o recién ida) los clics no cuentan: la que
+    // sigue pide otros 3 después (Oscar: que no salgan una tras otra).
+    if (bubble.ocupada()) { c.n = 0; return }
+    const ahora = performance.now()
+    if (ahora - c.t > CLIC_VENTANA_MS) c.n = 0
+    c.t = ahora
+    c.n += 1
+    if (c.n < CLICS_PARA_HABLAR) return
+    c.n = 0
+    bubble.decir()
+  }
 
   // Robust anchor for the speech bubble: prefer bones (Head/Neck), NOT the mesh (which is usually at (0,0,0)).
   const bubbleAnchorRef = useRef(null)
@@ -4018,7 +4058,8 @@ export default function Player({
       if (boltTimerRef.current) clearTimeout(boltTimerRef.current)
       boltTimerRef.current = setTimeout(() => {
         boltTimerRef.current = null
-        try { startDisassemble({ hold: true, forceVisible: true }) } catch { }
+        // Con su aviso de despiece, como los demás rayos: Argus se burla (ZoidianNPC).
+        try { if (startDisassemble({ hold: true, forceVisible: true })) window.dispatchEvent(new CustomEvent('character-disassembled-by-egg')) } catch { }
         // Radial impulse from ground impact — sells the force of the strike.
         // Run on the next frame so pieces have been created by startDisassemble.
         try {
@@ -6329,6 +6370,14 @@ export default function Player({
     // Customizer abierto: congela la locomoción (sin early-return → idle y el
     // simulador siguen vivos; solo se anula el input para que no camine).
     if (customizeActiveRef.current) { xInputRaw = 0; zInputRaw = 0; inputMag = 0 }
+    // Caminata sola (lib/caminataAuto.js, la escena del trato de Argus): la
+    // dirección del mundo pasa a la base de la cámara, como si fuera una tecla.
+    const auto = pasoCaminata(simPosRef.current)
+    if (auto) {
+      xInputRaw = auto.x * camRight.x + auto.z * camRight.z
+      zInputRaw = auto.x * camForward.x + auto.z * camForward.z
+    }
+    const giroAuto = auto ? auto.mirar : null
 
     // Desired move direction relative to direct camera
     const xInput = xInputRaw
@@ -6538,7 +6587,10 @@ export default function Player({
       // Lambda ~20 = smooth turn, ~30 = more immediate, ~50+ = very snappy
       // Cargando la patada se APUNTA más despacio: es puntería, no volantazo.
       // Con el mouse se sube un poco el lambda porque el gesto ya es directo.
-      if (hasInput || aimAngle !== null) {
+      if (!hasInput && aimAngle === null && giroAuto !== null) {
+        // ya llegó: voltea despacio hacia quien le habla
+        simYawRef.current = dampAngleWrapped(simYawRef.current, giroAuto, 7.0, stepDt)
+      } else if (hasInput || aimAngle !== null) {
         const ROT_LAMBDA = planted ? (aimAngle !== null ? 22.0 : 14.0) : 50.0
         simYawRef.current = dampAngleWrapped(
           simYawRef.current,
@@ -7406,6 +7458,16 @@ export default function Player({
           {/* Rigid pieces for the easter egg (dynamically mounted) */}
           <group ref={piecesRootRef} />
         </group>
+        {/* Para picarlo (viñetas): invisible, nunca se dibuja ni compila, y una
+            cápsula es barata de raycastear (la malla con piel no). */}
+        <mesh
+          visible={false}
+          position={[0, 1.35, 0]}
+          onClick={clicSkulley}
+          raycast={puedeHablar ? THREE.Mesh.prototype.raycast : () => null}
+        >
+          <capsuleGeometry args={[0.6, 1.5, 4, 8]} />
+        </mesh>
         {/* Workaround: voxel shatter + rebuild (simulates disassembly) */}
         <instancedMesh
           ref={eggVoxelRef}
@@ -7459,6 +7521,7 @@ export default function Player({
         // Camera-relative offset: x=right, y=up, z=toward camera
         // Pushed further right and higher so it does not overlap the character
         offset={[1.95, 1.20, 0]}
+        evitar={VINETA_EVITA}
       />
       {/* Barra de carga 3D sobre la cabeza: visibilidad la controla su propio
           useFrame vía chargeRef (0 = oculta), no montar en prewarm. */}

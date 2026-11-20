@@ -222,7 +222,7 @@ function TutorialModal({ t, open, onClose, tactil = false }) {
 }
 
 /** Una tecla de verdad: cara blanca, filo de tinta y su costado abajo; presionada se hunde en amarillo. */
-function Tecla({ children, on = false, ancha = false }) {
+export function Tecla({ children, on = false, ancha = false }) {
   return (
     <span className={`tecla${ancha ? ' tecla--ancha' : ''}${on ? ' is-on' : ''}`}>
       <span className="tecla__cara">{children}</span>
@@ -231,7 +231,7 @@ function Tecla({ children, on = false, ancha = false }) {
 }
 
 /** El mouse toon: el botón izquierdo (arrastrar) y la rueda (zoom) se encienden al usarlos. */
-function Raton({ encendida }) {
+export function Raton({ encendida = () => false }) {
   const on = (id) => (encendida(id) ? 'is-on' : '')
   return (
     <svg className="raton" viewBox="0 0 64 96" aria-hidden>
@@ -268,7 +268,7 @@ function GlifoTeclado({ id, t, encendida }) {
   return null
 }
 
-function GlifoTactil({ id }) {
+export function GlifoTactil({ id }) {
   if (id === 'move') return <span className="tuto-joystick"><span /></span>
   if (id === 'kick') return <span className="tuto-boton"><KickIcon /></span>
   if (id === 'laser') return <span className="tuto-boton tuto-boton--amarillo"><BoltIcon /></span>

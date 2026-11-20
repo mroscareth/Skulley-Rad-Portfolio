@@ -6,6 +6,7 @@ import WallpaperEscena, { CARA_Y } from './WallpaperEscena.jsx'
 import { registrarCabeza } from '../../lib/cabezaEnPantalla.js'
 import { toonPisoGlobal } from '../../lib/toonBanding.js'
 import { wallpaperEstado } from '../../lib/wallpaperEscritorio.js'
+import { PALETAS_HOME, useMomentoHome } from '../../lib/momentoHome.js'
 import PortalCrystal from '../fx/PortalCrystal.jsx'
 import PortalHitArea from '../fx/PortalHitArea.jsx'
 import Luciernagas from '../fx/Luciernagas.jsx'
@@ -242,6 +243,7 @@ import CameraController from '../CameraController.jsx'
 import FrustumCulledGroup from '../FrustumCulledGroup.jsx'
 import Environment from '../Environment.jsx'
 import FakeGrass from '../FakeGrass.jsx'
+import PastoPintado from './PastoPintado.jsx'
 import FloatingExclamation from '../FloatingExclamation.jsx'
 import ZoidianNPC from '../ZoidianNPC.jsx'
 import DroneNPC from '../drone/DroneNPC.jsx'
@@ -415,10 +417,10 @@ function ToonKeyLight({ playerRef, intensity = 2.4 }) {
 export default function HomeScene({
   // state flags
   pageHidden, showPreloaderOverlay, showSectionUi, sectionUiAnimatingOut, sectionCovered, historiaCubre, primerPlano,
-  dialogoDron = false, puedeHablarDron = false, onHablarDron,
+  dialogoDron = false, puedeHablarDron = false, onHablarDron, dialogoArgus = false, onHablarArgus,
   transitionState, tramaViaje, noiseMixEnabled, mainWarmStage, sectionHomeWarm, onHomeWarmDone, psychoSceneColor,
   effectiveSceneColor, isMobilePerf, degradedMode, fxWarm, prevSceneTex,
-  eggActive, boltFlashActive, vhsRewindActive, section, homeLanded, spheresTutorialOpen, sphereGameActive,
+  eggActive, boltFlashActive, vhsRewindActive, section, homeLanded, sphereGameActive,
   cheatDragEnabled, bootLoading, goldSkinModelActive, goldSkinTransformActive,
   navTarget, preloaderFadingOut, blackoutVisible, orbActiveUi, playerMoving,
   nearPortalId, actionCooldown, cameraMode, customizeActive, playerMeshes, portalMixMap,
@@ -438,7 +440,7 @@ export default function HomeScene({
   setCtaForceHidden, setShowCta, setCtaAnimatingOut, setUiHintPortalId,
   setCharacterReady, setNavTarget,
   setPortraitGlowV, setOrbActiveUi, setPlayerMoving, setActionCooldown,
-  setPreloaderFadingOut, setHomeLanded, setSpheresTutorialOpen, setZoidianDialogOpen, setPlayerMeshes,
+  setPreloaderFadingOut, setHomeLanded, setPlayerMeshes,
 
   // actions (useCallback-wrapped in App)
   handlePortalEnter, handleCheatCapture, handleBlockedDragAttempt, onOfferingDelivered, section6Unlocked,
@@ -464,6 +466,7 @@ export default function HomeScene({
   // esferas, Argus, la babosa, el pasto, las sombras, los cristales y el contorno
   // del composer. Solo lo que se dibuja; el juego sigue con `section`.
   const comoHome = section === 'home' || Boolean(sectionHomeWarm)
+  const momentoHome = useMomentoHome()
   // dónde anda la esfera corrupta (el drone de M.A.D.R.E. va a verla de vez en cuando)
   const buscarCorrupta = useRef(() => homeOrbsRef.current?.corrupta?.() || null).current
   const portalClickEnabled = section === 'home' && !bootLoading && !showPreloaderOverlay
@@ -630,7 +633,7 @@ export default function HomeScene({
           lowPerf={Boolean(isMobilePerf || degradedMode || !fxWarm)}
           isMobile={Boolean(isMobilePerf)}
           fieldRadius={isMobilePerf ? 80 : 150}
-          baseColor={eggActive ? '#fc1c27' : '#1202f2'}
+          baseColor={eggActive ? '#fc1c27' : PALETAS_HOME[momentoHome].pastoFino}
           emissiveIntensity={0.22}
           revealRadius={7.0}
           feather={2.2}
@@ -641,6 +644,9 @@ export default function HomeScene({
           bladeWidth={0.032}
           sway={isMobilePerf ? 0.02 : 0.045}
         />
+        {/* Matas pintadas a mano (home/PastoPintado.jsx): del color del piso, se
+            doblan y se aplastan al pasar Skulley. Montadas siempre: no compilan al jugar. */}
+        <PastoPintado playerRef={playerRef} portales={portals} colorPiso={psychoSceneColor || '#204580'} />
         {/* God Rays anchor (hidden when inactive and no depth write) */}
         {fx.godEnabled && (
           <mesh ref={sunRef} position={[0, 8, 0]}>
@@ -724,8 +730,8 @@ export default function HomeScene({
           </>
         )}
         {/* Zoidian — NPC dueño del juego de las esferas, parado donde antes
-            flotaba solo el "!". Click (en él o en el "!") → diálogo de
-            presentación (ZoidianDialog en App) → instrucciones. Monta desde el
+            flotaba solo el "!". Click (en él o en el "!", con Skulley cerca) →
+            su escena del trato (ZoidianDialog en App) → partida. Monta desde el
             warmup (sin esperar homeLanded) para que sus shaders entren al
             compileAsync del preloader; Suspense PROPIO para no suspender la
             escena entera mientras baja su GLB. */}
@@ -738,10 +744,7 @@ export default function HomeScene({
                 position={[0, 0, 12.9]}
                 rotationY={Math.PI}
                 targetHeight={3.2}
-                onClick={() => {
-                  try { playSfx('click', { volume: 0.8 }) } catch { }
-                  try { setZoidianDialogOpen?.(true) } catch { }
-                }}
+                onClick={() => { try { onHablarArgus?.() } catch { } }}
               />
             </Suspense>
             {/* Sombra de contacto del zoidian — misma silueta RTT cenital que
@@ -784,11 +787,8 @@ export default function HomeScene({
           <FloatingExclamation
             position={[0, 4.1, 12.9]}
             color="#f5ff00"
-            visible={section === 'home' && !saliendoDeHome && homeLanded && !spheresTutorialOpen}
-            onClick={() => {
-              try { playSfx('click', { volume: 0.8 }) } catch { }
-              try { setZoidianDialogOpen?.(true) } catch { }
-            }}
+            visible={section === 'home' && !saliendoDeHome && homeLanded && !dialogoArgus}
+            onClick={() => { try { onHablarArgus?.() } catch { } }}
           />
         )}
         {/* Player mounts from preloader in prewarm mode (invisible, no loop) to avoid hitch on "Enter" */}
@@ -800,8 +800,8 @@ export default function HomeScene({
           eggActive={eggActive}
           goldSkinActive={goldSkinModelActive}
           goldSkinTransformActive={goldSkinTransformActive}
-          customizeActive={customizeActive || tramaViaje || primerPlano || dialogoDron}
-          powerEnabled={section === 'home' && !saliendoDeHome && !dialogoDron}
+          customizeActive={customizeActive || tramaViaje || primerPlano || dialogoDron || dialogoArgus}
+          powerEnabled={section === 'home' && !saliendoDeHome && !dialogoDron && !dialogoArgus}
           homeLanded={homeLanded}
           onPortalEnter={bootLoading ? undefined : handlePortalEnter}
           onProximityChange={bootLoading ? undefined : ((f) => {
@@ -1039,7 +1039,8 @@ export default function HomeScene({
               mode={cameraMode}
               customizeActive={customizeActive}
               primerPlano={primerPlano}
-              dialogo={dialogoDron}
+              dialogo={dialogoDron || dialogoArgus}
+              dialogoCon={dialogoArgus ? 'argus' : 'dron'}
             />
           )
         })()}

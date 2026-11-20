@@ -1,3 +1,5 @@
+import { argus } from './argusNpc.js'
+
 // El drone de M.A.D.R.E. que anda por la home (components/drone/DroneNPC.jsx).
 // Estado compartido sin three: App y el diálogo lo leen y van en el chunk de
 // entrada. El NPC escribe `pos` cada cuadro (la cámara del diálogo la mira) y
@@ -13,8 +15,27 @@ export const dron = {
   plantada: 0,
 }
 
+// Durante la partida del juego de esferas se queda aquí, junto a Argus y a su
+// izquierda (la derecha de la cámara del trato), viendo a Skulley: `lado` hacia la
+// izquierda de Argus, `adelante` hacia donde ve él, `alto` sobre el piso.
+export const JUNTO_ARGUS = { lado: 3.0, adelante: 0.8, alto: 3.4 }
+export function juntoArgus() {
+  const fx = Math.sin(argus.rotY)
+  const fz = Math.cos(argus.rotY)
+  // su izquierda: el frente girado 90° (de frente a -z, la izquierda es -x)
+  const ix = fz
+  const iz = -fx
+  return {
+    x: argus.pos.x + ix * JUNTO_ARGUS.lado + fx * JUNTO_ARGUS.adelante,
+    y: JUNTO_ARGUS.alto,
+    z: argus.pos.z + iz * JUNTO_ARGUS.lado + fz * JUNTO_ARGUS.adelante,
+  }
+}
+
 const oyentes = new Set()
 // El diálogo le pide caras y acciones al drone: { cara } | { accion } | { voltear: true }
+// La escena de Argus, al aceptar el trato: { alJuego: true } la manda junto a él
+// (y { alJuego: false } la regresa si no hubo partida).
 export function escucharDron(fn) {
   oyentes.add(fn)
   return () => oyentes.delete(fn)

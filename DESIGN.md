@@ -569,6 +569,10 @@ Nuevos tokens Tailwind disponibles (§6.3):
 
 ## Changelog
 
+**2026-11-19 — El trato de Argus pasa de modal a escena**
+- Oscar: "quiero hacer cinemática la interacción con Argus, como la tenemos con M.A.D.R.E.". El `.site-modal` del trato (retrato en 3D, pestañas El trato / Premios) y el modal de reglas (`SphereGameModal`) se van: Skulley camina hasta Argus, la cámara se pone sobre su hombro y Argus habla en el globo de los diálogos (barras de cine, tinta, runas que se revelan). Después del trato, un menú: a jugar, cómo se juega, qué gano, ahora no.
+- Lo que antes era contenido de pestaña (los boletos, el conteo del mes, las teclas) sale renglón por renglón en una tarjeta arriba a la derecha, en el paspartú oscuro de los premios con la tinta y la sombra dura del globo. Entra con rebote y sale antes de que entre la siguiente. Sobre el globo tapaba a Argus.
+
 **2026-11-15 — Selector de color propio**
 - El `<input type="color">` nativo se fue de Customize, del personalizador del teléfono y del wallpaper: `ColorWell` abre `SelectorColor`, un globo con piquito en escritorio y una hoja abajo en el teléfono, con cuadro de saturación y brillo, barra de tono, hex, el color anterior y Listo. Ver §14.15.
 
@@ -1167,7 +1171,8 @@ Nombres propios que no se traducen: Memories como nombre de la sección se dice 
 - `src/index.css` bloque "KICK HUD" — medidor de la patada (§14.10)
 - `src/components/shop/OrderStatusModal.jsx` — Patrón canónico de modal
 - `src/components/ContactForm.jsx` — Patrón canónico de formulario por pasos (§5.1)
-- `src/components/SphereGameModal.jsx` / `GameOverModal.jsx` — Patrón de diálogo de juego (Argus)
+- `src/components/GameOverModal.jsx` — Patrón de diálogo de juego (Argus)
+- `src/components/ZoidianDialog.jsx` — Escena de diálogo en el mundo (barras de cine, globo con tinta, tarjeta de lo que se enseña); misma base que `drone/DialogoMadre.jsx`
 - `src/components/MusicPlayer.jsx` — Consola de música SR-90 (§14.11): un objeto de hardware dicho en el lenguaje toon
 - `tailwind.config.js` — tokens de color, fuentes, z-index, easings, sombras de elevación
 - `index.html` — Carga de fuentes

@@ -6,14 +6,15 @@ import { RUNE_FONT_FAMILY } from '../../lib/installRuneFont.js'
 // Un renglón de M.A.D.R.E. que llega en SKULLEYGLYPH y se revela letra por
 // letra, como el título del preloader y el About (lib/runeReveal.js), con un
 // bip cada dos letras cuando aparecen. Lo usan su diálogo (DialogoMadre) y sus
-// avisos del juego (AvisoMadre). `completo` se salta el revelado; `alTerminar`
-// avisa cuando ya se leen todas las letras.
+// avisos del juego (AvisoMadre), y la escena del trato de Argus con su propia
+// voz (`bip`; `alBip` avisa en cada bip, para su quijada). `completo` se salta
+// el revelado; `alTerminar` avisa cuando ya se leen todas las letras.
 
 const LETRAS_POR_S = 46
 const RUNA_MS = 560          // lo que tarda en irse cada runa
 const PAUSA_PUNTO_MS = 170   // respiro después de una palabra con punto o coma
 
-export default function RenglonRunas({ texto, completo = false, alTerminar, className = '' }) {
+export default function RenglonRunas({ texto, completo = false, alTerminar, className = '', bip = blipMadre, alBip }) {
   const ref = useRef(null)
   useRuneSplit(ref, [texto])
   const { partes, fin, tiempos } = useMemo(() => {
@@ -34,6 +35,10 @@ export default function RenglonRunas({ texto, completo = false, alTerminar, clas
 
   const alTerminarRef = useRef(alTerminar)
   alTerminarRef.current = alTerminar
+  const bipRef = useRef(bip)
+  bipRef.current = bip
+  const alBipRef = useRef(alBip)
+  alBipRef.current = alBip
   useEffect(() => {
     if (completo) { alTerminarRef.current?.(); return undefined }
     const t0 = performance.now()
@@ -43,7 +48,7 @@ export default function RenglonRunas({ texto, completo = false, alTerminar, clas
       const ms = performance.now() - t0
       let sono = false
       while (k < tiempos.length && tiempos[k] <= ms) {
-        if (!sono && k % 2 === 0) { blipMadre(); sono = true }
+        if (!sono && k % 2 === 0) { bipRef.current?.(); alBipRef.current?.(); sono = true }
         k += 1
       }
       if (ms >= fin) { alTerminarRef.current?.(); return }
