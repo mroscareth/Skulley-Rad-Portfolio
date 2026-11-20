@@ -518,7 +518,9 @@ function SiteApp() {
   // Diálogo del zoidian (NPC del juego de esferas) — antesala del tutorial.
   const [zoidianDialogOpen, setZoidianDialogOpen] = useState(false)
   // Hablando con el drone de M.A.D.R.E.: la UI se va y la cámara se pone sobre el hombro.
+  // 'charla' al picarla; 'bienvenida' la primera vez en la experiencia (luego los controles).
   const [dialogoDron, setDialogoDron] = useState(false)
+  const [dialogoModo, setDialogoModo] = useState('charla')
   const [sphereGameActive, setSphereGameActive] = useState(false)
   // Guarda de secciones durante la partida (se define junto a sectionLabel).
   // Devuelve true si bloqueó la entrada.
@@ -1484,14 +1486,17 @@ function SiteApp() {
   uiAnimApi.current.uiExitTimerRef = uiExitTimerRef
   uiAnimApi.current.setHomeLanded = setHomeLanded
 
+  // La primera vez en la experiencia la UI espera a la bienvenida del drone y a
+  // los controles (tutorial_shown); hasta entonces se queda escondida.
+  const bienvenidaPendiente = !VERSION_RAPIDA && !tutorialShown && section === 'home'
   // UI animation logic
   useEffect(() => {
     const inHome = section === 'home'
 
     if (inHome) {
       // In HOME: UI enters when homeLanded is true
-      if (dialogoDron) {
-        // hablando con el drone: la UI sale animada y se queda escondida
+      if (dialogoDron || bienvenidaPendiente) {
+        // hablando con el drone (o esperando su bienvenida): la UI sale animada y se queda escondida
         if (uiAnimPhase === 'visible' || uiAnimPhase === 'entering') {
           setUiAnimPhase('exiting')
           if (uiExitTimerRef.current) clearTimeout(uiExitTimerRef.current)
@@ -1518,7 +1523,7 @@ function SiteApp() {
         clearTimeout(uiEnterTimerRef.current)
       }
     }
-  }, [section, homeLanded, transitionState.active, uiAnimPhase, dialogoDron])
+  }, [section, homeLanded, transitionState.active, uiAnimPhase, dialogoDron, bienvenidaPendiente])
 
   // El deck de música se monta UNA vez (al primer aterrizaje, o al entrar
   // directo a una sección) y ya no se desmonta. Antes colgaba de `homeLanded`
@@ -1586,16 +1591,18 @@ function SiteApp() {
     return quitar
   }, [])
 
-  // Auto-show tutorial when the character lands for the first time
+  // La primera vez que Skulley aterriza: el drone de M.A.D.R.E. da la bienvenida
+  // en su diálogo y, al cerrarlo, se abren los controles (Oscar, 2026-11-19;
+  // antes salían solos los controles).
   const tutorialTriggeredRef = useRef(false)
   useEffect(() => {
     if (VERSION_RAPIDA) return undefined
     if (homeLanded && !tutorialShown && !tutorialTriggeredRef.current) {
       tutorialTriggeredRef.current = true
-      // Small delay to let the UI finish appearing
       const timer = setTimeout(() => {
-        setTutorialOpen(true)
-      }, 800)
+        setDialogoModo('bienvenida')
+        setDialogoDron(true)
+      }, 450)
       return () => clearTimeout(timer)
     }
   }, [homeLanded, tutorialShown])
@@ -2466,8 +2473,11 @@ function SiteApp() {
     setDialogoDron(true)
   }, [])
   useEffect(() => {
-    if (dialogoDron && (section !== 'home' || sphereGameActive || customizeOpen || transitionState.active)) setDialogoDron(false)
-  }, [dialogoDron, section, sphereGameActive, customizeOpen, transitionState.active])
+    if (!dialogoDron || !(section !== 'home' || sphereGameActive || customizeOpen || transitionState.active)) return
+    setDialogoDron(false)
+    // si se corta la bienvenida, que la UI no se quede esperándola
+    if (dialogoModo === 'bienvenida') { setDialogoModo('charla'); markTutorialShown() }
+  }, [dialogoDron, dialogoModo, section, sphereGameActive, customizeOpen, transitionState.active, markTutorialShown])
 
   // Volver al inicio: la pantalla principal (/), con la cortinilla.
   const irAlInicio = useCallback(() => {
@@ -4041,7 +4051,16 @@ function SiteApp() {
       {/* El diálogo con el drone de M.A.D.R.E. */}
       {dialogoDron && (
         <Suspense fallback={null}>
-          <DialogoMadre onClose={() => setDialogoDron(false)} />
+          <DialogoMadre
+            modo={dialogoModo}
+            onClose={() => {
+              setDialogoDron(false)
+              if (dialogoModo === 'bienvenida') {
+                setDialogoModo('charla')
+                setTimeout(() => setTutorialOpen(true), 250)
+              }
+            }}
+          />
         </Suspense>
       )}
       {/* Zoidian dialog — antesala del tutorial de esferas */}

@@ -8,6 +8,14 @@
 // al drone cuando el renglón empieza (pantallaDrone / acciones del GLB).
 
 const ES = {
+  // la primera vez en la experiencia: la bienvenida y luego los controles (App)
+  bienvenida: [
+    { t: 'Bienvenido al mausoleo digital de Skulley Rad.', cara: 'feliz', accion: 'IdleJugueton' },
+    { t: 'Soy M.A.D.R.E., la superinteligencia artificial que lo construyó.', cara: 'normal' },
+    { t: 'Lo que manejas es su avatar. Camina por ahí y entra a los portales para ver su trabajo.', cara: 'normal', voltear: true },
+    { t: 'Si tienes preguntas, búscame y pícame.', cara: 'feliz' },
+    { t: 'Ahora, tus controles.', cara: 'normal' },
+  ],
   saludo: [
     { t: 'Hola. Soy M.A.D.R.E., la superinteligencia artificial que construyó este mausoleo digital.', cara: 'feliz' },
     { t: 'Contestarte me toma 0.0004 segundos. Lo escribo despacio por ti.', cara: 'normal' },
@@ -76,6 +84,13 @@ const ES = {
 }
 
 const EN = {
+  bienvenida: [
+    { t: "Welcome to Skulley Rad's digital mausoleum.", cara: 'feliz', accion: 'IdleJugueton' },
+    { t: "I'm M.A.D.R.E., the artificial superintelligence that built it.", cara: 'normal' },
+    { t: "What you're steering is his avatar. Walk around and step into the portals to see his work.", cara: 'normal', voltear: true },
+    { t: 'If you have questions, find me and click on me.', cara: 'feliz' },
+    { t: 'Now, your controls.', cara: 'normal' },
+  ],
   saludo: [
     { t: "Hello. I'm M.A.D.R.E., the artificial superintelligence that built this digital mausoleum.", cara: 'feliz' },
     { t: 'Answering you takes me 0.0004 seconds. I type it slowly for your sake.', cara: 'normal' },

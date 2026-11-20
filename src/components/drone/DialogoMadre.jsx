@@ -25,7 +25,9 @@ const quietoPreferido = () => {
   try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch { return false }
 }
 
-export default function DialogoMadre({ onClose }) {
+// `modo`: 'charla' (al picarla: saludo y menú) o 'bienvenida' (la primera vez en
+// la experiencia: su bienvenida y se cierra; App abre después los controles).
+export default function DialogoMadre({ onClose, modo = 'charla' }) {
   const { lang } = useLanguage()
   const D = dialogoMadre(lang)
   const [fase, setFase] = useState('entra')      // entra | texto | menu | sale
@@ -60,7 +62,10 @@ export default function DialogoMadre({ onClose }) {
   useEffect(() => {
     let primera = true
     try { primera = !sessionStorage.getItem(VISTO); sessionStorage.setItem(VISTO, '1') } catch { }
-    const id = setTimeout(() => empezar(primera ? D.saludo : D.otraVez, 'menu'), ENTRADA_MS)
+    const id = setTimeout(() => {
+      if (modo === 'bienvenida') empezar(D.bienvenida, 'salir')
+      else empezar(primera ? D.saludo : D.otraVez, 'menu')
+    }, ENTRADA_MS)
     return () => clearTimeout(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
