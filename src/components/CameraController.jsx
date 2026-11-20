@@ -121,12 +121,15 @@ export default function CameraController({
   const PRIMER_PLANO_DIST = 1.9
   const PRIMER_PLANO_Y = 2.1
   // Sobre el hombro en el diálogo con el drone: tanto atrás de Skulley, a su
-  // derecha y a esta altura; mira al drone corrido hacia el centro, así el
-  // hombro queda a la izquierda del cuadro y el drone a la derecha.
-  const DIALOGO_ATRAS = 2.4
-  const DIALOGO_LADO = 1.05
-  const DIALOGO_ALTO = 2.8
-  const DIALOGO_MIRA_LADO = 0.5
+  // derecha y a esta altura (unos 66° de giro desde su espalda); mira a un punto
+  // a la izquierda del drone y abajo, así la cabeza de Skulley queda en la
+  // esquina de abajo a la izquierda, arriba del globo del texto, y el drone a la
+  // derecha del centro (Oscar, 2026-11-19: con 24° de giro se veía amontonado).
+  const DIALOGO_ATRAS = 1.26
+  const DIALOGO_LADO = 2.83
+  const DIALOGO_ALTO = 3.1
+  const DIALOGO_MIRA_LADO = 1.2
+  const DIALOGO_MIRA_Y = -0.6
   const CUSTOMIZE_SALIDA_S = 1.25 // el regreso a la vista de arriba: arranca y llega suave
   const custTmpRef = useRef({
     quat: new THREE.Quaternion(),
@@ -619,7 +622,7 @@ export default function CameraController({
         const fx = dx / d, fz = dz / d
         const rx = -fz, rz = fx
         c.camTarget.set(base.x - fx * DIALOGO_ATRAS + rx * DIALOGO_LADO, base.y + DIALOGO_ALTO, base.z - fz * DIALOGO_ATRAS + rz * DIALOGO_LADO)
-        c.lookTarget.set(dron.pos.x - rx * DIALOGO_MIRA_LADO, dron.pos.y - 0.1, dron.pos.z - rz * DIALOGO_MIRA_LADO)
+        c.lookTarget.set(dron.pos.x - rx * DIALOGO_MIRA_LADO, dron.pos.y + DIALOGO_MIRA_Y, dron.pos.z - rz * DIALOGO_MIRA_LADO)
       } else {
         // Camera in front of the face (+Z local) + lateral truck (+X local).
         c.camOff.set(lateral, primerPlano ? PRIMER_PLANO_Y : CUSTOMIZE_CAM_HEIGHT, frontDist).applyQuaternion(c.quat)

@@ -45,7 +45,8 @@ const OFERTA = { espera: 6, letras: 34, junto: 2.7, lado: 2.2, ciclo: 8, dice: 5
 const VER_CERCA = 5
 const VER_SUELTA = 1.5
 // Diálogo: enfrente de Skulley, a esta distancia y altura (la cámara va detrás de él).
-const DIALOGO = { dist: 3.1, alto: 2.45 }
+// `aCamara`: cuánto se voltea de Skulley hacia la cámara (0 = a él, 1 = a la cámara).
+const DIALOGO = { dist: 3.1, alto: 2.45, aCamara: 0.45 }
 // Castigo: frente a Skulley, un poco arriba, viéndolo; vuela a lo más tanto antes de invocar.
 const CASTIGO = { dist: 3.4, alto: 3.1, vueloMax: 1.1, despues: 2.6 }
 // El escudo: radio (cubre las alas), celda y alcance de la onda a su medida.
@@ -619,7 +620,14 @@ export default function DroneNPC({
 
     // a quién ve: a Skulley cuando habla, ofrece o castiga y ya no viaja
     const quietoEnSitio = !e.meta || e.fase === 'quieto' || e.fase === 'invocar' || (e.fase === 'viaje' && Math.hypot(e.v.x, e.v.z) < 0.8)
-    if (e.mirar === 'skulley' && s && quietoEnSitio) yawMeta = Math.atan2(s.x - e.pos.x, s.z - e.pos.z)
+    if (e.mirar === 'skulley' && s && quietoEnSitio) {
+      // en el diálogo se abre un poco a la cámara, como en el teatro: la cámara la
+      // ve desde un lado de Skulley y de frente a él se le veía la cara de perfil
+      const k = e.modo === 'dialogo' ? DIALOGO.aCamara : 0
+      const mx = s.x + (camera.position.x - s.x) * k
+      const mz = s.z + (camera.position.z - s.z) * k
+      yawMeta = Math.atan2(mx - e.pos.x, mz - e.pos.z)
+    }
     // detenida por Skulley (o pregonando): lo sigue con el cuerpo, y los ojos se adelantan al giro
     const loSigue = (e.modo === 'deambular' && e.viendo) || (e.modo === 'oferta' && e.fase === 'quieto')
     if (loSigue && s && cara) {
