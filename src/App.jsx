@@ -1012,6 +1012,23 @@ function SiteApp() {
     return () => window.removeEventListener('character-disassembled-by-bolt', onDisassembled)
   }, [unlockSkin])
 
+  // LENTES 3D: el rayo de la esfera corrupta le pega al drone de M.A.D.R.E.
+  // (DroneNPC la quema y avisa con 'madre-quemada'). Desbloquea el prop en Customize.
+  useEffect(() => {
+    const onQuemada = () => {
+      const key = 'prop_lentes3d'
+      try { if (hasAchievement(key)) return } catch { }
+      try { unlockAchievement(key) } catch { }
+      try {
+        const meta = ACHIEVEMENTS.find((a) => a.key === key)
+        const loc = meta ? localizeAchievement(meta, lang) : null
+        gameToast({ message: `${meta?.icon || '🎉'} ${loc?.title || ''} ${lang === 'es' ? 'desbloqueados' : 'unlocked'}!`, type: 'success', duration: 4500 })
+      } catch { }
+    }
+    window.addEventListener('madre-quemada', onQuemada)
+    return () => window.removeEventListener('madre-quemada', onQuemada)
+  }, [hasAchievement, unlockAchievement, gameToast, lang])
+
   // POLTERGEIST: escuchar completa la canción del lobby a media velocidad con
   // el ½× del reproductor. MusicPlayer avisa cuando la oyó entera así.
   useEffect(() => {

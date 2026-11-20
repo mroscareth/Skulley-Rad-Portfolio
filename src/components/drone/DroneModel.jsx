@@ -42,6 +42,8 @@ function fuegoDe(accion, t) {
   return 0
 }
 const ROJO_LUZ = new THREE.Color(1.0, 0.15, 0.12)
+// el hollín: casi negro, un pelo café (multiplica la luz que llega)
+const HOLLIN = new THREE.Color(0.16, 0.13, 0.11)
 const ROJO_FRANJA = new THREE.Color('#ff2a1c')
 
 // Normales promediadas por posición para el contorno: el modelo es de superficie
@@ -88,8 +90,9 @@ function materialContorno(grosor) {
 // El material del GLB pasa a MeshStandardMaterial con el banding de Skulley: el
 // clearcoat del original (MeshPhysical) dejaba brillos 3D suaves. Encima, el
 // enojo: la luz que llega se tiñe de rojo (después del banding, así conserva sus
-// bandas) y lo que brilla solo (las franjas cian) se vuelve rojo.
-function materialToon(m, { mapasNormales, toon, enojo }) {
+// bandas) y lo que brilla solo (las franjas cian) se vuelve rojo. Y lo quemado
+// (el rayo de la esfera corrupta): hollín que oscurece todo y apaga las franjas.
+function materialToon(m, { mapasNormales, toon, enojo, quemado }) {
   const s = new THREE.MeshStandardMaterial({
     name: m.name,
     color: m.color.clone(),
@@ -109,12 +112,15 @@ function materialToon(m, { mapasNormales, toon, enojo }) {
     shader.uniforms.uEnojo = enojo
     shader.uniforms.uRojoLuz = { value: ROJO_LUZ }
     shader.uniforms.uRojoFranja = { value: ROJO_FRANJA }
-    shader.fragmentShader = 'uniform float uEnojo;\nuniform vec3 uRojoLuz;\nuniform vec3 uRojoFranja;\n' + shader.fragmentShader
+    shader.uniforms.uQuemado = quemado
+    shader.uniforms.uHollin = { value: HOLLIN }
+    shader.fragmentShader = 'uniform float uEnojo;\nuniform vec3 uRojoLuz;\nuniform vec3 uRojoFranja;\nuniform float uQuemado;\nuniform vec3 uHollin;\n' + shader.fragmentShader
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-        totalEmissiveRadiance = mix(totalEmissiveRadiance, uRojoFranja * max(max(totalEmissiveRadiance.r, totalEmissiveRadiance.g), totalEmissiveRadiance.b), uEnojo);`)
+        totalEmissiveRadiance = mix(totalEmissiveRadiance, uRojoFranja * max(max(totalEmissiveRadiance.r, totalEmissiveRadiance.g), totalEmissiveRadiance.b), uEnojo);
+        totalEmissiveRadiance *= 1.0 - 0.8 * uQuemado;`)
       .replace('#include <aomap_fragment>', `#include <aomap_fragment>
         {
-          vec3 _rojo = mix(vec3(1.0), uRojoLuz, uEnojo);
+          vec3 _rojo = mix(vec3(1.0), uRojoLuz, uEnojo) * mix(vec3(1.0), uHollin, uQuemado);
           reflectedLight.directDiffuse *= _rojo;
           reflectedLight.indirectDiffuse *= _rojo;
           reflectedLight.directSpecular *= _rojo;
@@ -175,6 +181,7 @@ const DroneModel = forwardRef(function DroneModel({
     const pieles = []
     c.traverse((o) => { if (o.isMesh && o.material.name === 'Pantalla') pantallaShader = crearMaterialPantalla(o.geometry) })
     const enojo = pantallaShader.userData.pantalla.uEnojo
+    const quemado = pantallaShader.userData.pantalla.uQuemado
     c.traverse((o) => {
       if (!o.isMesh) return
       o.frustumCulled = false
@@ -183,7 +190,7 @@ const DroneModel = forwardRef(function DroneModel({
         o.material = pantallaShader
         pantalla = o
       } else {
-        o.material = materialToon(o.material, { mapasNormales, toon, enojo })
+        o.material = materialToon(o.material, { mapasNormales, toon, enojo, quemado })
       }
       if (o.isSkinnedMesh) pieles.push(o)
     })

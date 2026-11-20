@@ -5,6 +5,7 @@ import DroneModel, { INVOCAR_GOLPE_S } from './DroneModel.jsx'
 import SpeechBubble3D from '../SpeechBubble3D.jsx'
 import SilhouetteShadow from '../SilhouetteShadow.jsx'
 import DomeShield from '../fx/DomeShield.jsx'
+import HumoDron from './HumoDron.jsx'
 import { dron, escucharDron } from '../../lib/droneNpc.js'
 import { dialogoMadre } from '../../lib/dialogoMadre.js'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
@@ -21,7 +22,9 @@ import { useLanguage } from '../../i18n/LanguageContext.jsx'
 // las para un escudo con el efecto del domo (DomeShield en esfera); a la tercera
 // se enoja y lo castiga con el rayo. Una patada la empuja un poco y el castigo es
 // inmediato (Oscar, 2026-11-19). Muy de vez en cuando va a ver la esfera corrupta
-// con cara de duda y dice algo de ella (`CURIOSA`).
+// con cara de duda y dice algo de ella (`CURIOSA`). El rayo de la esfera
+// corrupta sí le hace daño: la deja quemada un rato, humeando, mareada y con
+// ojos de tache (`QUEMADA`), y eso da el logro de los lentes 3D (App).
 //
 // Monta desde el warm-up con Argus (comoHome), así sus programas se compilan
 // detrás del preloader. Todo lo que anima va por refs; el estado de React solo
@@ -54,6 +57,10 @@ const PATADA = { empuje: 4.5, sube: 0.3, invoca: 0.3 }
 const CURIOSA = { primera: [55, 100], cada: [160, 280], dist: 2.3, alto: 1.7, vel: 3, mira: 7.5, dice: 5.5 }
 // Las viñetas se escriben a este paso (letras por segundo).
 const LETRAS = 34
+// El rayo de la esfera corrupta: le pega si cae a menos de `radio` (en el piso,
+// bajo ella); queda quemada `dura` segundos, más abajo y meciéndose, y al final
+// se sacude (`sacude` segundos) y el hollín se va solo.
+const QUEMADA = { radio: 2.3, dura: 11, alto: 1.95, sacude: 0.7 }
 
 const azar = (a, b) => a + Math.random() * (b - a)
 const angulo = (a) => Math.atan2(Math.sin(a), Math.cos(a))
@@ -79,6 +86,7 @@ export default function DroneNPC({
   const anclaRef = useRef()
   const escudoRef = useRef(null)
   const escudoGrupoRef = useRef()
+  const humoRef = useRef({ pos: new THREE.Vector3(), nivel: 0 })
   const [accion, setAccion] = useState({ nombre: 'IdleTranquilo', n: 0 })
   const [hover, setHover] = useState(false)
   const [vineta, setVineta] = useState({ on: false, texto: '', layout: '' })
@@ -127,6 +135,8 @@ export default function DroneNPC({
       tCur: -1,
       dijoCur: false,
       ultimaCur: -1,
+      tQuemada: 0,
+      sacudida: 0,
     }
   }
   const pedir = (nombre) => setAccion((a) => ({ nombre, n: a.n + 1 }))
@@ -175,7 +185,7 @@ export default function DroneNPC({
       const { x, y, z, fuerza } = msg.escudo
       escudoRef.current?.hit({ x, y, z }, 0.6 + 0.4 * fuerza)
       ladear(e.pos.x - x, e.pos.z - z, 0.25 + 0.35 * fuerza)
-      if (e.modo === 'castigo' || e.modo === 'dialogo') return
+      if (e.modo === 'castigo' || e.modo === 'dialogo' || e.modo === 'quemada') return
       e.golpesEscudo += 1
       const n = e.golpesEscudo
       if (n >= 3) {
@@ -192,6 +202,8 @@ export default function DroneNPC({
       if (e.modo === 'curiosa') terminarCuriosa(false)
     }
     if (msg.patada) {
+      // quemada y mareada no castiga: solo se mece del golpe
+      if (e.modo === 'quemada') { ladear(msg.patada.dx, msg.patada.dz, 1.2); return }
       if (e.modo === 'castigo' || e.modo === 'dialogo') return
       // el empujón y, en el acto, el rayo
       if (e.modo === 'curiosa') terminarCuriosa(false)
@@ -211,6 +223,26 @@ export default function DroneNPC({
     }
   }), []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // el rayo de la esfera corrupta (el que lanza Skulley después de comérsela, o el
+  // de la esfera al caer en un portal): si cae cerca de ella, la quema
+  useEffect(() => {
+    const cerca = (x, z) => Math.hypot(x - est.current.pos.x, z - est.current.pos.z) < QUEMADA.radio
+    const onTrueno = (ev) => {
+      const pts = ev?.detail?.points || []
+      if (pts.some((q) => cerca(q.x, q.z))) quemar()
+    }
+    const onAntimateria = (ev) => {
+      const d = ev?.detail || {}
+      if (Number.isFinite(d.x) && Number.isFinite(d.z) && cerca(d.x, d.z)) quemar()
+    }
+    window.addEventListener('thunder-strike', onTrueno)
+    window.addEventListener('antimatter-orb-strike', onAntimateria)
+    return () => {
+      window.removeEventListener('thunder-strike', onTrueno)
+      window.removeEventListener('antimatter-orb-strike', onAntimateria)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // desarrollo: window.__dronCuriosa() la manda a ver la esfera corrupta
   useEffect(() => {
     if (!import.meta.env.DEV) return undefined
@@ -224,6 +256,8 @@ export default function DroneNPC({
         else quieto(0, 'IdleTranquilo')
       }
     }
+    // window.__dronQuemar() hace como si le cayera el rayo de la esfera corrupta
+    window.__dronQuemar = () => quemar()
     // y window.__dronEscudo(fuerza) enciende el escudo del lado de Skulley, sin contar
     window.__dronEscudo = (fuerza = 1) => {
       const e = est.current
@@ -234,7 +268,7 @@ export default function DroneNPC({
       const L = Math.hypot(dx, dz) || 1
       escudoRef.current?.hit({ x: e.pos.x + (dx / L) * ESCUDO.radio, y: e.pos.y - 0.25, z: e.pos.z + (dz / L) * ESCUDO.radio }, 0.6 + 0.4 * fuerza)
     }
-    return () => { delete window.__dronCuriosa; delete window.__dronEscudo }
+    return () => { delete window.__dronCuriosa; delete window.__dronEscudo; delete window.__dronQuemar }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- metas
@@ -279,6 +313,31 @@ export default function DroneNPC({
     if (e.sonando === 'Avanzar' || e.sonando === 'Arrancar') pedir('Detenerse')
     else pedir(nombre)
     if (nombre === 'IdleJugueton') caraRef.current?.poner('feliz')
+  }
+
+  // ---- el rayo de la esfera corrupta: quemada, humeando y con ojos de tache
+  function quemar() {
+    const e = est.current
+    if (!dron.montado || e.modo === 'dialogo') return
+    if (e.modo === 'curiosa') terminarCuriosa(false)
+    // el rayo le gana a todo, hasta a su castigo (el de las trampas lo remata App a su tiempo)
+    e.modo = 'quemada'
+    e.tQuemada = 0
+    e.sacudida = 0
+    e.golpe = null
+    e.meta = null
+    e.mirar = null
+    e.ofertaTexto = ''
+    e.dice = null
+    e.v.set(0, 0, 0)
+    e.pos.y -= 0.35
+    e.ladeo.vx += (Math.random() - 0.5) * 9
+    e.ladeo.vz += (Math.random() < 0.5 ? -1 : 1) * 7
+    const cara = caraRef.current
+    cara?.poner('tache')
+    cara?.quemar(1)
+    pedir('Detenerse')
+    try { window.dispatchEvent(new CustomEvent('madre-quemada')) } catch { }
   }
 
   // ---- la esfera corrupta: se queda a un lado y arriba de ella, viéndola
@@ -362,7 +421,8 @@ export default function DroneNPC({
     const cara = caraRef.current
     e.t += dt
 
-    // el castigo manda sobre todo
+    // el castigo manda sobre todo, menos quemada: ahí no puede (el de las trampas lo remata App)
+    if (dron.castigo && e.modo === 'quemada') dron.castigo = null
     if (dron.castigo && e.modo !== 'castigo' && s) {
       e.modo = 'castigo'
       e.golpe = dron.castigo.alGolpe
@@ -460,6 +520,22 @@ export default function DroneNPC({
           viajar(puntoCurioso(corrupta), CURIOSA.vel)
         }
       }
+    } else if (e.modo === 'quemada') {
+      e.tQuemada += dt
+      if (e.tQuemada > QUEMADA.dura) {
+        // se sacude como perro mojado y vuelve a lo suyo; el hollín se va solo
+        if (e.sacudida === 0) { cara?.poner('normal'); cara?.quemar(0) }
+        const antes = e.sacudida
+        e.sacudida += dt
+        const paso = 0.09
+        if (Math.floor(e.sacudida / paso) !== Math.floor(antes / paso)) {
+          e.ladeo.vz += (Math.floor(e.sacudida / paso) % 2 ? 1 : -1) * 5
+        }
+        if (e.sacudida > QUEMADA.sacude) {
+          e.modo = 'deambular'
+          quieto(azar(1.5, 2.5), 'IdleTranquilo')
+        }
+      }
     } else if (e.modo === 'castigo') {
       if (e.fase === 'empujada' && e.t > PATADA.invoca) {
         e.fase = 'invocar'
@@ -525,7 +601,9 @@ export default function DroneNPC({
     }
     e.pos.x += e.v.x * dt
     e.pos.z += e.v.z * dt
-    const altoMeta = e.meta ? e.meta.y : ALTO
+    const altoMeta = e.modo === 'quemada' && e.sacudida === 0
+      ? QUEMADA.alto + 0.12 * Math.sin(e.tQuemada * 2.4)
+      : (e.meta ? e.meta.y : ALTO)
     e.pos.y += (altoMeta - e.pos.y) * (1 - Math.exp(-dt * 2.5))
 
     // si Skulley se le mete encima, se hace apenas a un lado (si no, se queda donde se detuvo)
@@ -549,6 +627,8 @@ export default function DroneNPC({
       yawMeta = hacia
       cara.mirar(THREE.MathUtils.clamp(angulo(hacia - e.yaw) / 0.9, -1, 1), -0.35)
     }
+    // quemada y mareada: gira despacio sobre sí misma
+    if (e.modo === 'quemada' && e.sacudida === 0) yawMeta = e.yaw + 0.35
     // viendo la esfera corrupta: de frente y con los ojos abajo, hacia ella
     if (e.modo === 'curiosa' && corrupta && quietoEnSitio && cara) {
       const hacia = Math.atan2(corrupta.pos.x - e.pos.x, corrupta.pos.z - e.pos.z)
@@ -560,8 +640,11 @@ export default function DroneNPC({
 
     // el ladeo de los golpes: resorte que se mece y se asienta
     const L = e.ladeo
-    L.vx += (-70 * L.x - 7 * L.vx) * dt
-    L.vz += (-70 * L.z - 7 * L.vz) * dt
+    const mareo = e.modo === 'quemada' && e.sacudida === 0 ? 0.16 : 0
+    const ox = mareo * Math.sin(e.tQuemada * 2.2)
+    const oz = mareo * Math.cos(e.tQuemada * 2.2)
+    L.vx += (-70 * (L.x - ox) - 7 * L.vx) * dt
+    L.vz += (-70 * (L.z - oz) - 7 * L.vz) * dt
     L.x = THREE.MathUtils.clamp(L.x + L.vx * dt, -0.7, 0.7)
     L.z = THREE.MathUtils.clamp(L.z + L.vz * dt, -0.7, 0.7)
 
@@ -571,6 +654,12 @@ export default function DroneNPC({
       g.rotation.set(L.x, e.yaw, L.z)
     }
     if (escudoGrupoRef.current) escudoGrupoRef.current.position.copy(e.pos)
+    // humea fuerte al principio y menos con el tiempo; ya sacudida, lo que quede de hollín
+    const H = humoRef.current
+    H.pos.set(e.pos.x, e.pos.y + 0.2, e.pos.z)
+    H.nivel = e.modo === 'quemada' && e.sacudida === 0
+      ? Math.max(0.35, 1 - 0.65 * (e.tQuemada / QUEMADA.dura))
+      : (cara ? cara.estado.quemado * 0.35 : 0)
 
     // la viñeta: lo que esté diciendo manda sobre el pregón de la tienda
     let texto = ''
@@ -598,7 +687,7 @@ export default function DroneNPC({
   const clic = (ev) => {
     ev.stopPropagation()
     const e = est.current
-    if (!puedeHablar || e.modo === 'castigo' || dialogo) return
+    if (!puedeHablar || e.modo === 'castigo' || e.modo === 'quemada' || dialogo) return
     try { onHablar?.() } catch { }
   }
   const sobre = (ev) => {
@@ -625,7 +714,7 @@ export default function DroneNPC({
         accionN={accion.n}
         onAccion={(n) => { est.current.sonando = n }}
         contornoColor={hover && !dialogo ? '#ffffff' : '#000000'}
-        fuegoEscala={est.current.modo === 'deambular' ? 0.55 : 1}
+        fuegoEscala={est.current.modo === 'deambular' || est.current.modo === 'quemada' ? 0.55 : 1}
       >
         {/* el área para picarlo: más grande que el drone, barata de raycastear */}
         <mesh onClick={clic} onPointerOver={sobre} onPointerOut={fuera} raycast={puedeHablar ? THREE.Mesh.prototype.raycast : () => null}>
@@ -635,6 +724,8 @@ export default function DroneNPC({
       </DroneModel>
       {/* sombra en el piso: la silueta vista desde arriba, como la de Argus */}
       <SilhouetteShadow playerRef={grupoRef} enabled={Boolean(activo)} size={2.4} opacity={0.4} resolution={128} blur={1.2} height={6} />
+      {/* el humo de cuando la quema el rayo de la esfera corrupta */}
+      <HumoDron fuenteRef={humoRef} />
       {/* el escudo: no gira ni se ladea con ella; solo se ve donde pega una bola */}
       <group ref={escudoGrupoRef}>
         <DomeShield ref={escudoRef} esfera radius={ESCUDO.radio} celda={ESCUDO.celda} alcance={ESCUDO.alcance} />

@@ -165,6 +165,23 @@ export const ACHIEVEMENTS = [
       es: 'Escucha completa la canción del lobby a media velocidad en el reproductor.',
     },
   },
+  {
+    // Desbloquea los lentes 3D en Customize → Props. Lo da App cuando el rayo de
+    // la esfera corrupta le pega al drone de M.A.D.R.E. (evento 'madre-quemada').
+    key: 'prop_lentes3d',
+    source: 'achievement',
+    icon: '👓',
+    live: true,
+    title: { en: '3D Glasses', es: 'Lentes 3D' },
+    description: {
+      en: "Hit M.A.D.R.E. with the corrupted orb's lightning and unlocked the 3D glasses.",
+      es: 'Le diste a M.A.D.R.E. con el rayo de la esfera corrupta y desbloqueaste los lentes 3D.',
+    },
+    hint: {
+      en: "There is something M.A.D.R.E.'s shield can't stop.",
+      es: 'Hay algo que el escudo de M.A.D.R.E. no detiene.',
+    },
+  },
 ]
 
 // Devuelve título/descr/hint resueltos al idioma dado.
