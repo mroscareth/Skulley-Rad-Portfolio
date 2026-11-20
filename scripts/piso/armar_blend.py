@@ -1,10 +1,11 @@
-"""Arma D:/Work/mroscar/Website/new/Piso/PisoTierra.blend para pintarle encima a
-las texturas del piso del home (src/lib/pisoPintado.js).
+"""Arma Character/PisoTierra.blend (en el repo, con los demás .blend del proyecto,
+por Git LFS) para pintarle encima a las texturas del piso del home
+(src/lib/pisoPintado.js).
 
     "C:/Program Files/Blender Foundation/Blender 5.3/blender.exe" --background --factory-startup \
-        --python scripts/piso/armar_blend.py -- D:/Work/mroscar/Website/new/Piso
+        --python scripts/piso/armar_blend.py
 
-Antes hay que pintar los PNG maestros junto al .blend (lo hacen los pintores:
+Antes hay que pintar los PNG maestros en Character/assets (lo hacen los pintores:
 pintar_tierra.py, pintar_piedras.py y pintar_camino.py; ver IMAGENES). Deja una
 imagen por textura (Non-Color), cada una en un plano con el azul aproximado del
 sitio (para pintar en Texture Paint) y, la tierra, otro plano 3 × 3 para ver que
@@ -17,7 +18,9 @@ import sys
 
 import bpy
 
-carpeta = sys.argv[sys.argv.index('--') + 1] if '--' in sys.argv else os.getcwd()
+REPO_AQUI = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
+# Dónde va el .blend (los PNG maestros, en su carpeta assets/).
+carpeta = sys.argv[sys.argv.index('--') + 1] if '--' in sys.argv else os.path.join(REPO_AQUI, 'Character')
 
 # (imagen, PNG maestro, medida en el mundo (ancho, largo), lleva alfa, pintor, semilla, WebP del sitio)
 IMAGENES = [
@@ -77,7 +80,7 @@ def material(nombre, img, repetir, alfa):
 
 x = 0.0
 for nombre, png, (ancho, largo), alfa, _, _, _ in IMAGENES:
-    img = bpy.data.images.load(os.path.join(carpeta, png))
+    img = bpy.data.images.load(os.path.join(carpeta, 'assets', png))
     img.name = nombre
     img.colorspace_settings.name = 'Non-Color'
     if alfa:
@@ -114,7 +117,7 @@ import bpy
 CUAL = 'PisoPiedras'
 SEMILLA = None  # None = la de siempre
 IMAGENES = {LISTA}
-REPO = bpy.path.abspath('//../Skulley-Rad-Portfolio')
+REPO = bpy.path.abspath('//..')
 sys.path.insert(0, os.path.join(REPO, 'scripts', 'piso'))
 nombre, png, alfa, pintor, semilla, web = next(i for i in IMAGENES if i[0] == CUAL)
 mod = importlib.reload(importlib.import_module(pintor))
@@ -142,7 +145,7 @@ EXPORTAR = f'''# Guarda los PNG maestros y escribe los WebP que usa el sitio (pu
 import os
 import bpy
 IMAGENES = {LISTA}
-REPO = bpy.path.abspath('//../Skulley-Rad-Portfolio')
+REPO = bpy.path.abspath('//..')
 for nombre, png, alfa, pintor, semilla, web in IMAGENES:
     img = bpy.data.images[nombre]
     img.save()
@@ -172,6 +175,6 @@ for nombre, texto in (('Piso_generar', GENERAR), ('Piso_exportar', EXPORTAR)):
 
 bpy.ops.wm.save_as_mainfile(filepath=os.path.join(carpeta, 'PisoTierra.blend'), relative_remap=True)
 for nombre, png, *_ in IMAGENES:
-    bpy.data.images[nombre].filepath = '//' + png
+    bpy.data.images[nombre].filepath = '//assets/' + png
 bpy.ops.wm.save_mainfile()
 print('blend listo')
