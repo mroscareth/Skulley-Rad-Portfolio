@@ -106,8 +106,11 @@ export default function LaserTarget({ aimRef, chargeRef, reachFor }) {
     if (!group || !a) return
     const s = stateRef.current
     const dt = Math.min(delta, 0.05)
-    s.show += ((a.on ? 1 : 0) - s.show) * (1 - Math.exp(-FADE_LAMBDA * dt))
-    if (!a.on && s.show < 0.004) s.show = 0
+    // Con el cursor sobre el drone de M.A.D.R.E. la bola va a ella y no al piso: la
+    // mira se apaga (en el piso parecía que el disparo iba detrás de ella, Oscar).
+    const mira = a.on && !a.alDron
+    s.show += ((mira ? 1 : 0) - s.show) * (1 - Math.exp(-FADE_LAMBDA * dt))
+    if (!mira && s.show < 0.004) s.show = 0
     group.visible = s.show > 0 || !s.warmed
     const reach = reachRef.current
     if (reach) reach.visible = group.visible

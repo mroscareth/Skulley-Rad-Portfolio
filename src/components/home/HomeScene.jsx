@@ -245,6 +245,7 @@ import FakeGrass from '../FakeGrass.jsx'
 import FloatingExclamation from '../FloatingExclamation.jsx'
 import ZoidianNPC from '../ZoidianNPC.jsx'
 import DroneNPC from '../drone/DroneNPC.jsx'
+import { patadaAlDron } from '../../lib/droneNpc.js'
 import PortalParticles from '../PortalParticles.jsx'
 import GoldenFlashOverlay from '../GoldenFlashOverlay.jsx'
 import GoldenDissolveParticles from '../GoldenDissolveParticles.jsx'
@@ -463,6 +464,8 @@ export default function HomeScene({
   // esferas, Argus, la babosa, el pasto, las sombras, los cristales y el contorno
   // del composer. Solo lo que se dibuja; el juego sigue con `section`.
   const comoHome = section === 'home' || Boolean(sectionHomeWarm)
+  // dónde anda la esfera corrupta (el drone de M.A.D.R.E. va a verla de vez en cuando)
+  const buscarCorrupta = useRef(() => homeOrbsRef.current?.corrupta?.() || null).current
   const portalClickEnabled = section === 'home' && !bootLoading && !showPreloaderOverlay
     && !showSectionUi && !orbActiveUi && !navTarget && !transitionState?.active && !customizeActive
 
@@ -769,6 +772,7 @@ export default function HomeScene({
               dialogo={dialogoDron}
               puedeHablar={puedeHablarDron}
               onHablar={onHablarDron}
+              buscarCorrupta={buscarCorrupta}
             />
           </Suspense>
         )}
@@ -882,7 +886,11 @@ export default function HomeScene({
             // Devuelve la LISTA de impactos (posición + fuerza de cada esfera),
             // no un contador: Player la usa para lanzar chispas en cada punto
             // de contacto y modular el SFX.
-            try { return homeOrbsRef.current?.kickImpulse(pos, dir, strength, radius, skip, base, halfAngle) || [] } catch { return [] }
+            let hits = []
+            try { hits = homeOrbsRef.current?.kickImpulse(pos, dir, strength, radius, skip, base, halfAngle) || [] } catch { }
+            // el drone de M.A.D.R.E. también se patea (y castiga en el acto)
+            try { const d = patadaAlDron(pos, dir, radius, skip, base, halfAngle); if (d) hits = [...hits, d] } catch { }
+            return hits
           })}
           onActionCooldown={bootLoading ? undefined : ((r) => { try { setActionCooldown(r) } catch { } })}
           onHomeSplash={bootLoading ? undefined : (() => {

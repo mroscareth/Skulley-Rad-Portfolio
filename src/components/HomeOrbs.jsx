@@ -479,6 +479,14 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
     // hacia dónde saldría esa otra. Misma física que el juego (ORB_PHYS,
     // kickContact): la línea que ves es lo que va a pasar, salvo lo que se
     // mueva mientras tanto. No toca el estado de ninguna esfera.
+    // La esfera corrupta (o la purificada) si está a la vista: su posición y radio.
+    // La lee el drone de M.A.D.R.E. para ir a verla.
+    corrupta() {
+      for (const s of orbsRef.current || []) {
+        if (s._isCursed && !s._thunderHidden && !s._inactiva && !s._isDragging) return { pos: s.pos, radius: s.radius }
+      }
+      return null
+    },
     predictKick(base, dir, strength, radius, halfAngle, centerY, maxOrbs = 3) {
       const arr = orbsRef.current || []
       const center = { x: base.x, y: centerY, z: base.z }

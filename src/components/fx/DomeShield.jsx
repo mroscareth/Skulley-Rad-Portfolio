@@ -24,6 +24,11 @@ import * as THREE from 'three'
 //
 // Sin golpes vivos no se rasteriza (uActive), pero sigue en la escena: así compila
 // con todo lo demás al entrar y el primer golpe no traba la partida.
+//
+// `esfera`: la esfera completa, con celdas y onda a su medida (`celda`, `alcance`):
+// el escudo del drone de M.A.D.R.E. contra las bolas de fuego (Oscar, 2026-11-19:
+// "mismo efecto"). Sigue a su padre; el centro se lee del mundo al dibujarse. Es
+// el mismo programa del domo: no compila nada nuevo.
 
 const MAX_HITS = 16
 const HEX_TARGET = 1.1   // tamaño de celda deseado, en unidades del domo
@@ -119,8 +124,8 @@ const FRAGMENT = `
     // El reflejo del lente, en la esquina de luz.
     float spec = smoothstep(0.7, 0.98, facing) * smoothstep(0.08, 0.2, e) * (1.0 - smoothstep(0.2, 0.42, e));
 
-    // Filo cian de un lado y rosa del otro, apenas: la dispersión del cristal.
-    vec3 fringe = mix(vec3(0.72, 0.95, 1.0), vec3(1.0, 0.82, 0.98), smoothstep(-0.7, 0.7, facing));
+    // Filo cian de un lado y azul lavanda del otro, apenas: la dispersión del cristal.
+    vec3 fringe = mix(vec3(0.55, 0.9, 1.0), vec3(0.62, 0.7, 1.0), smoothstep(-0.7, 0.7, facing));
     vec3 c = mix(uTint, fringe, clamp(glow * 0.9, 0.0, 1.0));
     c = mix(c, vec3(1.0), clamp(rim * 0.8 + spec, 0.0, 1.0)) * (1.0 + rim * 0.35 + spec * 0.3);
 
@@ -130,13 +135,16 @@ const FRAGMENT = `
   }
 `
 
-const DomeShield = forwardRef(function DomeShield({ radius, groundY = 0 }, ref) {
+const DomeShield = forwardRef(function DomeShield({ radius, groundY = 0, esfera = false, celda = HEX_TARGET, alcance = REACH }, ref) {
   const stateRef = useRef({ next: 0, time: 0, lastHit: -1e9 })
+  const meshRef = useRef(null)
 
   const circ = 2 * Math.PI * radius
-  const hex = circ / Math.max(1, Math.round(circ / HEX_TARGET))
+  const hex = circ / Math.max(1, Math.round(circ / celda))
 
-  const geo = useMemo(() => new THREE.SphereGeometry(radius, 128, 32, 0, Math.PI * 2, 0, Math.PI / 2), [radius])
+  const geo = useMemo(() => (esfera
+    ? new THREE.SphereGeometry(radius, 64, 32)
+    : new THREE.SphereGeometry(radius, 128, 32, 0, Math.PI * 2, 0, Math.PI / 2)), [radius, esfera])
   const mat = useMemo(() => new THREE.ShaderMaterial({
     uniforms: {
       uActive: { value: 0 },
@@ -145,19 +153,20 @@ const DomeShield = forwardRef(function DomeShield({ radius, groundY = 0 }, ref) 
       uR: { value: radius },
       uHex: { value: hex },
       uCirc: { value: circ },
-      uReach: { value: REACH },
+      uReach: { value: alcance },
       uCenter: { value: new THREE.Vector3(0, groundY, 0) },
-      uGround: { value: groundY + 0.01 },
+      uGround: { value: esfera ? -1e4 : groundY + 0.01 },
       uHits: { value: Array.from({ length: MAX_HITS }, () => new THREE.Vector4(0, 0, -1000, 0)) },
-      // Cristal frío, un pelo azulado como el piso, igual en cada golpe.
-      uTint: { value: new THREE.Color('#e9edff') },
+      // Cristal azul, igual en cada golpe (Oscar, 2026-11-19: "azulito"; antes
+      // casi blanco, #e9edff).
+      uTint: { value: new THREE.Color('#5cb2ff') },
     },
     vertexShader: VERTEX,
     fragmentShader: FRAGMENT,
     transparent: true,
     depthWrite: false,
     side: THREE.DoubleSide,
-  }), [radius, groundY, hex, circ])
+  }), [radius, groundY, hex, circ, esfera, alcance])
 
   useEffect(() => () => {
     try {
@@ -170,9 +179,11 @@ const DomeShield = forwardRef(function DomeShield({ radius, groundY = 0 }, ref) 
     // `at` es donde va la esfera; se enciende el punto del domo en esa dirección.
     hit(at, strength = 1) {
       if (!at) return
-      const dx = at.x
-      const dy = at.y - groundY
-      const dz = at.z
+      const c = mat.uniforms.uCenter.value
+      if (esfera && meshRef.current) meshRef.current.getWorldPosition(c)
+      const dx = at.x - c.x
+      const dy = at.y - c.y
+      const dz = at.z - c.z
       const len = Math.hypot(dx, dy, dz)
       if (len < 1e-6) return
       const s = stateRef.current
@@ -184,7 +195,7 @@ const DomeShield = forwardRef(function DomeShield({ radius, groundY = 0 }, ref) 
       s.lastHit = s.time
       mat.uniforms.uActive.value = 1
     },
-  }), [mat, radius, groundY])
+  }), [mat, radius, esfera])
 
   useFrame((_, delta) => {
     const s = stateRef.current
@@ -195,9 +206,11 @@ const DomeShield = forwardRef(function DomeShield({ radius, groundY = 0 }, ref) 
 
   return (
     <mesh
+      ref={meshRef}
       geometry={geo}
       material={mat}
-      position={[0, groundY, 0]}
+      position={esfera ? [0, 0, 0] : [0, groundY, 0]}
+      onBeforeRender={esfera ? () => { mat.uniforms.uCenter.value.setFromMatrixPosition(meshRef.current.matrixWorld) } : undefined}
       frustumCulled={false}
       renderOrder={3}
       raycast={() => null}

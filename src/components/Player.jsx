@@ -47,6 +47,7 @@ const FASE_PISA_WALK = 10 / 40
 const FASE_PISA_CORRER = 0
 import { applyCharacterSkinShader, materialTakesSkin, skinLineColor, SKIN_LINE_COLOR_EVENT, getSkinForcedColors, getCurrentSkinMode } from '../lib/skinShaders.js'
 import LlamaMano from './fx/LlamaMano.jsx'
+import { rayoTocaDron, bolaAlEscudo, golpeEscudo } from '../lib/droneNpc.js'
 
 // Identidad fija para un componente definido dentro de otro: `render` cambia en cada
 // render del padre, pero React ve siempre el mismo tipo y no lo vuelve a montar.
@@ -5535,19 +5536,24 @@ export default function Player({
     shot.power = power
     shot.radius = pulseRadius(power)
     shot.pending = true
-    shot.x = aim.x
-    shot.y = aim.y
-    shot.z = aim.z
-    const camino = Math.hypot(aim.x - aim.ex, aim.y + 0.4 - aim.ey, aim.z - aim.ez)
+    // Si va hacia el drone de M.A.D.R.E., pega en su escudo: ahí acaba el viaje y
+    // ahí explota, en el aire (LaserBeam no pinta lo del piso con `escudo`).
+    const esc = bolaAlEscudo(aim.ex, aim.ey, aim.ez, aim.x, aim.y + 0.4, aim.z, aim.alDron)
+    shot.escudo = Boolean(esc)
+    shot.x = esc ? esc.x : aim.x
+    shot.y = esc ? esc.y - 0.4 : aim.y
+    shot.z = esc ? esc.z : aim.z
+    const camino = Math.hypot(shot.x - aim.ex, shot.y + 0.4 - aim.ey, shot.z - aim.ez)
     shot.travel = THREE.MathUtils.clamp(camino / BOLA_VELOCIDAD, BOLA_VIAJE[0], BOLA_VIAJE[1])
     shot.dur = Math.max(pose, shot.travel + 0.2)
     playFireballShot(power)
     laserRef.current.dur = pose
     impactosRef.current.push({
       cuando: performance.now() / 1000 + shot.travel,
-      x: aim.x,
-      y: aim.y,
-      z: aim.z,
+      x: shot.x,
+      y: shot.y,
+      z: shot.z,
+      escudo: shot.escudo,
       power,
       color: shot.color.clone(),
     })
@@ -6419,6 +6425,7 @@ export default function Player({
       const pz = simPosRef.current.z
       if (newKeys) a.active = false
       let toCursor = false
+      la.alDron = false
       if (hasJoy && hasInput) {
         // Sin cursor apunta el joystick: hacia dónde lo empujas es la dirección y qué
         // tanto lo empujas es qué tan lejos cae. Al soltarlo la mira se queda ahí, para
@@ -6440,6 +6447,8 @@ export default function Player({
           aimTools.ray.setFromCamera(aimTools.ndc, state.camera)
           aimTools.plane.constant = -simPosRef.current.y
           const dir = aimTools.ray.ray.direction
+          // con el cursor sobre el drone de M.A.D.R.E. la bola va hacia ella (y la para su escudo)
+          la.alDron = rayoTocaDron(aimTools.ray.ray.origin, dir)
           let rx = dir.x * LASER_MAX_DIST * 2
           let rz = dir.z * LASER_MAX_DIST * 2
           if (dir.y < -1e-3 && aimTools.ray.ray.intersectPlane(aimTools.plane, aimTools.point)) {
@@ -6801,6 +6810,7 @@ export default function Player({
           sparkTintRef.current.color.copy(imp.color)
           sparkTintRef.current.on = true
           triggerManualExplosion(imp.power, tmp.impact.set(imp.x, imp.y + 0.4, imp.z))
+          if (imp.escudo) golpeEscudo(imp.x, imp.y + 0.4, imp.z, imp.power)
           playLaserBlast(imp.power)
           try { window.dispatchEvent(new CustomEvent('camera-temblor', { detail: { fuerza: 0.8 + 1.6 * imp.power } })) } catch { }
         }

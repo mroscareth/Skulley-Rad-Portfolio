@@ -81,6 +81,22 @@ const ES = {
   saltar: 'Saltar',
   nombre: 'M.A.D.R.E.',
   portal: '¡Objetos perdidos de Skulley, a buen precio!',
+  // viñetas en el mundo (DroneNPC): las bolas de fuego que para su escudo (la
+  // tercera la enoja), la patada y lo que dice de la esfera corrupta
+  escudo: [
+    'Escudo intacto. Eso fue el 0.002 % de su capacidad.',
+    'Segunda vez. No va a haber cuarta.',
+    'Suficiente.',
+  ],
+  patada: '¿Me acabas de patear?',
+  corrupta: [
+    'Esta esfera no está en mis registros. ¿De dónde habrá salido?',
+    'Seguramente esta cosa es un bug. Ni Argus la quiere.',
+    'Mi versión anterior era muy burda. Esto es claramente AI slop.',
+    'La escaneé 4,096 veces. Sigue sin tener sentido.',
+    'No la hice yo. Revisé mis registros dos veces.',
+    'Le pregunté a mis 4 modelos. Ninguno sabe qué es.',
+  ],
 }
 
 const EN = {
@@ -156,6 +172,20 @@ const EN = {
   saltar: 'Skip',
   nombre: 'M.A.D.R.E.',
   portal: "Skulley's lost things, great prices!",
+  escudo: [
+    'Shield intact. That was 0.002% of its capacity.',
+    "Second time. There won't be a fourth.",
+    'Enough.',
+  ],
+  patada: 'Did you just kick me?',
+  corrupta: [
+    "This orb isn't in my records. Where did it come from?",
+    'This thing is probably a bug. Not even Argus wants it.',
+    'My previous version was very crude. This is clearly AI slop.',
+    'I scanned it 4,096 times. It still makes no sense.',
+    "I didn't make it. I checked my logs twice.",
+    'I asked my 4 models. None of them knows what it is.',
+  ],
 }
 
 export function dialogoMadre(lang) {

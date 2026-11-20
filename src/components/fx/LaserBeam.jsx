@@ -53,6 +53,7 @@ export const RUNE_WORD = 'SKULLEYRAD'  // el piso la va escribiendo, una letra p
 const RUNE_CELLS = [...RUNE_WORD].map(runeCell)   // casilla de cada letra en el atlas
 const RUNE_CORE = 0.045     // qué tan adentro del trazo empieza el blanco, con la runa midiendo 1 de alto
 const RUNE_INK = 0.05       // contorno negro
+const ESCUDO_ESCALA = 0.22  // la explosión contra el escudo del drone
 const RUNE_QUAD = 1.32      // la runa, sus picos y el contorno caben de sobra
 const AIR_RUNES = [5, 13]   // cuántas vuelan, de poca a toda la carga
 const AIR_DELAY = 0.16
@@ -209,6 +210,9 @@ function fire(slot, shot, letter, camera) {
   slot.x = shot.x
   slot.y = shot.y
   slot.z = shot.z
+  // En el escudo del drone de M.A.D.R.E. explota en el aire: más chica y sin lo
+  // del piso (estrella, aro, marca y runa), que quedaría flotando.
+  slot.escudo = Boolean(shot.escudo)
   mats.disc.color.copy(shot.color).multiplyScalar(1.3)
   mats.ring.color.copy(shot.color).lerp(WHITE, 0.5).multiplyScalar(1.5)
   mats.star.color.copy(shot.color).multiplyScalar(1.3)
@@ -230,7 +234,7 @@ function fire(slot, shot, letter, camera) {
     seed.life = PUFF_LIFE[0] + Math.random() * (PUFF_LIFE[1] - PUFF_LIFE[0])
   })
 
-  const size = blastSize(shot.power)
+  const size = blastSize(shot.power) * (slot.escudo ? ESCUDO_ESCALA : 1)
   slot.airCount = Math.round(AIR_RUNES[0] + (AIR_RUNES[1] - AIR_RUNES[0]) * shot.power)
   slot.air.forEach((rune, i) => {
     // Repartidas alrededor para que no se amontonen de un lado.
@@ -342,7 +346,7 @@ export default function LaserBeam({ shotRef }) {
       if (slot.on) slot.t += step
       const t = slot.t
       const since = t - slot.travel
-      const size = blastSize(slot.power)
+      const size = blastSize(slot.power) * (slot.escudo ? ESCUDO_ESCALA : 1)
       if (slot.on) alive += 1
 
       // Una vuelta más al terminar: deja sus bolas en cero antes de soltar la casilla.
@@ -408,7 +412,7 @@ export default function LaserBeam({ shotRef }) {
       const burning = slot.on && u >= 0
       if (burning || slot.burning) {
         let scale = 0
-        if (burning) {
+        if (burning && !slot.escudo) {
           const blink = u - FLOOR_RUNE_STEADY
           if (blink <= 0 || blinkPhase(blink) % 1 <= BLINK_LIT) scale = FLOOR_RUNE_SIZE
         }
@@ -419,7 +423,7 @@ export default function LaserBeam({ shotRef }) {
         floorDirty = true
       }
 
-      const marking = slot.on && since >= 0 && t < slot.dur + MARK_TIME
+      const marking = slot.on && !slot.escudo && since >= 0 && t < slot.dur + MARK_TIME
       if (refs.mark) refs.mark.visible = marking || warming
       if (marking) {
         const after = t - slot.dur

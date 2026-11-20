@@ -7,6 +7,10 @@ export const dron = {
   pos: { x: 0, y: 0, z: 0 },
   // el castigo de la tercera trampa: { alGolpe, pedido }
   castigo: null,
+  // radio del escudo que la cubre de las bolas de fuego (0 = sin escudo)
+  escudo: 0,
+  // hasta cuándo (performance.now() / 1000) se planta: viene una bola
+  plantada: 0,
 }
 
 const oyentes = new Set()
@@ -28,4 +32,99 @@ export function castigarConDron(alGolpe) {
   if (!dron.montado) return false
   dron.castigo = { alGolpe, pedido: performance.now() }
   return true
+}
+
+// ---- Skulley contra M.A.D.R.E. (Oscar, 2026-11-19): sus bolas de fuego nunca la
+// tocan, las para su escudo; tres y se enoja. Una patada la empuja y se castiga
+// en el acto. Player y HomeScene preguntan aquí; el NPC reacciona por `avisarDron`.
+
+// ¿El rayo del cursor (origen y dirección, de la cámara) pasa por el escudo?
+export function rayoTocaDron(o, d) {
+  const R = dron.escudo
+  if (!dron.montado || !R || !o || !d) return false
+  const cx = dron.pos.x - o.x
+  const cy = dron.pos.y - o.y
+  const cz = dron.pos.z - o.z
+  const dl = Math.hypot(d.x, d.y, d.z) || 1
+  const t = (cx * d.x + cy * d.y + cz * d.z) / dl
+  if (t < 0) return false
+  const d2 = cx * cx + cy * cy + cz * cz - t * t
+  // un poco más ancho que el escudo: el drone se mueve y no hay que atinarle al pixel
+  return d2 <= R * R * 1.44
+}
+
+// Una bola de fuego sale de (ex, ey, ez) hacia (tx, ty, tz). Si el cursor estaba
+// sobre el drone (`apuntado`) va hacia ella; si no, solo si su camino la cruza.
+// Regresa dónde pega en el escudo, o null. Con una bola en camino, se planta para
+// que el golpe caiga donde está el escudo.
+export function bolaAlEscudo(ex, ey, ez, tx, ty, tz, apuntado = false) {
+  const R = dron.escudo
+  if (!dron.montado || !R) return null
+  const c = dron.pos
+  let hx
+  let hy
+  let hz
+  if (apuntado) {
+    const vx = c.x - ex
+    const vy = c.y - ey
+    const vz = c.z - ez
+    const L = Math.hypot(vx, vy, vz)
+    if (L <= R) return null
+    hx = ex + (vx / L) * (L - R)
+    hy = ey + (vy / L) * (L - R)
+    hz = ez + (vz / L) * (L - R)
+  } else {
+    const dx = tx - ex
+    const dy = ty - ey
+    const dz = tz - ez
+    const a = dx * dx + dy * dy + dz * dz
+    if (a < 1e-8) return null
+    const fx = ex - c.x
+    const fy = ey - c.y
+    const fz = ez - c.z
+    const b = 2 * (fx * dx + fy * dy + fz * dz)
+    const cc = fx * fx + fy * fy + fz * fz - R * R
+    const disc = b * b - 4 * a * cc
+    if (cc <= 0 || disc < 0) return null
+    const t = (-b - Math.sqrt(disc)) / (2 * a)
+    if (t < 0 || t > 1) return null
+    hx = ex + dx * t
+    hy = ey + dy * t
+    hz = ez + dz * t
+  }
+  dron.plantada = performance.now() / 1000 + 0.45
+  // revienta un poco antes del escudo: la explosión no la tapa y el golpe se ve en él
+  const nx = (hx - c.x) / R
+  const ny = (hy - c.y) / R
+  const nz = (hz - c.z) / R
+  return { x: hx + nx * FUERA, y: hy + ny * FUERA, z: hz + nz * FUERA }
+}
+const FUERA = 0.45
+
+// La bola llegó al escudo (Player, en el cuadro del impacto).
+export function golpeEscudo(x, y, z, fuerza = 0.5) {
+  avisarDron({ escudo: { x, y, z, fuerza } })
+}
+
+// La patada de Skulley (HomeScene, cada cuadro de la ventana de golpe): el mismo
+// abanico que patea las esferas, medido desde el cuerpo (`base`), con la altura
+// holgada porque ella flota. `skip` es el de la patada: le pega una vez.
+const CUERPO = 0.62
+export function patadaAlDron(pie, dir, radio, skip, base, mitad) {
+  if (!dron.montado || !dir || (skip && skip.has('dron'))) return null
+  const b = base || pie
+  const fx = dron.pos.x - b.x
+  const fz = dron.pos.z - b.z
+  const d = Math.hypot(fx, fz)
+  if (d - CUERPO > radio) return null
+  const dy = dron.pos.y - (pie?.y ?? 0)
+  if (dy > 2.6 || dy < -1.5) return null
+  if (d > CUERPO) {
+    const ang = Math.acos(Math.max(-1, Math.min(1, (fx * dir.x + fz * dir.z) / d)))
+    if (ang - Math.asin(Math.min(1, CUERPO / d)) > (mitad ?? 1.31)) return null
+  }
+  if (skip) skip.add('dron')
+  avisarDron({ patada: { dx: dir.x, dz: dir.z } })
+  const k = d > 1e-4 ? CUERPO / d : 0
+  return { x: dron.pos.x - fx * k, y: dron.pos.y - 0.25, z: dron.pos.z - fz * k, power: 0.9, color: '' }
 }

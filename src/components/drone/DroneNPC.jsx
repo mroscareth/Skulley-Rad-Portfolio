@@ -4,6 +4,7 @@ import * as THREE from 'three'
 import DroneModel, { INVOCAR_GOLPE_S } from './DroneModel.jsx'
 import SpeechBubble3D from '../SpeechBubble3D.jsx'
 import SilhouetteShadow from '../SilhouetteShadow.jsx'
+import DomeShield from '../fx/DomeShield.jsx'
 import { dron, escucharDron } from '../../lib/droneNpc.js'
 import { dialogoMadre } from '../../lib/dialogoMadre.js'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
@@ -15,6 +16,12 @@ import { useLanguage } from '../../i18n/LanguageContext.jsx'
 // portal de Work se le acerca con su viñeta de la tienda. En la tercera trampa
 // del juego (castigarConDron, App) vuela enojada hacia él, lo ve e invoca el
 // rayo: el rayo cae en el cuadro en que azota (INVOCAR_GOLPE_S).
+//
+// Skulley le puede tirar bolas de fuego (Player, lib/droneNpc.js): nunca la tocan,
+// las para un escudo con el efecto del domo (DomeShield en esfera); a la tercera
+// se enoja y lo castiga con el rayo. Una patada la empuja un poco y el castigo es
+// inmediato (Oscar, 2026-11-19). Muy de vez en cuando va a ver la esfera corrupta
+// con cara de duda y dice algo de ella (`CURIOSA`).
 //
 // Monta desde el warm-up con Argus (comoHome), así sus programas se compilan
 // detrás del preloader. Todo lo que anima va por refs; el estado de React solo
@@ -38,6 +45,15 @@ const VER_SUELTA = 1.5
 const DIALOGO = { dist: 3.1, alto: 2.45 }
 // Castigo: frente a Skulley, un poco arriba, viéndolo; vuela a lo más tanto antes de invocar.
 const CASTIGO = { dist: 3.4, alto: 3.1, vueloMax: 1.1, despues: 2.6 }
+// El escudo: radio (cubre las alas), celda y alcance de la onda a su medida.
+const ESCUDO = { radio: 1.15, celda: 0.24, alcance: 1.5 }
+// La patada: el empujón (se frena solo) y en cuánto empieza a invocar el rayo.
+const PATADA = { empuje: 4.5, sube: 0.3, invoca: 0.3 }
+// La esfera corrupta: la primera visita y cada cuánto (segundos), a qué distancia
+// y altura sobre ella se queda, cuánto la mira y cuánto dura su viñeta.
+const CURIOSA = { primera: [55, 100], cada: [160, 280], dist: 2.3, alto: 1.7, vel: 3, mira: 7.5, dice: 5.5 }
+// Las viñetas se escriben a este paso (letras por segundo).
+const LETRAS = 34
 
 const azar = (a, b) => a + Math.random() * (b - a)
 const angulo = (a) => Math.atan2(Math.sin(a), Math.cos(a))
@@ -51,16 +67,21 @@ export default function DroneNPC({
   dialogo = false,
   puedeHablar = true,
   onHablar,
+  buscarCorrupta = null,
 }) {
   const { gl, camera } = useThree()
   const { lang } = useLanguage()
   const textos = dialogoMadre(lang)
+  const textosRef = useRef(textos)
+  textosRef.current = textos
   const grupoRef = useRef()
   const caraRef = useRef(null)
   const anclaRef = useRef()
+  const escudoRef = useRef(null)
+  const escudoGrupoRef = useRef()
   const [accion, setAccion] = useState({ nombre: 'IdleTranquilo', n: 0 })
   const [hover, setHover] = useState(false)
-  const [oferta, setOferta] = useState({ on: false, texto: '' })
+  const [vineta, setVineta] = useState({ on: false, texto: '', layout: '' })
   // desarrollo: window.__dronOferta() hace como si Skulley estuviera en el portal
   const [probarOferta, setProbarOferta] = useState(0)
   useEffect(() => {
@@ -97,6 +118,15 @@ export default function DroneNPC({
       probandoHasta: 0,
       viendo: false,
       golpe: null,
+      ofertaTexto: '',
+      dice: null,               // viñeta que está diciendo: { texto, t, dura }
+      golpesEscudo: 0,
+      alertaHasta: 0,           // después de un golpe al escudo lo sigue viendo
+      ladeo: { x: 0, z: 0, vx: 0, vz: 0 },
+      curiosaCuando: performance.now() / 1000 + azar(CURIOSA.primera[0], CURIOSA.primera[1]),
+      tCur: -1,
+      dijoCur: false,
+      ultimaCur: -1,
     }
   }
   const pedir = (nombre) => setAccion((a) => ({ nombre, n: a.n + 1 }))
@@ -106,17 +136,106 @@ export default function DroneNPC({
   // el estado compartido: montado solo de verdad en la home
   useEffect(() => {
     dron.montado = Boolean(activo)
-    return () => { dron.montado = false; dron.castigo = null }
+    dron.escudo = activo ? ESCUDO.radio : 0
+    return () => { dron.montado = false; dron.castigo = null; dron.escudo = 0 }
   }, [activo])
 
-  // lo que pide el diálogo
+  // dice algo en su viñeta (se escribe letra por letra)
+  const decir = (texto, dura) => { est.current.dice = { texto, t: 0, dura } }
+  // un golpe la ladea hacia donde la empujan (resorte en su marco)
+  const ladear = (dx, dz, fuerza) => {
+    const e = est.current
+    const L = Math.hypot(dx, dz) || 1
+    const fx = dx / L
+    const fz = dz / L
+    const sy = Math.sin(e.yaw)
+    const cy = Math.cos(e.yaw)
+    e.ladeo.vx += (fx * sy + fz * cy) * fuerza * 6
+    e.ladeo.vz -= (fx * cy - fz * sy) * fuerza * 6
+  }
+  // su rayo, sin las reglas del juego: el mismo del castigo, sin -9999
+  const rayoASkulley = () => {
+    const p = playerRef?.current?.position
+    try {
+      window.dispatchEvent(new CustomEvent('madre-castigo-strike', { detail: { x: p?.x || 0, y: 0, z: p?.z || 0 } }))
+      window.dispatchEvent(new CustomEvent('bolt-strike', { detail: { at: performance.now() } }))
+    } catch { }
+  }
+
+  // lo que pide el diálogo, y los golpes de Skulley (lib/droneNpc.js)
   useEffect(() => escucharDron((msg) => {
     const cara = caraRef.current
+    const e = est.current
+    const T = textosRef.current
     if (msg.cara && cara) cara.poner(msg.cara)
     if (msg.voltear && cara) cara.voltear()
     if (msg.accion) pedir(msg.accion)
     if (msg.fin) { cara?.poner('normal'); pedir('IdleTranquilo') }
-  }), [])
+    if (msg.escudo) {
+      const { x, y, z, fuerza } = msg.escudo
+      escudoRef.current?.hit({ x, y, z }, 0.6 + 0.4 * fuerza)
+      ladear(e.pos.x - x, e.pos.z - z, 0.25 + 0.35 * fuerza)
+      if (e.modo === 'castigo' || e.modo === 'dialogo') return
+      e.golpesEscudo += 1
+      const n = e.golpesEscudo
+      if (n >= 3) {
+        // la tercera: se enoja y va por él
+        e.golpesEscudo = 0
+        decir(T.escudo[2], 2.6)
+        if (e.modo === 'curiosa') terminarCuriosa(false)
+        dron.castigo = { alGolpe: rayoASkulley, pedido: performance.now() }
+        return
+      }
+      decir(T.escudo[n - 1], 4.6)
+      cara?.poner(n === 1 ? 'feliz' : 'enojada')
+      e.alertaHasta = performance.now() / 1000 + 6
+      if (e.modo === 'curiosa') terminarCuriosa(false)
+    }
+    if (msg.patada) {
+      if (e.modo === 'castigo' || e.modo === 'dialogo') return
+      // el empujón y, en el acto, el rayo
+      if (e.modo === 'curiosa') terminarCuriosa(false)
+      e.modo = 'castigo'
+      e.fase = 'empujada'
+      e.t = 0
+      e.meta = null
+      e.mirar = 'skulley'
+      e.golpe = rayoASkulley
+      e.ofertaTexto = ''
+      e.v.set(msg.patada.dx * PATADA.empuje, 0, msg.patada.dz * PATADA.empuje)
+      e.pos.y += PATADA.sube
+      ladear(msg.patada.dx, msg.patada.dz, 1.4)
+      cara?.poner('enojada')
+      decir(T.patada, 2.8)
+      pedir('Detenerse')
+    }
+  }), []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // desarrollo: window.__dronCuriosa() la manda a ver la esfera corrupta
+  useEffect(() => {
+    if (!import.meta.env.DEV) return undefined
+    window.__dronCuriosa = () => {
+      const e = est.current
+      e.curiosaCuando = 0
+      if (e.modo === 'deambular') {
+        e.viendo = false
+        e.alertaHasta = 0
+        if (e.fase === 'quieto') e.hasta = 0
+        else quieto(0, 'IdleTranquilo')
+      }
+    }
+    // y window.__dronEscudo(fuerza) enciende el escudo del lado de Skulley, sin contar
+    window.__dronEscudo = (fuerza = 1) => {
+      const e = est.current
+      const s = playerRef?.current?.position
+      if (!s) return
+      const dx = s.x - e.pos.x
+      const dz = s.z - e.pos.z
+      const L = Math.hypot(dx, dz) || 1
+      escudoRef.current?.hit({ x: e.pos.x + (dx / L) * ESCUDO.radio, y: e.pos.y - 0.25, z: e.pos.z + (dz / L) * ESCUDO.radio }, 0.6 + 0.4 * fuerza)
+    }
+    return () => { delete window.__dronCuriosa; delete window.__dronEscudo }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- metas
   const libre = (x, z, s) => {
@@ -162,6 +281,36 @@ export default function DroneNPC({
     if (nombre === 'IdleJugueton') caraRef.current?.poner('feliz')
   }
 
+  // ---- la esfera corrupta: se queda a un lado y arriba de ella, viéndola
+  const puntoCurioso = (c) => {
+    const e = est.current
+    let dx = e.pos.x - c.pos.x
+    let dz = e.pos.z - c.pos.z
+    const L = Math.hypot(dx, dz)
+    if (L < 1e-3) { dx = 1; dz = 0 } else { dx /= L; dz /= L }
+    return new THREE.Vector3(c.pos.x + dx * CURIOSA.dist, Math.max(1.7, c.pos.y + CURIOSA.alto), c.pos.z + dz * CURIOSA.dist)
+  }
+  const empezarCuriosa = (c) => {
+    const e = est.current
+    e.modo = 'curiosa'
+    e.tCur = -1
+    e.dijoCur = false
+    caraRef.current?.poner('normal')
+    viajar(puntoCurioso(c), CURIOSA.vel)
+  }
+  function terminarCuriosa(descansa = true) {
+    const e = est.current
+    e.modo = 'deambular'
+    e.tCur = -1
+    e.dijoCur = false
+    e.curiosaCuando = performance.now() / 1000 + azar(CURIOSA.cada[0], CURIOSA.cada[1])
+    caraRef.current?.mirar(0, 0)
+    if (descansa) {
+      caraRef.current?.poner('normal')
+      quieto(azar(1.5, 2.5), 'IdleTranquilo')
+    }
+  }
+
   // ---- la viñeta de la tienda
   useEffect(() => {
     const e = est.current
@@ -190,7 +339,8 @@ export default function DroneNPC({
     const e = est.current
     if (dialogo) {
       e.modo = 'dialogo'
-      setOferta((o) => (o.on ? { on: false, texto: '' } : o))
+      e.ofertaTexto = ''
+      e.dice = null
       const p = playerRef?.current
       if (!p) return
       const fy = p.rotation.y
@@ -217,7 +367,7 @@ export default function DroneNPC({
       e.modo = 'castigo'
       e.golpe = dron.castigo.alGolpe
       dron.castigo = null
-      setOferta((o) => (o.on ? { on: false, texto: '' } : o))
+      e.ofertaTexto = ''
       cara?.poner('enojada')
       const desde = new THREE.Vector3(e.pos.x - s.x, 0, e.pos.z - s.z)
       if (desde.lengthSq() < 0.01) desde.set(0, 0, 1)
@@ -229,23 +379,34 @@ export default function DroneNPC({
     }
 
     // ---- decidir
+    const ahora = performance.now() / 1000
     if (e.modo !== 'deambular') e.viendo = false
     if (e.modo === 'deambular' && s) {
       const dS = Math.hypot(s.x - e.pos.x, s.z - e.pos.z)
-      if (!e.viendo && dS < VER_CERCA) {
+      const alerta = ahora < e.alertaHasta
+      if (!e.viendo && (dS < VER_CERCA || alerta)) {
         e.viendo = true
         if (e.fase === 'quieto') e.hasta = Infinity
         else quieto(Infinity, 'IdleTranquilo')
-      } else if (e.viendo && dS > VER_CERCA + VER_SUELTA) {
+      } else if (e.viendo && dS > VER_CERCA + VER_SUELTA && !alerta) {
         e.viendo = false
         e.hasta = e.t + azar(0.8, 1.6)
         cara?.mirar(0, 0)
       }
     }
+    let corrupta = null
     if (e.modo === 'deambular') {
       if (e.fase === 'quieto' && e.t > e.hasta) {
-        viajar(elegirMeta(s), VEL.paseo)
-        if (Math.random() < 0.25) cara?.poner('normal')
+        // muy de vez en cuando, en lugar de pasear, va a ver la esfera corrupta
+        if (!juegoActivo && ahora > e.curiosaCuando) {
+          corrupta = buscarCorrupta?.() || null
+          if (corrupta) empezarCuriosa(corrupta)
+          else e.curiosaCuando = ahora + 20
+        }
+        if (e.modo === 'deambular') {
+          viajar(elegirMeta(s), VEL.paseo)
+          if (Math.random() < 0.25) cara?.poner('normal')
+        }
       } else if (e.fase === 'quieto' && cara && e.t > 0.9 && e.t - dt <= 0.9) {
         const r = Math.random()
         if (r < 0.3) cara.poner('feliz')
@@ -264,17 +425,47 @@ export default function DroneNPC({
         e.tOferta += dt
         if (antes < OFERTA.ciclo * 0.8 && e.tOferta >= OFERTA.ciclo * 0.8) pedir('IdleTranquilo')
         const c = e.tOferta % OFERTA.ciclo
-        const texto = c < OFERTA.dice ? textos.portal.slice(0, Math.min(textos.portal.length, Math.floor(c * OFERTA.letras))) : ''
-        setOferta((o) => (o.on === Boolean(texto) && o.texto === texto ? o : { on: Boolean(texto), texto }))
+        e.ofertaTexto = c < OFERTA.dice ? textos.portal.slice(0, Math.min(textos.portal.length, Math.floor(c * OFERTA.letras))) : ''
       }
       if (!sigue) {
-        setOferta((o) => (o.on ? { on: false, texto: '' } : o))
+        e.ofertaTexto = ''
         e.modo = 'deambular'
         e.ofertaEspera = performance.now() / 1000 + OFERTA.espera
         cara?.poner('normal')
         quieto(azar(1, 2), 'IdleTranquilo')
       }
+    } else if (e.modo === 'curiosa') {
+      corrupta = buscarCorrupta?.() || null
+      if (!corrupta || juegoActivo) terminarCuriosa()
+      else if (e.fase === 'girar' || e.fase === 'viaje') {
+        // la esfera se mueve: la meta la sigue
+        if (e.meta) e.meta.copy(puntoCurioso(corrupta))
+      } else if (e.fase === 'quieto') {
+        if (e.tCur < 0) {
+          e.tCur = 0
+          cara?.poner('confundida')
+        }
+        e.tCur += dt
+        if (e.tCur > 0.8 && !e.dijoCur) {
+          e.dijoCur = true
+          const lista = textos.corrupta
+          let i = Math.floor(Math.random() * lista.length)
+          if (i === e.ultimaCur) i = (i + 1) % lista.length
+          e.ultimaCur = i
+          decir(lista[i], CURIOSA.dice)
+        }
+        if (e.tCur > CURIOSA.mira) terminarCuriosa()
+        else if (Math.hypot(corrupta.pos.x - e.pos.x, corrupta.pos.z - e.pos.z) > CURIOSA.dist + 2.5) {
+          // se le fue rodando: se le vuelve a acercar
+          viajar(puntoCurioso(corrupta), CURIOSA.vel)
+        }
+      }
     } else if (e.modo === 'castigo') {
+      if (e.fase === 'empujada' && e.t > PATADA.invoca) {
+        e.fase = 'invocar'
+        e.t = 0
+        pedir('Invocar')
+      }
       if (e.fase === 'viaje' && e.t > CASTIGO.vueloMax) {
         // se acabó el tiempo de vuelo: llega de un jalón para no atrasar el rayo
         e.pos.lerp(e.meta, 1 - Math.exp(-dt * 14))
@@ -358,13 +549,45 @@ export default function DroneNPC({
       yawMeta = hacia
       cara.mirar(THREE.MathUtils.clamp(angulo(hacia - e.yaw) / 0.9, -1, 1), -0.35)
     }
+    // viendo la esfera corrupta: de frente y con los ojos abajo, hacia ella
+    if (e.modo === 'curiosa' && corrupta && quietoEnSitio && cara) {
+      const hacia = Math.atan2(corrupta.pos.x - e.pos.x, corrupta.pos.z - e.pos.z)
+      yawMeta = hacia
+      cara.mirar(THREE.MathUtils.clamp(angulo(hacia - e.yaw) / 0.9, -1, 1), -0.75)
+    }
     const giro = e.modo === 'castigo' ? 9 : e.fase === 'girar' ? 3.2 : 4
     e.yaw += angulo(yawMeta - e.yaw) * (1 - Math.exp(-dt * giro))
 
+    // el ladeo de los golpes: resorte que se mece y se asienta
+    const L = e.ladeo
+    L.vx += (-70 * L.x - 7 * L.vx) * dt
+    L.vz += (-70 * L.z - 7 * L.vz) * dt
+    L.x = THREE.MathUtils.clamp(L.x + L.vx * dt, -0.7, 0.7)
+    L.z = THREE.MathUtils.clamp(L.z + L.vz * dt, -0.7, 0.7)
+
     if (g) {
       g.position.copy(e.pos)
-      g.rotation.set(0, e.yaw, 0)
+      g.rotation.order = 'YXZ'
+      g.rotation.set(L.x, e.yaw, L.z)
     }
+    if (escudoGrupoRef.current) escudoGrupoRef.current.position.copy(e.pos)
+
+    // la viñeta: lo que esté diciendo manda sobre el pregón de la tienda
+    let texto = ''
+    let layout = ''
+    if (e.dice) {
+      e.dice.t += dt
+      if (e.dice.t < e.dice.dura) {
+        texto = e.dice.texto.slice(0, Math.min(e.dice.texto.length, Math.floor(e.dice.t * LETRAS)))
+        layout = e.dice.texto
+      } else e.dice = null
+    }
+    if (!e.dice && e.modo === 'oferta' && e.ofertaTexto) {
+      texto = e.ofertaTexto
+      layout = textos.portal
+    }
+    if (e.modo === 'dialogo') texto = ''
+    setVineta((v) => (v.on === Boolean(texto) && v.texto === texto && (v.layout === layout || !layout) ? v : { on: Boolean(texto), texto, layout: layout || v.layout }))
     if (anclaRef.current) anclaRef.current.position.set(e.pos.x, e.pos.y + 0.35, e.pos.z)
     dron.pos.x = e.pos.x
     dron.pos.y = e.pos.y
@@ -412,9 +635,13 @@ export default function DroneNPC({
       </DroneModel>
       {/* sombra en el piso: la silueta vista desde arriba, como la de Argus */}
       <SilhouetteShadow playerRef={grupoRef} enabled={Boolean(activo)} size={2.4} opacity={0.4} resolution={128} blur={1.2} height={6} />
+      {/* el escudo: no gira ni se ladea con ella; solo se ve donde pega una bola */}
+      <group ref={escudoGrupoRef}>
+        <DomeShield ref={escudoRef} esfera radius={ESCUDO.radio} celda={ESCUDO.celda} alcance={ESCUDO.alcance} />
+      </group>
       {/* la viñeta va fuera del grupo girado: SpeechBubble3D mira a cámara con padre sin rotación */}
       <object3D ref={anclaRef} />
-      <SpeechBubble3D anchorRef={anclaRef} visible={oferta.on} displayText={oferta.texto} layoutText={textos.portal} offset={[1.3, 0.6, 0]} />
+      <SpeechBubble3D anchorRef={anclaRef} visible={vineta.on} displayText={vineta.texto} layoutText={vineta.layout || textos.portal} offset={[1.3, 0.6, 0]} />
     </>
   )
 }
