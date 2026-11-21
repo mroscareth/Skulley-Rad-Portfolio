@@ -83,6 +83,86 @@ const EXPR = {
   encoge: { ceja: 0.04, inf: 0.12, son: -0.2 },
 }
 const CLAVES_EXPR = ['sup', 'inf', 'supInt', 'supExt', 'ceja', 'cejaInt', 'cejaL', 'cejaR', 'son', 'junta', 'grune']
+// Formas de boca al hablar. q: quijada en grados (0 = la boca del modelo,
+// entreabierta; con -4 cierra los dientes y con -7 casi los labios; más, se arruga
+// la barbilla); ancho / junta: comisuras afuera o juntas (como la expresión);
+// labio / frente: el labio de arriba sube o se adelanta. Medidas en Blender.
+const VISEMAS = {
+  reposo: { q: 0, ancho: 0, junta: 0, labio: 0, frente: 0 },
+  cerrada: { q: -2.5, ancho: 0.05, junta: 0, labio: -0.002, frente: 0 },
+  A: { q: 12, ancho: 0.25, junta: 0, labio: 0.014, frente: 0 },
+  E: { q: 6, ancho: 0.8, junta: 0, labio: 0.01, frente: 0 },
+  I: { q: 3, ancho: 0.9, junta: 0, labio: 0.007, frente: 0 },
+  O: { q: 8, ancho: -0.2, junta: 0.6, labio: 0.004, frente: 0.007 },
+  U: { q: 3, ancho: -0.3, junta: 0.85, labio: 0, frente: 0.01 },
+  M: { q: -5, ancho: 0.1, junta: 0.15, labio: -0.005, frente: 0 },
+  F: { q: 2, ancho: 0.3, junta: 0, labio: 0.008, frente: 0.004 },
+}
+// Las formas de boca abiertas salen más seguido que las cerradas: saltar de la A a
+// la M en cada sílaba se veía robótico (Oscar)
+const PESO_VISEMA = [['A', 0.24], ['E', 0.22], ['I', 0.12], ['O', 0.16], ['U', 0.08], ['M', 0.08], ['F', 0.1]]
+const canal = () => ({ x: 0, v: 0 })
+function crearBoca() {
+  return {
+    t: 0, dur: 0, vis: 'reposo', restan: 0, idx: 0, acento: 0, fuerte: false, ladoMeta: 0,
+    fuerza: 1, qLado: 0, qRoll: 0, cejaMeta: 0, asim: 0, pausaLarga: false, miraMeta: [0, 0], fase: Math.random() * 100,
+    q: canal(), ancho: canal(), junta: canal(), labio: canal(), frente: canal(), lado: canal(), ceja: canal(), cabeza: canal(),
+    jl: canal(), jr: canal(), cejaPal: canal(), ojos: canal(), miraX: canal(), miraY: canal(),
+  }
+}
+function elegirVisema(antes) {
+  const op = PESO_VISEMA.filter(([n]) => n !== antes)
+  let r = Math.random() * op.reduce((t, [, w]) => t + w, 0)
+  for (const [n, w] of op) { r -= w; if (r <= 0) return n }
+  return op[0][0]
+}
+// La siguiente sílaba: entre palabras la boca cierra (a veces una pausa larga,
+// como coma); en cada palabra una sílaba es la fuerte.
+function siguienteSilaba(bo) {
+  bo.t = 0
+  if (bo.restan <= 0) {
+    if (bo.vis !== 'cerrada' && bo.vis !== 'reposo') {
+      bo.vis = 'cerrada'
+      bo.fuerte = false
+      bo.pausaLarga = Math.random() < 0.18
+      bo.dur = bo.pausaLarga ? 0.38 + Math.random() * 0.2 : 0.13 + Math.random() * 0.1
+      // en las pausas largas desvía la mirada un instante (piensa) y regresa
+      bo.miraMeta = bo.pausaLarga ? [(Math.random() - 0.5) * 0.4, (Math.random() - 0.3) * 0.16] : [0, 0]
+      return
+    }
+    bo.pausaLarga = false
+    bo.miraMeta = [0, 0]
+    bo.restan = 1 + Math.floor(Math.random() * 4)
+    bo.idx = 0
+    bo.acento = Math.floor(Math.random() * bo.restan)
+    bo.ladoMeta = Math.random() < 0.45 ? (Math.random() < 0.5 ? -1 : 1) : 0
+    // las cejas de cada palabra: casi siempre suben (más o menos), a veces frunce,
+    // y a veces más una que otra
+    const r = Math.random()
+    bo.cejaMeta = r < 0.6 ? 0.004 + Math.random() * 0.009 : r < 0.75 ? -0.007 : 0
+    bo.asim = Math.random() < 0.4 ? (Math.random() - 0.5) * 1.2 : 0
+  }
+  bo.fuerte = bo.idx === bo.acento
+  bo.vis = elegirVisema(bo.vis)
+  // cada sílaba abre distinto, la fuerte más; la quijada se corre y se ladea poquito
+  bo.fuerza = bo.fuerte ? 1.1 + Math.random() * 0.15 : 0.55 + Math.random() * 0.45
+  bo.qLado = (Math.random() - 0.5) * 3
+  bo.qRoll = (Math.random() - 0.5) * 1.6
+  bo.dur = bo.fuerte ? 0.3 + Math.random() * 0.12 : 0.18 + Math.random() * 0.12
+  bo.idx += 1
+  bo.restan -= 1
+}
+// Resorte amortiguado de un canal (en subpasos: un cuadro lento no lo vuelve inestable)
+function resorte(c, meta, dt, hz, zeta) {
+  const w = 2 * Math.PI * hz
+  const pasos = Math.max(1, Math.ceil(dt * 240))
+  const h = dt / pasos
+  for (let i = 0; i < pasos; i += 1) {
+    c.v += (-w * w * (c.x - meta) - 2 * zeta * w * c.v) * h
+    c.x += c.v * h
+  }
+  if (!Number.isFinite(c.x) || !Number.isFinite(c.v)) { c.x = meta; c.v = 0 }
+}
 // La cara de cada momento de cada clip: [segundo, expresión].
 const CARA_CLIP = {
   IdleComer: [[0, 'neutral'], [0.3, 'sorpresa'], [1.3, 'feliz'], [3.7, 'sorpresa'], [4.6, 'apretados'], [4.78, 'feliz'],
@@ -381,8 +461,7 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
       parpadeo: { t: -1, prox: 1.5 + Math.random() * 3, doble: false },
       mirada: { yaw: 0, pitch: 0, metaYaw: 0, metaPitch: 0, prox: 0.5 },
       ojos: { yaw: 0, pitch: 0 },
-      quijada: 0, habla: 0, ancho: 0, silaba: { t: 0, dur: 0.2, abre: 0, ancho: 0, labio: 0, lado: 0 },
-      labio: { p: new THREE.Vector3(), v: new THREE.Vector3() },
+      habla: 0, boca: crearBoca(),
       track: { yaw: 0, pitch: 0, w: 0 },
       antenas: null,
     }
@@ -442,6 +521,8 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
     if (!g) return
     const dt = Math.min(Math.max(delta, 0), 1 / 20)
     const e = est.current
+    // desarrollo: con el HMR el estado sobrevive al cambio de código y le faltaban canales
+    if (!e.boca?.miraY) e.boca = crearBoca()
     e.reloj += dt
     const ahora = performance.now()
     const dlg = dialogoRef?.current
@@ -612,14 +693,15 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
         const bi = cb.inf[k]
         if (!bs || !bi) continue
         const wIn = k === ADENTRO[lado] ? 1 : k === 1 ? 0.5 : 0
-        const sup = Math.max(THREE.MathUtils.clamp(ex.sup + ex.supInt * wIn + ex.supExt * (1 - wIn) - subeMirada, 0, 1), blink)
+        const sup = Math.max(THREE.MathUtils.clamp(ex.sup + ex.supInt * wIn + ex.supExt * (1 - wIn) - subeMirada - e.boca.ojos.x, 0, 1), blink)
         const inf = Math.max(ex.inf, blink)
         _q1.setFromAxisAngle(EJE_X, THREE.MathUtils.degToRad(-ABIERTO_EXTRA + (CIERRE[lado].sup[k] + ABIERTO_EXTRA) * sup))
         bs.quaternion.copy(bs.userData.__restQ).multiply(_q1)
         _q1.setFromAxisAngle(EJE_X, THREE.MathUtils.degToRad(-ABIERTO_EXTRA + (CIERRE[lado].inf[k] + ABIERTO_EXTRA) * inf))
         bi.quaternion.copy(bi.userData.__restQ).multiply(_q1)
       }
-      const acento = e.habla * 0.012 * Math.max(0, Math.sin(e.reloj * 4.3 + (lado === 'L' ? 0 : 0.4)))
+      const bo = e.boca
+      const acento = bo.ceja.x * (lado === 'L' ? 1 : 0.85) + bo.cejaPal.x * (1 + (lado === 'L' ? bo.asim : -bo.asim))
       const ce = ex.ceja + (lado === 'L' ? ex.cejaL : ex.cejaR) + acento
       for (const [b, extra] of [[cb.cejaInt, ex.cejaInt], [cb.cejaExt, 0]]) {
         if (!b) continue
@@ -676,8 +758,8 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
       const yaw = THREE.MathUtils.clamp(Math.atan2(-_v3.x, _v3.y), -0.45, 0.45)
       const pitch = THREE.MathUtils.clamp(Math.atan2(_v3.z, Math.hypot(_v3.x, _v3.y)), -0.35, 0.35)
       const o = e.ojos
-      o.yaw += (yaw - o.yaw) * ko
-      o.pitch += (pitch - o.pitch) * ko
+      o.yaw += (yaw + e.boca.miraX.x - o.yaw) * ko
+      o.pitch += (pitch + e.boca.miraY.x - o.pitch) * ko
       _q3.setFromAxisAngle(EJE_Z, o.yaw)
       _q1.setFromAxisAngle(EJE_X, o.pitch)
       for (const lado of ['L', 'R']) {
@@ -685,69 +767,81 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
         if (ojo) ojo.quaternion.copy(ojo.userData.__restQ).multiply(_q3).multiply(_q1)
       }
     }
-    // boca al hablar: sílabas de ~0.15 a 0.28 s, cada una de su tamaño (abre y
-    // cierra), con pausas, y las comisuras se estiran o se juntan según la sílaba.
-    // Encima de la quijada del clip y de la boca de la expresión.
-    const sil = e.silaba
-    let metaQ = 0
-    let metaAncho = 0
+    // ── boca al hablar (Oscar: se veía tiesa, muy rápida, solo arriba y abajo y
+    // siempre abierta): formas de boca en palabras de 1 a 4 sílabas, cada una
+    // sostenida un rato, con la boca cerrada entre palabras y en las M; cada canal
+    // llega con su resorte, así se encadenan en vez de abrir y cerrar a cada
+    // sílaba. La sílaba fuerte de cada palabra dura más, abre más, alza las cejas y
+    // cabecea. Sin hablar regresa a su boca de siempre (la del modelo, entreabierta).
+    const bo = e.boca
     if (hablando) {
-      sil.t += dt
-      if (sil.t >= sil.dur) {
-        const pausa = Math.random() < 0.12
-        sil.t = 0
-        sil.dur = pausa ? 0.1 + Math.random() * 0.08 : 0.15 + Math.random() * 0.13
-        sil.abre = pausa ? 0 : 0.35 + Math.random() * 0.65
-        sil.ancho = Math.random() * 2 - 1
-        // el labio de arriba con vida propia: cada sílaba sube distinto (enseña los
-        // dientes en las abiertas), a veces de un lado, y se adelanta en las "o"
-        sil.labio = pausa ? 0 : Math.min(1, sil.abre * (0.4 + Math.random() * 0.9))
-        sil.lado = Math.random() < 0.35 ? (Math.random() < 0.5 ? -1 : 1) : 0
-      }
-      const lomo = Math.pow(Math.sin(Math.PI * Math.min(1, sil.t / sil.dur)), 0.8)
-      metaQ = sil.abre * lomo * 22
-      metaAncho = sil.ancho * lomo
+      bo.t += dt
+      if (bo.t >= bo.dur) siguienteSilaba(bo)
+    } else if (bo.vis !== 'reposo') {
+      bo.vis = 'reposo'
+      bo.fuerte = false
+      bo.restan = 0
+      bo.t = 0
+      bo.dur = 0
     }
-    e.quijada += (metaQ - e.quijada) * (1 - Math.exp(-dt * 28))
-    e.ancho += (metaAncho - e.ancho) * (1 - Math.exp(-dt * 20))
-    const abre = e.quijada / 22
-    if (bones.quijada && e.quijada > 0.05) {
-      _q1.setFromAxisAngle(EJE_X, THREE.MathUtils.degToRad(e.quijada))
-      bones.quijada.quaternion.multiply(_q1)
+    const vis = VISEMAS[bo.vis]
+    const fz = hablando ? bo.fuerza : 1
+    // resortes lentos y casi sin rebote: la boca se desliza de una forma a otra y en
+    // las sílabas cortas no alcanza a llegar del todo, como al hablar de verdad
+    resorte(bo.q, vis.q > 0 ? vis.q * fz : vis.q, dt, 3, 0.9)
+    resorte(bo.ancho, vis.ancho * fz, dt, 2.8, 0.95)
+    resorte(bo.junta, vis.junta * fz, dt, 2.8, 0.95)
+    resorte(bo.labio, vis.labio * fz, dt, 3.2, 0.85)
+    resorte(bo.frente, vis.frente, dt, 2.8, 0.95)
+    resorte(bo.lado, hablando ? bo.ladoMeta : 0, dt, 4, 0.8)
+    resorte(bo.ceja, bo.fuerte && hablando ? 0.012 : 0, dt, 3.5, 0.75)
+    resorte(bo.cejaPal, hablando ? bo.cejaMeta : 0, dt, 3.5, 0.7)
+    resorte(bo.cabeza, bo.fuerte && hablando ? 1 : 0, dt, 2.6, 0.7)
+    resorte(bo.jl, hablando && vis.q > 0 ? bo.qLado : 0, dt, 2.4, 0.95)
+    resorte(bo.jr, hablando && vis.q > 0 ? bo.qRoll : 0, dt, 2.4, 0.95)
+    resorte(bo.ojos, bo.fuerte && hablando ? 0.12 : 0, dt, 3.5, 0.85)
+    resorte(bo.miraX, hablando ? bo.miraMeta[0] : 0, dt, 5, 0.75)
+    resorte(bo.miraY, hablando ? bo.miraMeta[1] : 0, dt, 5, 0.75)
+    if (hablando && bo.pausaLarga && bo.t < dt * 1.5 && e.parpadeo.t < 0 && Math.random() < 0.6) e.parpadeo.t = 0
+    const q = bo.q.x
+    const abre = Math.max(0, q) / 22
+    if (bones.quijada && (Math.abs(q) > 0.05 || Math.abs(bo.jl.x) > 0.05)) {
+      // abre (X), se corre de lado (Z) y se ladea (Y): medido en Blender
+      _q1.setFromAxisAngle(EJE_X, THREE.MathUtils.degToRad(q))
+      _q2.setFromAxisAngle(EJE_Z, THREE.MathUtils.degToRad(bo.jl.x))
+      _q3.setFromAxisAngle(ARRIBA, THREE.MathUtils.degToRad(bo.jr.x))
+      bones.quijada.quaternion.multiply(_q1).multiply(_q2).multiply(_q3)
     }
     // las comisuras: X local = izquierda de Argus (afuera en la izquierda, adentro en
-    // la derecha), Y arriba, Z al frente
+    // la derecha), Y arriba, Z al frente; con `lado` una comisura sube más que la otra
+    const junta = ex.junta + bo.junta.x
     for (const [b, s] of [[bones.comisuraL, 1], [bones.comisuraR, -1]]) {
       if (!b) continue
-      const fuera = 0.016 * ex.son - 0.02 * ex.junta + 0.012 * e.ancho
-      _v1.set(s * fuera, 0.022 * ex.son + 0.004 * abre, 0.004 * ex.junta).applyQuaternion(b.userData.__restQ)
+      const fuera = 0.016 * ex.son - 0.02 * junta + 0.012 * bo.ancho.x
+      _v1.set(s * fuera, 0.022 * ex.son + 0.004 * abre + 0.005 * bo.lado.x * s, 0.004 * junta).applyQuaternion(b.userData.__restQ)
       b.position.copy(b.userData.__restP).add(_v1)
     }
     if (bones.labioSup) {
-      // meta del labio (en el espacio de la cabeza: X izquierda, Y arriba, Z al frente)
-      // y un resorte con sobrepaso que lo sigue: así no va pegado a la quijada
-      const lomoL = hablando ? Math.pow(Math.sin(Math.PI * Math.min(1, (sil.t + 0.03) / sil.dur)), 0.7) : 0
-      const sube = 0.022 * ex.grune + (0.006 * abre + 0.026 * sil.labio * lomoL) * (hablando ? 1 : 0)
-      const frente = 0.004 * ex.grune + 0.012 * Math.max(0, -e.ancho) + 0.004 * abre
-      const lado = 0.007 * sil.lado * lomoL
-      const lb = e.labio
-      _v2.set(lado, sube, frente)
-      const wl = 2 * Math.PI * 9
-      const hl = Math.min(dt, 0.05) / 3
-      for (let n = 0; n < 3; n += 1) {
-        _v3.copy(_v2).sub(lb.p).multiplyScalar(wl * wl).addScaledVector(lb.v, -2 * 0.42 * wl)
-        lb.v.addScaledVector(_v3, hl)
-        lb.p.addScaledVector(lb.v, hl)
-      }
-      _v1.copy(lb.p).applyQuaternion(bones.labioSup.userData.__restQ)
+      // en el espacio de la cabeza: X izquierda, Y arriba, Z al frente
+      _v1.set(0.006 * bo.lado.x, 0.022 * ex.grune + bo.labio.x, 0.004 * ex.grune + bo.frente.x).applyQuaternion(bones.labioSup.userData.__restQ)
       bones.labioSup.position.copy(bones.labioSup.userData.__restP).add(_v1)
     }
-    // y la cabeza acompaña cada sílaba con un cabeceo chiquito
-    if (abre > 0.01 && bones.head) {
+    // la cabeza: cabecea en la sílaba fuerte, se ladea hacia el lado de la palabra y,
+    // mientras habla, no se queda quieta (un vaivén lento que nunca se repite igual)
+    if (bones.head && (e.habla > 0.01 || Math.abs(bo.cabeza.x) > 0.002)) {
+      const tf = e.reloj + bo.fase
+      const h = e.habla
+      const yaw = h * (1.8 * Math.sin(tf * 0.9) + 1.1 * Math.sin(tf * 2.3 + 1.3))
+      const pitch = 3.2 * bo.cabeza.x + h * (1.2 * Math.sin(tf * 1.4 + 0.5) + 0.7 * Math.sin(tf * 3.1))
+      const roll = -1.6 * bo.lado.x + h * (1.4 * Math.sin(tf * 1.1 + 2.1) + 0.6 * Math.sin(tf * 2.7 + 0.4))
       g.getWorldQuaternion(_q1)
       _v1.set(1, 0, 0).applyQuaternion(_q1)
-      _q4.setFromAxisAngle(_v1, THREE.MathUtils.degToRad(2.2 * abre))
-      girarEnMundo(bones.head, _q4)
+      _q4.setFromAxisAngle(_v1, THREE.MathUtils.degToRad(pitch))
+      _v2.set(0, 0, 1).applyQuaternion(_q1)
+      _q3.setFromAxisAngle(_v2, THREE.MathUtils.degToRad(roll))
+      _q4.multiply(_q3)
+      _q3.setFromAxisAngle(ARRIBA, THREE.MathUtils.degToRad(yaw))
+      girarEnMundo(bones.head, _q4.multiply(_q3))
     }
 
     // ── antenas: resorte que se queda atrás de la cabeza y latiguea ──
@@ -896,7 +990,11 @@ export default function ZoidianNPC({
     }
     if (msg.cara !== undefined) d.cara = msg.cara
     if (msg.mirar !== undefined) d.mirar = msg.mirar
-    if (msg.accion) { try { ctrlRef.current?.forzar(msg.accion) } catch { } }
+    // Ya saludó al entrar Skulley a su radio (y sigue adentro: la escena solo abre
+    // ahí), así que el saludo del primer renglón no se repite (Oscar: "se ve raro");
+    // ese renglón lo dice hablando.
+    const yaSaludo = msg.accion === 'Saludo' && !saludoRef.current.lejos
+    if (msg.accion && !yaSaludo) { try { ctrlRef.current?.forzar(msg.accion) } catch { } }
   }), [])
   const reaccionar = (nombre, delay = 0) => {
     const go = () => { try { ctrlRef.current?.reaccionar(nombre) } catch { } }

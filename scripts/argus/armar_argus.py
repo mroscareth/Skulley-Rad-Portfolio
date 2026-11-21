@@ -591,6 +591,8 @@ def cara(arm=None, malla=None):
     soldados = _soldar_costuras(malla)
     print("COSTURAS", len(soldados))
     print("CAPAS", _pesar_capas(malla, fijos=soldados))
+    # al final: la soldadura con el collar le promediaba peso del cuello a la cara
+    print("CARA_SIN_CUELLO", _cara_sin_cuello(malla))
     _separar_parpados(malla)
     print("PANTALLA", _separar_pantalla(malla))
     arm["cara"] = json.dumps({
@@ -1021,6 +1023,50 @@ def _poner_peso(obj, i, nuevos):
 def _quitar_pesos(obj, i):
     for g in list(obj.data.vertices[i].groups):
         obj.vertex_groups[g.group].remove([i])
+
+
+def _cara_sin_cuello(malla, abajo=1.47, arriba=1.6):
+    """La barbilla y los lados de la quijada acababan con la mitad de su peso en el
+    cuello (la soldadura de costuras promedia la orilla de la cabeza con el collar,
+    que va con el cuello): al girar la cabeza esa parte se quedaba con el cuello y
+    la boca se veía torcida (Oscar). Va después de soldar y de las capas. En la pieza de la cabeza, arriba del collar
+    (`arriba`) el peso del cuello pasa a la cabeza y a la quijada (en la proporción
+    que ya tenía cada vértice); adentro del collar se queda (para que el cuello
+    doble suave) y en medio se reparte en rampa."""
+    me = malla.data
+    isla, miembros = _islas_de(me)
+    gi = {g.name: g.index for g in malla.vertex_groups}
+    gn = {g.index: g.name for g in malla.vertex_groups}
+    cuello, cabeza, quijada = gi.get("neck_04"), gi.get("head_05"), gi.get("quijada")
+    if cuello is None or cabeza is None:
+        return 0
+    # las piezas de la cabeza (piel, dientes, boca por dentro): las que en su mayoría
+    # van con la cabeza o la cara; las del cuello adentro del collar no se tocan
+    DE_CABEZA = ("head", "quijada", "ojo_", "parpado", "ceja", "comisura", "labio", "antena")
+    piezas = []
+    for k, ids in miembros.items():
+        dom = [gn[max(me.vertices[i].groups, key=lambda g: g.weight).group] for i in ids if me.vertices[i].groups]
+        if dom and sum(1 for d in dom if d.startswith(DE_CABEZA)) > 0.5 * len(dom):
+            piezas.extend(ids)
+    n = 0
+    for i in piezas:
+        v = me.vertices[i]
+        w = {g.group: g.weight for g in v.groups}
+        wc = w.get(cuello, 0.0)
+        if wc <= 0.0:
+            continue
+        t = _suave((v.co.z - abajo) / (arriba - abajo))
+        if t <= 0.0:
+            continue
+        pasa = wc * t
+        wh, wq = w.get(cabeza, 0.0), w.get(quijada, 0.0) if quijada is not None else 0.0
+        fq = wq / (wh + wq) if wh + wq > 1e-6 else 0.0
+        malla.vertex_groups[cuello].add([i], wc - pasa, "REPLACE")
+        malla.vertex_groups[cabeza].add([i], wh + pasa * (1 - fq), "REPLACE")
+        if quijada is not None and fq > 0:
+            malla.vertex_groups[quijada].add([i], wq + pasa * fq, "REPLACE")
+        n += 1
+    return n
 
 
 def _pesar_cara(malla, info, lids, antenas):
