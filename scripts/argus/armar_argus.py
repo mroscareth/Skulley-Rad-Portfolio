@@ -588,13 +588,22 @@ def cara(arm=None, malla=None):
 
     _pesar_cara(malla, info, lids, antenas)
     _giro_antebrazo(arm, malla)
-    soldados = _soldar_costuras(malla)
+    # antes de soldar (las orillas de la chamarra que la tocan se promedian con ella)
+    # y de las capas (la chamarra que queda debajo copia sus pesos)
+    # la banda primero: se reconoce por su peso del hombro izquierdo, que la cintura
+    # le quitaría
+    banda = _banda_semirrigida(malla)
+    print("BANDA", len(banda))
+    print("CINTURA", _cintura_sin_brazo(malla, excluir=banda))
+    print("CHAMARRA_BANDA", _chamarra_con_banda(malla, banda))
+    soldados = _soldar_costuras(malla, sin_brazo=banda)
     print("COSTURAS", len(soldados))
-    print("CAPAS", _pesar_capas(malla, fijos=soldados))
+    print("CAPAS", _pesar_capas(malla, fijos=soldados, sin_brazo=banda))
     # al final: la soldadura con el collar le promediaba peso del cuello a la cara
     print("CARA_SIN_CUELLO", _cara_sin_cuello(malla))
     _separar_parpados(malla)
     print("PANTALLA", _separar_pantalla(malla))
+    print("OJOS", _separar_ojos(malla))
     arm["cara"] = json.dumps({
         "cierres": cierres,
         "ojos": {l: {"c": list(o["c"]), "r": o["r"]} for l, o in info["ojos"].items()},
@@ -654,13 +663,16 @@ def _giro_antebrazo(arm, malla):
 COSTURA_PREF = ("shoulder", "upper_arm", "lower_arm", "antebrazo_giro", "chest", "spine", "neck", "hand")
 
 
-def _soldar_costuras(malla, radio=0.012, suavizar=0.05, pasadas=4):
+def _soldar_costuras(malla, radio=0.012, suavizar=0.05, pasadas=4, sin_brazo=()):
     """La malla de Sketchfab es de piezas sueltas (manga, hombrera, torso, guante...)
     con pesos distintos en sus orillas: al levantar el brazo la orilla de una pieza se
     separa de la otra y se ve el fondo por el hueco. Cada vértice de una orilla abierta
     toma los mismos pesos que el vértice más cercano de la otra pieza (el promedio de
     los dos), así se mueven juntos, y alrededor (SUAVIZAR) los pesos se suavizan para
-    que no quede un pliegue."""
+    que no quede un pliegue. Los vértices de `sin_brazo` (la banda del torso) no se
+    cosen con piezas del brazo: la punta de la banda en la cadera derecha queda a menos
+    de RADIO de la manga con el brazo abajo y heredaba su peso (en el saludo se iba
+    con el brazo)."""
     from mathutils.kdtree import KDTree
     me = malla.data
     isla, _ = _islas_de(me)
@@ -701,13 +713,24 @@ def _soldar_costuras(malla, radio=0.012, suavizar=0.05, pasadas=4):
             padre[x] = padre.get(padre[x], padre[x])
             x = padre[x]
         return x
+    sin_brazo = set(sin_brazo)
+    BRAZO = ("upper_arm", "lower_arm", "antebrazo")
+
+    def se_cosen(i, j):
+        if isla[j] == isla[i]:
+            return False
+        if i in sin_brazo and dom[j].startswith(BRAZO):
+            return False
+        if j in sin_brazo and dom[i].startswith(BRAZO):
+            return False
+        return True
     for i in region:
         if i not in orilla:
             continue
         mejor = None
         for _, k, d in kd.find_range(me.vertices[i].co, radio):
             j = region[k]
-            if isla[j] != isla[i] and (mejor is None or d < mejor[1]):
+            if se_cosen(i, j) and (mejor is None or d < mejor[1]):
                 mejor = (j, d)
         if mejor:
             ri, rj = raiz(i), raiz(mejor[0])
@@ -802,7 +825,7 @@ def _cubiertos(malla, alcance=0.05):
     return res
 
 
-def _pesar_capas(malla, pasadas=3, banda=0.03, suaves=4, fijos=()):
+def _pesar_capas(malla, pasadas=3, banda=0.03, suaves=4, fijos=(), sin_brazo=()):
     """La malla trae capas encimadas (la piel debajo de la chamarra, la chamarra debajo
     de otra) con pesos distintos: al subir el brazo la de abajo se salía por la de
     arriba (la mancha en la espalda, junto a la hombrera). Cada vértice tapado toma los
@@ -814,7 +837,24 @@ def _pesar_capas(malla, pasadas=3, banda=0.03, suaves=4, fijos=()):
     from mathutils.kdtree import KDTree
     me = malla.data
     fijos = set(fijos)
-    cub = {i: c for i, c in _cubiertos(malla).items() if i not in fijos}
+    gn = {g.index: g.name for g in malla.vertex_groups}
+    dom = {v.index: gn[max(v.groups, key=lambda g: g.weight).group] for v in me.vertices if v.groups}
+    BRAZO, TORSO = ("upper_arm", "lower_arm", "antebrazo"), ("chest", "spine", "hips")
+
+    sin_brazo = set(sin_brazo)
+
+    def brazo_encima(i, vs):
+        # el brazo que cuelga junto al costado no es una capa del torso: con él
+        # encima, la banda y la chamarra del costado copiaban su peso y en el saludo
+        # se iban con el brazo (Oscar). La banda (`sin_brazo`) no copia de ninguna
+        # cara que toque el brazo o el hombro derecho: la orilla de la manga le queda
+        # encima en la cadera y le pasaba hasta un tercio del peso del brazo
+        if i in sin_brazo:
+            return any(dom.get(j, "").startswith(BRAZO) or dom.get(j, "").startswith("shoulder.R") for j in vs)
+        return dom.get(i, "").startswith(TORSO) and all(dom.get(j, "").startswith(BRAZO) for j in vs)
+    todos = _cubiertos(malla)
+    cub = {i: c for i, c in todos.items() if i not in fijos and not brazo_encima(i, c[1])}
+    print("CAPAS_BRAZO_ENCIMA", sum(1 for i, c in todos.items() if i not in fijos and brazo_encima(i, c[1])))
 
     def pesos(i):
         return {g.group: g.weight for g in me.vertices[i].groups}
@@ -967,6 +1007,39 @@ def _quitar_ocultas(malla, imagen="Image_0"):
     return len(quitar)
 
 
+def _separar_ojos(malla):
+    """Los globos de los ojos y sus pupilas van en su propia malla: en el sitio se
+    dibujan planos (la banda de sombra del toon les ponía una mancha café en la
+    parte de abajo, Oscar) y con la pupila nítida (en la textura mide 6 x 10 px)."""
+    me = malla.data
+    isla, miembros = _islas_de(me)
+    gn = {g.index: g.name for g in malla.vertex_groups}
+    sel = set()
+    for k, ids in miembros.items():
+        dom = [gn[max(me.vertices[i].groups, key=lambda g: g.weight).group] for i in ids if me.vertices[i].groups]
+        if dom and sum(1 for d in dom if d.startswith("ojo_")) > 0.8 * len(dom):
+            sel.update(ids)
+    if not sel:
+        return 0
+    vl = bpy.context.view_layer
+    for o in bpy.data.objects:
+        o.select_set(False)
+    malla.select_set(True)
+    vl.objects.active = malla
+    for v in me.vertices:
+        v.select = v.index in sel
+    for e in me.edges:
+        e.select = all(i in sel for i in e.vertices)
+    for p in me.polygons:
+        p.select = all(i in sel for i in p.vertices)
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.separate(type="SELECTED")
+    bpy.ops.object.mode_set(mode="OBJECT")
+    nuevo = next(o for o in bpy.data.objects if o.type == "MESH" and o.name.startswith("Argus_malla") and o is not malla)
+    nuevo.name = nuevo.data.name = "Argus_ojos"
+    return len(sel)
+
+
 def _separar_pantalla(malla):
     """La carita de la mochila (el disco plano de enfrente, negro con las pastillas
     cian) va en su propia malla: en el sitio la dibuja un shader que mueve la mirada
@@ -1023,6 +1096,182 @@ def _poner_peso(obj, i, nuevos):
 def _quitar_pesos(obj, i):
     for g in list(obj.data.vertices[i].groups):
         obj.vertex_groups[g.group].remove([i])
+
+
+def _banda_semirrigida(malla, pasadas=24):
+    """La banda que cruza el torso (del hombro izquierdo a la cadera derecha, por
+    delante y por atrás) es ropa semirrígida, pero traía peso del hombro derecho y de
+    los brazos: al subir el brazo en el saludo la arrastraba y se pegaba a la piel
+    bajo la axila (Oscar). Ahora va con el pecho y la espalda, con el hombro
+    izquierdo solo donde pasa por encima de él, y los pesos se suavizan a lo largo de
+    la banda para que doble parejo."""
+    me = malla.data
+    isla, miembros = _islas_de(me)
+    gi = {g.name: g.index for g in malla.vertex_groups}
+    gn = {g.index: g.name for g in malla.vertex_groups}
+    hom_l, pecho, espalda = gi["shoulder.L_08"], gi["chest_03"], gi["spine_02"]
+    cadera = gi.get("hips_01")
+    P = [v.co for v in me.vertices]
+    mejor = None
+    for k, ids in miembros.items():
+        if not 700 < len(ids) < 1500:
+            continue
+        lo, hi = _caja(P, ids)
+        c, d = (lo + hi) / 2, hi - lo
+        if abs(c.x) > 0.15 or not 1.1 < c.z < 1.4 or not 0.9 < d.x < 1.3:
+            continue
+        dom = [max(me.vertices[i].groups, key=lambda g: g.weight).group for i in ids if me.vertices[i].groups]
+        f = sum(1 for g in dom if g == hom_l) / max(1, len(dom))
+        if mejor is None or f > mejor[1]:
+            mejor = (k, f)
+    if mejor is None or mejor[1] < 0.3:
+        return []
+    ids = miembros[mejor[0]]
+    TORSO = {pecho, espalda, hom_l} | ({cadera} if cadera is not None else set())
+
+    def sobre_hombro(v):
+        return v.co.z > 1.4 and v.co.x > 0.1
+    pesos = {}
+    for i in ids:
+        v = me.vertices[i]
+        w = {}
+        for g in v.groups:
+            gid = g.group
+            if gid == hom_l and not sobre_hombro(v):
+                gid = pecho
+            if gid not in TORSO:
+                gid = pecho if v.co.z > 1.2 else espalda
+            w[gid] = w.get(gid, 0.0) + g.weight
+        pesos[i] = w
+    vecinos = {i: [] for i in ids}
+    for e in me.edges:
+        a_, b_ = e.vertices
+        if a_ in vecinos and b_ in vecinos:
+            vecinos[a_].append(b_)
+            vecinos[b_].append(a_)
+    for _ in range(pasadas):
+        nuevos = {}
+        for i in ids:
+            acc = dict(pesos[i])
+            n = 1
+            for j in vecinos[i]:
+                for g, x in pesos[j].items():
+                    acc[g] = acc.get(g, 0.0) + x
+                n += 1
+            nuevos[i] = {g: x / n for g, x in acc.items()}
+        pesos = nuevos
+    for i in ids:
+        top = sorted(pesos[i].items(), key=lambda kv: -kv[1])[:4]
+        tot = sum(x for _, x in top) or 1.0
+        for g in list(me.vertices[i].groups):
+            malla.vertex_groups[g.group].remove([i])
+        for gid, x in top:
+            if x / tot > 1e-4:
+                malla.vertex_groups[gid].add([i], x / tot, "REPLACE")
+    return ids
+
+
+def _cintura_sin_brazo(malla, z0=1.25, z1=1.52, excluir=()):
+    """La chamarra y la piel del costado traían peso del hombro y del brazo hasta la
+    cintura (z 1.1): al subir el brazo en el saludo la tela de la cintura subía con él
+    hasta 16 cm, se estiraba desde la banda hasta la axila volteada hacia abajo y el
+    toon la pintaba negra (Oscar). Ahora el peso del hombro y del brazo en el torso se
+    apaga de z1 (cerca de la axila, donde la tela sí debe estirar) a z0, y lo que
+    queda pasa al pecho o a la espalda. No toca mangas ni brazos (dominados por el
+    brazo). Todo depende de la posición: los vértices de una costura cambian igual."""
+    me = malla.data
+    gi = {g.name: g.index for g in malla.vertex_groups}
+    gn = {g.index: g.name for g in malla.vertex_groups}
+    pecho, espalda = gi["chest_03"], gi["spine_02"]
+    BRAZO = ("upper_arm", "lower_arm", "antebrazo")
+    excluir = set(excluir)
+    n = 0
+    for v in me.vertices:
+        if not v.groups or v.co.z >= z1 or v.index in excluir:
+            continue
+        dom = gn[max(v.groups, key=lambda g: g.weight).group]
+        if dom.startswith(BRAZO) or not dom.startswith(CAPA_PREF):
+            continue
+        r = _suave((v.co.z - z0) / (z1 - z0))
+        w, quita = {}, 0.0
+        for g in v.groups:
+            nom = gn[g.group]
+            if nom.startswith(("shoulder", "upper_arm")):
+                w[g.group] = w.get(g.group, 0.0) + g.weight * r
+                quita += g.weight * (1.0 - r)
+            else:
+                w[g.group] = w.get(g.group, 0.0) + g.weight
+        if quita < 1e-4:
+            continue
+        dest = pecho if v.co.z > 1.2 else espalda
+        w[dest] = w.get(dest, 0.0) + quita
+        top = sorted(w.items(), key=lambda kv: -kv[1])[:4]
+        tot = sum(x for _, x in top) or 1.0
+        for g in list(v.groups):
+            malla.vertex_groups[g.group].remove([v.index])
+        for gid, x in top:
+            if x / tot > 1e-4:
+                malla.vertex_groups[gid].add([v.index], x / tot, "REPLACE")
+        n += 1
+    return n
+
+
+def _chamarra_con_banda(malla, banda, pegada=0.03, radio=0.16, z0=1.35, z1=1.45):
+    """La chamarra junto a la banda, bajo el brazo derecho y hasta la cintura, venía
+    con peso del hombro derecho: en el saludo subía hasta 13 cm mientras la banda se
+    quedaba con el torso, se deslizaban una contra otra y se asomaba lo oscuro que
+    está pintado bajo la orilla de la banda (Oscar). Ahora la chamarra alrededor de la
+    banda toma sus pesos, completos hasta `pegada` y soltándose hasta `radio`; lo que
+    estira al subir el brazo queda arriba, junto a la axila. Solo abajo de los hombros
+    (se apaga entre z0 y z1) y sin tocar mangas ni brazos. Va antes de soldar las
+    costuras: todo depende de la posición, así los vértices de una costura cambian
+    igual."""
+    from mathutils.kdtree import KDTree
+    if not banda:
+        return 0
+    me = malla.data
+    gn = {g.index: g.name for g in malla.vertex_groups}
+    bset = set(banda)
+    kd = KDTree(len(banda))
+    for k, i in enumerate(banda):
+        kd.insert(me.vertices[i].co, k)
+    kd.balance()
+    peso_banda = {i: {g.group: g.weight for g in me.vertices[i].groups} for i in banda}
+    cambios = {}
+    for v in me.vertices:
+        if v.index in bset or not v.groups:
+            continue
+        dom = gn[max(v.groups, key=lambda g: g.weight).group]
+        if not dom.startswith(CAPA_PREF) or dom.startswith(("upper_arm", "lower_arm", "antebrazo")):
+            continue
+        cerca = kd.find_n(v.co, 4)
+        d = cerca[0][2]
+        if d >= radio:
+            continue
+        f = 1.0 - _suave(min(1.0, max(0.0, (d - pegada) / (radio - pegada))))
+        f *= 1.0 - _suave(min(1.0, max(0.0, (v.co.z - z0) / (z1 - z0))))
+        if f <= 1e-3:
+            continue
+        # los pesos de la banda en ese punto: sus vértices más cercanos, por distancia
+        wb, tot = {}, 0.0
+        for _, k, dk in cerca:
+            a = 1.0 / max(dk, 1e-4)
+            tot += a
+            for g, x in peso_banda[banda[k]].items():
+                wb[g] = wb.get(g, 0.0) + x * a
+        w = {g.group: g.weight * (1.0 - f) for g in v.groups}
+        for g, x in wb.items():
+            w[g] = w.get(g, 0.0) + x / tot * f
+        cambios[v.index] = w
+    for i, w in cambios.items():
+        top = sorted(w.items(), key=lambda kv: -kv[1])[:4]
+        tot = sum(x for _, x in top) or 1.0
+        for g in list(me.vertices[i].groups):
+            malla.vertex_groups[g.group].remove([i])
+        for gid, x in top:
+            if x / tot > 1e-4:
+                malla.vertex_groups[gid].add([i], x / tot, "REPLACE")
+    return len(cambios)
 
 
 def _cara_sin_cuello(malla, abajo=1.47, arriba=1.6):
@@ -1539,7 +1788,7 @@ def exportar(ruta=SALIDA, comprimir=True):
     arm.animation_data.action = bpy.data.actions["Idle"]
     vl = bpy.context.view_layer
     for o in bpy.data.objects:
-        o.select_set(o.name in ("Argus", "Argus_malla", "Argus_parpados", "Argus_pantalla"))
+        o.select_set(o.name in ("Argus", "Argus_malla", "Argus_parpados", "Argus_pantalla", "Argus_ojos"))
     vl.objects.active = arm
     # la acción del original solo sirve de referencia
     viejo = bpy.data.actions.get("IdleOriginal")

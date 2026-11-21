@@ -100,6 +100,65 @@ const VISEMAS = {
 }
 // Las formas de boca abiertas salen más seguido que las cerradas: saltar de la A a
 // la M en cada sílaba se veía robótico (Oscar)
+// Para el contorno: normales promediadas por posición y un grosor por pieza (isla
+// conectada de la malla). En el espacio del GLB: X izquierda de Argus, Y arriba, Z al
+// frente. Las piezas de la boca por dentro van sin contorno y los dientes con uno
+// delgado (inflados con el grosor de todo el cuerpo eran picos negros entre los
+// dientes); lo muy chiquito (las pupilas) tampoco lleva.
+function prepararHull(geo) {
+  if (geo.attributes.normalSuave && geo.attributes.grosorHull) return
+  const pos = geo.attributes.position
+  const nor = geo.attributes.normal
+  const n = pos.count
+  const grupos = new Map()
+  const idx = new Int32Array(n)
+  const suma = []
+  for (let i = 0; i < n; i++) {
+    const k = `${Math.round(pos.getX(i) * 1e4)}|${Math.round(pos.getY(i) * 1e4)}|${Math.round(pos.getZ(i) * 1e4)}`
+    let g = grupos.get(k)
+    if (g === undefined) { g = suma.length / 3; grupos.set(k, g); suma.push(0, 0, 0) }
+    idx[i] = g
+    suma[g * 3] += nor.getX(i); suma[g * 3 + 1] += nor.getY(i); suma[g * 3 + 2] += nor.getZ(i)
+  }
+  const ns = new Float32Array(n * 3)
+  for (let i = 0; i < n; i++) {
+    const g = idx[i]
+    const x = suma[g * 3], y = suma[g * 3 + 1], z = suma[g * 3 + 2]
+    const l = Math.hypot(x, y, z) || 1
+    ns[i * 3] = x / l; ns[i * 3 + 1] = y / l; ns[i * 3 + 2] = z / l
+  }
+  geo.setAttribute('normalSuave', new THREE.BufferAttribute(ns, 3))
+  // islas: vértices unidos por los triángulos
+  const padre = new Int32Array(n)
+  for (let i = 0; i < n; i++) padre[i] = i
+  const raiz = (i) => { while (padre[i] !== i) { padre[i] = padre[padre[i]]; i = padre[i] } return i }
+  const une = (a, b) => { const ra = raiz(a), rb = raiz(b); if (ra !== rb) padre[ra] = rb }
+  const ind = geo.index
+  if (ind) for (let t = 0; t < ind.count; t += 3) { une(ind.getX(t), ind.getX(t + 1)); une(ind.getX(t), ind.getX(t + 2)) }
+  // el exportador parte los vértices en las costuras de UV: lo que comparte posición
+  // también es la misma pieza
+  const primero = new Int32Array(suma.length / 3).fill(-1)
+  for (let i = 0; i < n; i++) { const g = idx[i]; if (primero[g] < 0) primero[g] = i; else une(i, primero[g]) }
+  const cajas = new Map()
+  for (let i = 0; i < n; i++) {
+    const r = raiz(i)
+    let c = cajas.get(r)
+    if (!c) { c = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity]; cajas.set(r, c) }
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i)
+    if (x < c[0]) c[0] = x; if (y < c[1]) c[1] = y; if (z < c[2]) c[2] = z
+    if (x > c[3]) c[3] = x; if (y > c[4]) c[4] = y; if (z > c[5]) c[5] = z
+  }
+  const factor = new Map()
+  for (const [r, c] of cajas) {
+    const diag = Math.hypot(c[3] - c[0], c[4] - c[1], c[5] - c[2])
+    const cx = (c[0] + c[3]) / 2, cy = (c[1] + c[4]) / 2, cz = (c[2] + c[5]) / 2
+    const enBoca = Math.abs(cx) < 0.32 && cy > 1.6 && cy < 1.86 && cz > 0.25 && cz < 0.66 && diag < 0.5
+    factor.set(r, diag < 0.05 ? 0 : enBoca ? (diag < 0.14 ? 0.3 : 0) : 1)
+  }
+  const gr = new Float32Array(n)
+  for (let i = 0; i < n; i++) gr[i] = factor.get(raiz(i))
+  geo.setAttribute('grosorHull', new THREE.BufferAttribute(gr, 1))
+}
 const PESO_VISEMA = [['A', 0.24], ['E', 0.22], ['I', 0.12], ['O', 0.16], ['U', 0.08], ['M', 0.08], ['F', 0.1]]
 const canal = () => ({ x: 0, v: 0 })
 function crearBoca() {
@@ -235,21 +294,69 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
     const outlineMat = new THREE.MeshBasicMaterial({
       color: 0x000000, side: THREE.BackSide, transparent: false, depthWrite: true, depthTest: true, fog: false, toneMapped: false,
     })
+    // Se infla con normales promediadas por posición (las del modelo van partidas en
+    // las aristas duras y abrían picos) y con un grosor por pieza (`grosorHull`, ver
+    // prepararHull): los dientes delgado, la boca por dentro y lo muy chiquito sin
+    // contorno (Oscar: "el stroke se ve de muy mala calidad").
     outlineMat.onBeforeCompile = (shader) => {
       shader.uniforms.outlineThickness = { value: c.userData.__outlineThickness || 0.012 }
       c.userData.__outlineUniform = shader.uniforms.outlineThickness
-      shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>
-        uniform float outlineThickness;`)
-      shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', `#ifdef USE_SKINNING
-        transformed += normalize(objectNormal) * outlineThickness;
-        #else
-        transformed += normalize(normal) * outlineThickness;
-        #endif
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', `#include <common>
+        uniform float outlineThickness;
+        attribute vec3 normalSuave;
+        attribute float grosorHull;`)
+        .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = normalSuave;')
+        .replace('#include <project_vertex>', `transformed += normalize(objectNormal) * outlineThickness * grosorHull;
         #include <project_vertex>`)
     }
+    outlineMat.customProgramCacheKey = () => 'contornoArgus2'
     const skinnedMeshes = []
     c.traverse((o) => {
       if (!(o.isMesh || o.isSkinnedMesh)) return
+      if (o.name.includes('ojos')) {
+        // los ojos: planos, sin la banda de sombra del toon (les dejaba una mancha café
+        // abajo, Oscar) y con la pupila de orilla nítida (en la textura mide 6 x 10 px y
+        // de cerca se estiraba borrosa): lo oscuro de la textura se vuelve negro con un
+        // corte del ancho de un pixel de pantalla, así conserva su forma
+        const base = Array.isArray(o.material) ? o.material[0] : o.material
+        const m = new THREE.MeshBasicMaterial({ map: base.map, color: new THREE.Color(0.94, 0.94, 0.94) })
+        m.name = 'OjosArgus'
+        m.onBeforeCompile = (shader) => {
+          shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', `
+            #ifdef USE_MAP
+              // B-spline cúbica con 4 lecturas bilineales: con la bilineal sola la orilla
+              // de la pupila salía en escalones de pixel
+              vec2 tam = vec2(textureSize(map, 0));
+              vec2 p = vMapUv * tam - 0.5;
+              vec2 f = fract(p);
+              vec2 f2 = f * f, f3 = f2 * f;
+              vec2 w0 = (1.0 - 3.0 * f + 3.0 * f2 - f3) / 6.0;
+              vec2 w1 = (4.0 - 6.0 * f2 + 3.0 * f3) / 6.0;
+              vec2 w2 = (1.0 + 3.0 * f + 3.0 * f2 - 3.0 * f3) / 6.0;
+              vec2 w3 = f3 / 6.0;
+              vec2 g0 = w0 + w1, g1 = w2 + w3;
+              vec2 base0 = (floor(p) - 0.5 + w1 / g0) / tam;
+              vec2 base1 = (floor(p) + 1.5 + w3 / g1) / tam;
+              vec4 texel = g0.y * (g0.x * texture2D(map, vec2(base0.x, base0.y)) + g1.x * texture2D(map, vec2(base1.x, base0.y)))
+                + g1.y * (g0.x * texture2D(map, vec2(base0.x, base1.y)) + g1.x * texture2D(map, vec2(base1.x, base1.y)));
+              float lum = dot(texel.rgb, vec3(0.299, 0.587, 0.114));
+              float aa = max(fwidth(lum), 1e-4);
+              // lo que queda entre la pupila y el amarillo (el halo que deja estirar 6 x 10
+              // px) regresa al amarillo; el corte va a la mitad, así la pupila mide lo que
+              // en la textura
+              vec3 claro = texel.rgb * max(1.0, 0.62 / max(lum, 0.05));
+              texel.rgb = mix(vec3(0.012), claro, smoothstep(0.36 - aa, 0.36 + aa, lum));
+              diffuseColor *= texel;
+            #endif`)
+        }
+        m.customProgramCacheKey = () => 'ojosArgus2'
+        o.material = m
+        o.frustumCulled = false
+        o.raycast = () => { }
+        skinnedMeshes.push(o)
+        return
+      }
       if (o.name.includes('pantalla')) {
         // la carita de la mochila: su propio shader (sin toon ni contorno)
         o.material = crearMaterialMochila(o.geometry)
@@ -272,6 +379,7 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
     // los párpados (su propia malla) no llevan contorno: escondidos en la cuenca, su
     // contorno se salía de la piel como mancha negra
     for (const o of skinnedMeshes.filter((m) => !m.name.includes('parpado') && !m.name.includes('pantalla'))) {
+      prepararHull(o.geometry)
       const hull = new THREE.SkinnedMesh(o.geometry, outlineMat)
       hull.name = `${o.name || 'zoid'}_outline`
       hull.bindMode = o.bindMode
