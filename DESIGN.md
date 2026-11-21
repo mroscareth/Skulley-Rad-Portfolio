@@ -478,7 +478,9 @@ Hoy hay valores dispersos (1, 10, 11, 20, 30, 40, 45, **999990**, **9999999**). 
 
 ### 9.1 Librería
 
-**`@heroicons/react/24/solid`** como estándar único. No mezclar con lucide, feather, etc.
+**Tinta sólida (desde 2026-11-21):** los botones flotantes del sitio (puertas, pie de la versión simple, menú, renglón de la pantalla principal, audio del teléfono, idioma y bocina de la barra de secciones) usan `IconoTinta` (`src/components/ui/IconoTinta.jsx`, definiciones en `src/lib/iconosTinta.js`): formas vectoriales en retícula de 24, giradas en 3D con su costado de un solo negro, contorno de 2.2 % del tamaño, detalles más finos que el contorno y sin brillos. La fuente de diseño es `diseno/iconos-tinta/iconos-tinta.ai` (Oscar los ajusta ahí; los que vienen de Illustrator llevan `ilustrador: true` y se pintan con trazo centrado). Esos botones son teclas: `.burbuja-vidrio` / `.msh-btn--vidrio` ya no son vidrio sino tecla de tinta (cara plana, borde de 2 px, costado de 5 px que crece al pasar el mouse y se aplasta al presionar; bloque "TINTA SÓLIDA" al final de `index.css`). Pendiente de la fase 1: el carrito y la cuenta de arriba a la derecha, la barra de Customize, la barra del teléfono y el retrato. El resto de la UI y el CMS siguen con Heroicons.
+
+**`@heroicons/react/24/solid`** como estándar único fuera de lo de arriba. No mezclar con lucide, feather, etc.
 
 Iconos más usados: `PlayIcon`, `PauseIcon`, `XMarkIcon`, `ChevronLeft/Right/Up/DownIcon`, `BoltIcon`, `MusicalNoteIcon`, `PlusIcon`, `PencilSquareIcon`, `TrashIcon`, `EyeIcon`, `EyeSlashIcon`, `Cog6ToothIcon`, `InformationCircleIcon`, `UserCircleIcon`, `Bars3Icon`.
 

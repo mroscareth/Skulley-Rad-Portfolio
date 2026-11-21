@@ -1,5 +1,5 @@
 import React from 'react'
-import { SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/react/24/solid'
+import IconoTinta from '../ui/IconoTinta.jsx'
 import { playSfx } from '../../lib/sfx.js'
 import { sectionColors } from '../../lib/appHelpers.js'
 
@@ -12,9 +12,11 @@ const emitPortalHover = (id) => {
   try { window.dispatchEvent(new CustomEvent('portal-hover', { detail: { id, source: 'nav' } })) } catch { }
 }
 
-// Desktop bottom-center section nav with hover highlight + language + la bocina
-// (lib/silencioSitio.js: calla la música y los efectos; la música se abre con
-// el botón amarillo del retrato).
+// Desktop bottom-center section nav + language + la bocina (lib/silencioSitio.js:
+// calla la música y los efectos; la música se abre con el botón amarillo del
+// retrato). Tinta sólida (2026-11-21): una placa plana con los nombres impresos;
+// el que señalas y la sección activa se levantan como tecla en el color de su
+// sección (.nav-tinta en index.css). El idioma y la bocina son teclas.
 // Presentational. App owns nav state (`navRef`, `navInnerRef`, `navBtnRefs`,
 // `navHover` + `updateNavHighlightForEl`) and passes them as props.
 export default function DesktopNav({
@@ -29,12 +31,10 @@ export default function DesktopNav({
   onSelectSection,
   onToggleSilencio,
   onToggleLang,
-  lang,
   t,
   navRef,
   navInnerRef,
   navBtnRefs,
-  navHover,
   setNavHover,
   updateNavHighlightForEl,
 }) {
@@ -48,78 +48,47 @@ export default function DesktopNav({
       className="pointer-events-auto fixed inset-x-0 bottom-10 z-[999991] flex items-center justify-center"
       inert={juego === 'oculta'}
     >
-      {/* La animación (transform) va en el MISMO div del backdrop: un transform
-          PROPIO no rompe el backdrop-filter, pero uno de un ANCESTRO sí. Antes
-          el animClass estaba en el wrapper exterior → rompía el blur de la nav
-          durante cada entrada/salida (parpadeo "negro transparente"). */}
-      <div
-        ref={navInnerRef}
-        className={`relative bg-black/35 backdrop-blur-3xl rounded-full border border-white/[0.12] shadow-[0_8px_32px_rgba(0,0,0,0.5)] p-2 flex items-center gap-0.5 overflow-hidden ${animClass}`}
-      >
-        {/* Hover highlight */}
-        <div
-          className={`absolute rounded-full bg-white/[0.08] transition-all duration-200 ${navHover.visible ? 'opacity-100' : 'opacity-0'}`}
-          style={{ left: `${navHover.left}px`, width: `${navHover.width}px`, top: '8px', bottom: '8px' }}
-        />
-        {sections.map((id) => {
-          const isActive = showSectionUi && section === id
-          const sColor = sectionColors[id] || '#fff'
-          return (
-            <button
-              key={id}
-              type="button"
-              ref={(el) => { if (el) navBtnRefs.current[id] = el }}
-              onMouseEnter={(e) => { updateNavHighlightForEl(e.currentTarget); emitPortalHover(id); try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-              onFocus={(e) => { updateNavHighlightForEl(e.currentTarget); emitPortalHover(id) }}
-              onMouseLeave={() => { setNavHover((h) => ({ ...h, visible: false })); emitPortalHover(null) }}
-              onBlur={() => { setNavHover((h) => ({ ...h, visible: false })); emitPortalHover(null) }}
-              onClick={() => onSelectSection(id)}
-              className={`relative z-[1] px-3 py-2 rounded-full text-base sm:text-lg font-marquee uppercase tracking-wide transition-all duration-200 text-white`}
-              style={isActive ? {
-                background: `color-mix(in srgb, ${sColor} 18%, transparent)`,
-                boxShadow: `0 0 12px color-mix(in srgb, ${sColor} 25%, transparent)`,
-                textShadow: `0 0 10px ${sColor}`,
-              } : {}}
-            >
-              {sectionLabel[id]}
-              {/* Active section indicator dot */}
-              {isActive && (
-                <span
-                  className="absolute left-1/2 -translate-x-1/2 -bottom-0.5 h-[3px] w-5 rounded-full animate-section-dot"
-                  style={{ background: sColor }}
-                />
-              )}
-            </button>
-          )
-        })}
-        {/* Language switch */}
-        <div className="mx-1 h-5 w-px bg-white/[0.12]" />
+      <div ref={navInnerRef} className={`nav-tinta ${animClass}`}>
+        <div className="nav-tinta__placa">
+          {sections.map((id) => {
+            const isActive = showSectionUi && section === id
+            const sColor = sectionColors[id] || '#fff'
+            return (
+              <button
+                key={id}
+                type="button"
+                ref={(el) => { if (el) navBtnRefs.current[id] = el }}
+                onMouseEnter={(e) => { updateNavHighlightForEl(e.currentTarget); emitPortalHover(id); try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+                onFocus={(e) => { updateNavHighlightForEl(e.currentTarget); emitPortalHover(id) }}
+                onMouseLeave={() => { setNavHover((h) => ({ ...h, visible: false })); emitPortalHover(null) }}
+                onBlur={() => { setNavHover((h) => ({ ...h, visible: false })); emitPortalHover(null) }}
+                onClick={() => onSelectSection(id)}
+                className={`nav-tinta__item font-marquee${isActive ? ' es-activa' : ''}`}
+                style={{ '--cara-encima': sColor }}
+                aria-current={isActive ? 'page' : undefined}
+              >
+                {sectionLabel[id]}
+              </button>
+            )
+          })}
+        </div>
         <button
           type="button"
           onClick={onToggleLang}
-          onMouseEnter={(e) => { updateNavHighlightForEl(e.currentTarget); try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-          onFocus={(e) => updateNavHighlightForEl(e.currentTarget)}
-          onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
-          onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
-          className="relative z-[1] px-2.5 py-2 rounded-full bg-transparent text-white hover:text-white text-base sm:text-lg font-marquee uppercase tracking-wide transition-colors"
+          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+          className="burbuja-vidrio nav-tinta__tecla font-marquee"
           aria-label={t('common.switchLanguage')}
           data-tip={t('common.switchLanguage')}
         >{t('nav.langShort')}</button>
-        <div className="mx-0.5 h-5 w-px bg-white/[0.12]" />
         <button
           type="button"
           onClick={onToggleSilencio}
-          onMouseEnter={(e) => { updateNavHighlightForEl(e.currentTarget); try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-          onFocus={(e) => updateNavHighlightForEl(e.currentTarget)}
-          onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
-          onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
-          className="relative z-[1] px-2.5 py-2 rounded-full text-white transition-colors hover:bg-white/[0.08]"
+          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+          className="burbuja-vidrio nav-tinta__tecla"
           aria-label={silencio ? t('nav.unmute') : t('nav.mute')}
           data-tip={silencio ? t('nav.unmute') : t('nav.mute')}
         >
-          {silencio
-            ? <SpeakerXMarkIcon className="w-5 h-5" aria-hidden />
-            : <SpeakerWaveIcon className="w-5 h-5" aria-hidden />}
+          <IconoTinta nombre={silencio ? 'mudo' : 'bocina'} tam={34} />
         </button>
       </div>
     </div>

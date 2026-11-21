@@ -1,11 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react'
-import { HomeIcon, MusicalNoteIcon, PlayIcon, ShoppingCartIcon, UserIcon } from '@heroicons/react/24/solid'
+import IconoTinta from '../ui/IconoTinta.jsx'
 import { useTituloOrilla } from '../../hooks/useTituloOrilla.js'
 import { useGlitchRunas, useGlitchSolo, textoGlitch } from '../../hooks/useGlitchRunas.js'
 import { useShopData } from '../../lib/shopDataContext.jsx'
 import { transformApiProject } from '../work/WorkCard.jsx'
 import { SOCIAL_LINKS } from '../NavOverlay.jsx'
-import GamepadIcon from '../icons/GamepadIcon.jsx'
 
 // La home de la versión rápida de escritorio (la segunda puerta del preloader
 // de scroll). De la referencia de Oscar (auge-xp.com) se tomaron la estructura
@@ -590,7 +589,7 @@ export default function QuickHome({ lang, onAbrirPieza, onIdioma, onCarrito, onC
               aria-label={es ? 'Música' : 'Music'}
               data-tip={es ? 'Música' : 'Music'}
             >
-              <MusicalNoteIcon className="w-5 h-5" />
+              <IconoTinta nombre="nota" tam={34} />
             </button>
           </span>
         </span>
@@ -618,8 +617,8 @@ export default function QuickHome({ lang, onAbrirPieza, onIdioma, onCarrito, onC
               data-tip={autenticado ? (es ? 'Mi cuenta' : 'My account') : 'Login'}
             >
               {cargandoCuenta && !autenticado
-                ? <span className="block w-5 h-5 border-2 border-white/70 border-t-transparent rounded-full animate-spin" aria-hidden />
-                : <UserIcon className="w-5 h-5" />}
+                ? <span className="block w-5 h-5 border-2 border-[#0a0510]/70 border-t-transparent rounded-full animate-spin" aria-hidden />
+                : <IconoTinta nombre="usuario" tam={34} />}
               {autenticado && (
                 <span className="absolute bottom-1.5 right-1.5 w-[9px] h-[9px] rounded-full bg-green-500 ring-2 ring-[#0a0510] pointer-events-none" />
               )}
@@ -635,9 +634,9 @@ export default function QuickHome({ lang, onAbrirPieza, onIdioma, onCarrito, onC
               aria-label={es ? 'Abrir carrito' : 'Open cart'}
               data-tip={es ? 'Carrito' : 'Cart'}
             >
-              <ShoppingCartIcon className="w-5 h-5" />
+              <IconoTinta nombre="carrito" tam={34} />
               {totalCarrito > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 grid place-items-center rounded-full bg-white text-black text-[10px] font-black">
+                <span className="absolute -top-2 -right-2 min-w-[20px] h-[20px] px-1 grid place-items-center rounded-full bg-amarillo text-[#0a0510] border-2 border-[#0a0510] text-[10px] font-black">
                   {totalCarrito}
                 </span>
               )}
@@ -658,7 +657,7 @@ export default function QuickHome({ lang, onAbrirPieza, onIdioma, onCarrito, onC
             onClick={onInicio}
             aria-label={es ? 'Volver al inicio' : 'Back to start'}
           >
-            <HomeIcon className="puerta-modo-icono" />
+            <IconoTinta nombre="casa" tam={32} className="puerta-modo-icono" />
             <span className="puerta-modo-texto" aria-hidden="true">{es ? 'Volver al inicio' : 'Back to start'}</span>
           </button>
         )}
@@ -669,7 +668,7 @@ export default function QuickHome({ lang, onAbrirPieza, onIdioma, onCarrito, onC
             onClick={onHistoria}
             aria-label={es ? 'Conocer la historia' : 'Watch the story'}
           >
-            <PlayIcon className="puerta-modo-icono" />
+            <IconoTinta nombre="play" tam={32} className="puerta-modo-icono" />
             <span className="puerta-modo-texto" aria-hidden="true">{es ? 'Conocer la historia' : 'Watch the story'}</span>
           </button>
         )}
@@ -680,7 +679,7 @@ export default function QuickHome({ lang, onAbrirPieza, onIdioma, onCarrito, onC
             onClick={onCompleta}
             aria-label={es ? 'Lanzar experiencia completa' : 'Launch full experience'}
           >
-            <GamepadIcon className="puerta-modo-icono" />
+            <IconoTinta nombre="control" tam={32} className="puerta-modo-icono" />
             <span className="puerta-modo-texto" aria-hidden="true">{es ? 'Lanzar experiencia completa' : 'Launch full experience'}</span>
           </button>
         )}

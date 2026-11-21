@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react'
-import { Bars3Icon, XMarkIcon } from '@heroicons/react/24/solid'
+import IconoTinta from '../ui/IconoTinta.jsx'
 import NavOverlay from '../NavOverlay.jsx'
 import useMenuAnimation from '../../hooks/useMenuAnimation.js'
 
@@ -44,13 +44,13 @@ export default function QuickMenu({ sections = [], labels = {}, onIr, lang, t, a
         <span className="qm-flota">
           <button
             type="button"
-            className={`qm-boton h-12 w-12 rounded-full grid place-items-center ${abierto ? 'shadow-elev-lg border bg-white border-white text-black transition-colors duration-200' : 'burbuja-vidrio'}`}
+            className="qm-boton h-12 w-12 grid place-items-center burbuja-vidrio"
             onClick={() => (abierto ? close() : open())}
             aria-expanded={abierto ? 'true' : 'false'}
             aria-controls="nav-overlay"
             aria-label={abierto ? (es ? 'Cerrar menú' : 'Close menu') : (es ? 'Abrir menú' : 'Open menu')}
           >
-            {abierto ? <XMarkIcon className="w-5 h-5" /> : <Bars3Icon className="w-5 h-5" />}
+            <IconoTinta nombre={abierto ? 'cerrar' : 'menu'} tam={32} />
           </button>
         </span>
       </div>

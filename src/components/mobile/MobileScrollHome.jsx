@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { CameraIcon, ChevronDownIcon, ForwardIcon, PlayIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/react/24/solid'
+import { CameraIcon, ChevronDownIcon, ForwardIcon, PlayIcon } from '@heroicons/react/24/solid'
+import IconoTinta from '../ui/IconoTinta.jsx'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { sectionColors } from '../../lib/appHelpers.js'
 import { clicDeSpa, sectionToPath } from '../../lib/sectionRouting.js'
@@ -671,16 +672,16 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
                 <div className="msh-audio" role="group" aria-label={lang === 'es' ? 'Audio' : 'Sound'}>
                   {/* Arriba de las dos, a lo ancho de ellas: la historia
                       enciende el sonido y al terminar regresa aquí. */}
-                  <button type="button" className="shop-btn shop-btn--primary msh-btn msh-btn--audio msh-btn--historia" onClick={historia.verHistoria} onPointerDown={historia.prepararVoz} onFocus={historia.prepararVoz}>
-                    <PlayIcon className="w-5 h-5" aria-hidden="true" />
+                  <button type="button" className="shop-btn shop-btn--primary msh-btn msh-btn--audio msh-btn--historia burbuja-vidrio tecla-amarilla" onClick={historia.verHistoria} onPointerDown={historia.prepararVoz} onFocus={historia.prepararVoz}>
+                    <IconoTinta nombre="play" tam={28} />
                     {lang === 'es' ? 'Conocer la historia' : 'Watch the story'}
                   </button>
                   <button type="button" className="shop-btn msh-btn msh-btn--audio msh-btn--vidrio" onClick={() => onElegirAudio?.(false)}>
-                    <SpeakerXMarkIcon className="w-5 h-5" aria-hidden="true" />
+                    <IconoTinta nombre="mudo" tam={28} />
                     {lang === 'es' ? 'Sin audio' : 'No sound'}
                   </button>
                   <button type="button" className="shop-btn msh-btn msh-btn--audio msh-btn--vidrio msh-btn--con-audio" onClick={() => onElegirAudio?.(true)}>
-                    <SpeakerWaveIcon className="w-5 h-5" aria-hidden="true" />
+                    <IconoTinta nombre="bocina" tam={28} />
                     {lang === 'es' ? 'Con audio' : 'Sound on'}
                   </button>
                 </div>

@@ -7477,3 +7477,168 @@ div:has(> #privy-dialog-backdrop) {
 }
 .dlg-raiz.is-quieto .trato-muestra,
 .dlg-raiz.is-quieto .trato-muestra__orbe { animation: none; }
+
+/* ============================================================
+   TINTA SÓLIDA (2026-11-21, propuesta aprobada por Oscar)
+   El vidrio de los botones flotantes se vuelve tecla de tinta: cara plana,
+   contorno de 2 px y un costado de 5 px que crece con el mouse y se aplasta
+   al presionar. Se quedan los nombres .burbuja-vidrio y .msh-btn--vidrio
+   para no tocar cada componente que los usa. Los íconos son IconoTinta
+   (lib/iconosTinta.js).
+   ============================================================ */
+.icono-tinta { display: inline-block; flex: none; line-height: 0; }
+.icono-tinta > svg { display: block; width: 100%; height: 100%; overflow: visible; }
+
+.burbuja-vidrio,
+.msh-btn--vidrio {
+  --alto: 5px;
+  position: relative;
+  color: #0a0510;
+  background: #ffffff;
+  border: 2px solid #0a0510;
+  border-radius: 14px;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: 0 var(--alto) 0 0 #0a0510;
+  transform: translateY(calc(var(--alto) * -1));
+  transition: transform 160ms var(--ease-spring), box-shadow 160ms var(--ease-spring), background-color 120ms linear;
+}
+.burbuja-vidrio::before,
+.burbuja-vidrio::after { content: none; }
+.shop-btn.burbuja-vidrio,
+.shop-btn.msh-btn--vidrio {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  padding-top: 0.15em;
+}
+.shop-btn.burbuja-vidrio .icono-tinta,
+.shop-btn.msh-btn--vidrio .icono-tinta { margin-top: -0.15em; }
+.tecla-amarilla.burbuja-vidrio { background: var(--amarillo); border-color: #0a0510; }
+@media (hover: hover) and (pointer: fine) {
+  .burbuja-vidrio:hover,
+  .msh-btn--vidrio:hover,
+  .dsp-boton.burbuja-vidrio:hover {
+    --alto: 7px;
+    background: #ffffff;
+    transform: translateY(-7px);
+    filter: none;
+  }
+  .tecla-amarilla.burbuja-vidrio:hover { background: var(--amarillo-claro); border-color: #0a0510; }
+}
+.burbuja-vidrio:active,
+.msh-btn--vidrio:active {
+  --alto: 1px;
+  transform: translateY(-1px);
+  transition-duration: 60ms;
+  filter: none;
+}
+.burbuja-vidrio:focus-visible,
+.msh-btn--vidrio:focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: 4px;
+}
+/* Una tecla está puesta sobre algo: ya no flotan como burbujas. */
+.qh-burbuja-flota,
+.qm-flota { animation: none; }
+
+/* Las puertas (Volver al inicio, la historia y la otra versión) también son
+   teclas; se siguen abriendo con el texto al pasar el mouse. */
+.puertas .puerta-modo {
+  --alto: 5px;
+  height: 3.25rem;
+  max-width: 3.25rem;
+  padding: 0 0.5rem;
+  gap: 0.5rem;
+  border: 2px solid #0a0510;
+  border-radius: 14px;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  box-shadow: 0 var(--alto) 0 0 #0a0510;
+  transform: translateY(calc(var(--alto) * -1));
+  transition: max-width 460ms var(--ease-expo-out), padding 460ms var(--ease-expo-out),
+    background-color 160ms linear, transform 160ms var(--ease-spring), box-shadow 160ms var(--ease-spring);
+}
+.puertas .puerta-modo .puerta-modo-texto { padding-top: 0.15em; }
+.puertas .puerta-modo.puerta-inicio { background: #ffffff; color: #0a0510; }
+.puertas .puerta-modo:hover,
+.puertas .puerta-modo:focus-visible {
+  --alto: 7px;
+  max-width: 24rem;
+  padding-right: 1.1rem;
+  transform: translateY(-7px);
+  filter: none;
+}
+.puertas .puerta-modo.puerta-inicio:hover,
+.puertas .puerta-modo.puerta-inicio:focus-visible { background: #ffffff; transform: translateY(-7px); }
+.puertas .puerta-modo:active { --alto: 1px; transform: translateY(-1px); transition-duration: 60ms; }
+
+/* La barra de secciones de escritorio: placa plana con los nombres impresos;
+   el que señalas y la sección activa se levantan en el color de su sección. */
+.nav-tinta {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+.nav-tinta__placa {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 9px 8px 6px;
+  border-radius: 18px;
+  background: #18205a;
+}
+.nav-tinta__item {
+  --alto: 0px;
+  --cara-encima: #ffffff;
+  min-height: 44px;
+  padding: 0.2em 0.85rem 0;
+  font-size: 1.125rem;
+  line-height: 1;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #ffffff;
+  background: transparent;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  box-shadow: 0 var(--alto) 0 0 #0a0510;
+  transform: translateY(calc(var(--alto) * -1));
+  transition: transform 160ms var(--ease-spring), box-shadow 160ms var(--ease-spring),
+    background-color 120ms linear, color 120ms linear, border-color 120ms linear;
+}
+.nav-tinta__item.es-activa,
+.nav-tinta__item:focus-visible {
+  --alto: 5px;
+  background: var(--cara-encima);
+  color: #0a0510;
+  border-color: #0a0510;
+  transform: translateY(-5px);
+}
+@media (hover: hover) and (pointer: fine) {
+  .nav-tinta__item:hover {
+    --alto: 5px;
+    background: var(--cara-encima);
+    color: #0a0510;
+    border-color: #0a0510;
+    transform: translateY(-5px);
+    filter: none;
+  }
+}
+.nav-tinta__item:active { --alto: 1px; transform: translateY(-1px); transition-duration: 60ms; }
+.nav-tinta__item:focus-visible { outline: 3px solid #ffffff; outline-offset: 4px; }
+.nav-tinta__tecla {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  padding: 0.12em 0 0;
+  font-size: 1.05rem;
+  letter-spacing: 0.03em;
+}
+.nav-tinta__tecla .icono-tinta { margin-top: -0.12em; }
+
+@media (prefers-reduced-motion: reduce) {
+  .burbuja-vidrio, .msh-btn--vidrio, .puertas .puerta-modo, .nav-tinta__item { transition: background-color 120ms linear, color 120ms linear; }
+}

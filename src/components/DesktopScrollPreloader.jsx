@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { CameraIcon, ForwardIcon, PlayIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/react/24/solid'
+import { CameraIcon, ForwardIcon, PlayIcon } from '@heroicons/react/24/solid'
 import BarraHistoria from './BarraHistoria.jsx'
+import IconoTinta from './ui/IconoTinta.jsx'
 import { fotoDeHistoria } from '../lib/fotoHistoria.js'
 import GlitchName, { DESCRIPCION_HOME, finDeRunas } from './GlitchName.jsx'
 import useTitulosAjustados from '../hooks/useTitulosAjustados.js'
@@ -448,13 +449,15 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
         <div className="dsp-botones">
           <BurbujaIdioma lang={lang} setLang={setLang} inert={!enInicio} />
           <button ref={botonHistoriaRef} type="button" className="shop-btn msh-btn dsp-boton burbuja-vidrio" onClick={verHistoria} onPointerEnter={prepararVoz} onFocus={prepararVoz}>
-            <PlayIcon aria-hidden="true" />
+            <IconoTinta nombre="play" tam={30} />
             {es ? 'Conocer la historia' : 'Watch the story'}
           </button>
-          <button type="button" className="shop-btn shop-btn--primary msh-btn dsp-boton" onClick={() => salir('completa')}>
+          <button type="button" className="shop-btn shop-btn--primary msh-btn dsp-boton burbuja-vidrio tecla-amarilla" onClick={() => salir('completa')}>
+            <IconoTinta nombre="control" tam={32} />
             {es ? 'Experiencia completa' : 'Full experience'}
           </button>
           <button type="button" className="shop-btn msh-btn dsp-boton burbuja-vidrio" onClick={() => salir('simple')}>
+            <IconoTinta nombre="cuadricula" tam={28} />
             {es ? 'Versión simple' : 'Simple version'}
           </button>
           <span className="dsp-sonido">
@@ -467,7 +470,7 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
                 aria-label={conSonido ? (es ? 'Quitar el sonido' : 'Mute') : (es ? 'Con sonido' : 'Sound on')}
                 data-tip={conSonido ? (es ? 'Quitar el sonido' : 'Mute') : (es ? 'Con sonido' : 'Sound on')}
               >
-                {conSonido ? <SpeakerWaveIcon aria-hidden="true" /> : <SpeakerXMarkIcon aria-hidden="true" />}
+                <IconoTinta nombre={conSonido ? 'bocina' : 'mudo'} tam={34} />
               </button>
             </span>
           </span>

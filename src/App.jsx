@@ -113,7 +113,8 @@ const DialogoMadre = lazy(importDialogoMadre)
 // Los avisos de las trampas, con la cara del diálogo de M.A.D.R.E.
 const importAvisoMadre = () => import('./components/drone/AvisoMadre.jsx')
 const AvisoMadre = lazy(importAvisoMadre)
-import { HomeIcon, MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon, UserIcon, UserCircleIcon, ArrowRightOnRectangleIcon, ArrowLeftIcon, SwatchIcon, ShoppingCartIcon, BackwardIcon, Squares2X2Icon, PlayIcon } from '@heroicons/react/24/solid'
+import IconoTinta from './components/ui/IconoTinta.jsx'
+import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon, UserIcon, UserCircleIcon, ArrowRightOnRectangleIcon, ArrowLeftIcon, SwatchIcon, ShoppingCartIcon, BackwardIcon } from '@heroicons/react/24/solid'
 import { playSfx, preloadSfx, unlockSfx } from './lib/sfx.js'
 import { silenciarSitio, useSilencioSitio } from './lib/silencioSitio.js'
 import useGlobalSfx from './hooks/useGlobalSfx.js'
@@ -3575,7 +3576,7 @@ function SiteApp() {
               onClick={irAlInicio}
               aria-label={lang === 'es' ? 'Volver al inicio' : 'Back to start'}
             >
-              <HomeIcon className="puerta-modo-icono" />
+              <IconoTinta nombre="casa" tam={32} className="puerta-modo-icono" />
               <span className="puerta-modo-texto" aria-hidden="true">{lang === 'es' ? 'Volver al inicio' : 'Back to start'}</span>
             </button>
             {/* La historia de M.A.D.R.E., con el Skulley que se ve (abrirHistoria). */}
@@ -3585,7 +3586,7 @@ function SiteApp() {
               onClick={abrirHistoria}
               aria-label={lang === 'es' ? 'Conocer la historia' : 'Watch the story'}
             >
-              <PlayIcon className="puerta-modo-icono" />
+              <IconoTinta nombre="play" tam={32} className="puerta-modo-icono" />
               <span className="puerta-modo-texto" aria-hidden="true">{lang === 'es' ? 'Conocer la historia' : 'Watch the story'}</span>
             </button>
             <button
@@ -3596,7 +3597,7 @@ function SiteApp() {
             >
               {/* Una cuadrícula de tarjetas: el portafolio sin el juego (Oscar pidió algo
                   que dijera versión simplificada; la otra puerta es el control). */}
-              <Squares2X2Icon className="puerta-modo-icono" />
+              <IconoTinta nombre="cuadricula" tam={32} className="puerta-modo-icono" />
               <span className="puerta-modo-texto" aria-hidden="true">{lang === 'es' ? 'Cambiar a versión simple' : 'Switch to simple version'}</span>
             </button>
           </div>
