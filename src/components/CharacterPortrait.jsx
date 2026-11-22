@@ -7,7 +7,7 @@ import * as THREE from 'three'
 import { extendGLTFLoaderKTX2, detectKTX2Support } from '../lib/ktx2Setup.js'
 import { EffectComposer, Bloom, DotScreen, Glitch, ChromaticAberration } from '@react-three/postprocessing'
 import { BlendFunction, GlitchMode } from 'postprocessing'
-import { playSfx } from '../lib/sfx.js'
+import { playSfx, getSfxBus } from '../lib/sfx.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import PortraitGlobo from './PortraitGlobo.jsx'
 import { applyToonBanding } from '../lib/toonBanding.js'
@@ -793,7 +793,11 @@ export default function CharacterPortrait({
     window.setTimeout(() => setCursorScale(1), 280)
     // Punch sound (Web Audio preferred for low latency)
     let played = false
-    const ctx = audioCtxRef.current
+    // Por el bus de los SFX (la bocina lo calla y entra en la mezcla de
+    // lib/mezcla.js; 0.9 ahí suena igual que antes directo a la bocina). El
+    // buffer decodificado aquí sirve en cualquier contexto.
+    const bus = getSfxBus()
+    const ctx = bus?.ctx || audioCtxRef.current
     const buffer = audioBufferRef.current
     if (ctx && buffer) {
       try { if (ctx.state !== 'running') await ctx.resume() } catch { }
@@ -802,7 +806,7 @@ export default function CharacterPortrait({
         src.buffer = buffer
         const gain = ctx.createGain()
         gain.gain.value = 0.9
-        src.connect(gain).connect(ctx.destination)
+        src.connect(gain).connect(bus ? bus.out : ctx.destination)
         src.start(0)
         played = true
       } catch { }

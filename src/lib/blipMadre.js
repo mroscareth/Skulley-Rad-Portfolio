@@ -5,6 +5,9 @@ import { getSfxBus } from './sfx.js'
 // mute): un pulso cuadrado cortito con filtro, en notas de una pentatónica alta
 // para que no canse. Nada debajo de ~600 Hz (bocinas de laptop y celular).
 const NOTAS = [784, 880, 988, 1175, 1319]
+// Los diálogos se oyen por encima de la música (lib/mezcla.js). Con 0.045 cada
+// bip quedaba 22 dB debajo de la canción y no se oía.
+const PICO = 0.36
 
 export function blipMadre(fuerza = 1) {
   const bus = getSfxBus()
@@ -19,7 +22,7 @@ export function blipMadre(fuerza = 1) {
   filtro.frequency.value = 2600
   const g = ctx.createGain()
   g.gain.setValueAtTime(0, t)
-  g.gain.linearRampToValueAtTime(0.045 * fuerza, t + 0.004)
+  g.gain.linearRampToValueAtTime(PICO * fuerza, t + 0.004)
   g.gain.exponentialRampToValueAtTime(0.0008, t + 0.05)
   osc.connect(filtro)
   filtro.connect(g)

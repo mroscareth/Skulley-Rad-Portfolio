@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState, useCallback } from
 import { playSfx } from '../lib/sfx.js'
 import { FUNDIDO_ENTRADA_S, esperarDestape, fundir, esCancionLobby, LOBBY_LENTO_FALTA_S, LOBBY_LENTO_EVENT } from '../lib/musicaLobby.js'
 import { EVENTO_SILENCIO, sitioEnSilencio } from '../lib/silencioSitio.js'
+import { VOLUMEN_MUSICA } from '../lib/mezcla.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import SlimeSlugDOM from './SlimeSlugDOM.jsx'
 // AudioWorklet-based scratch engine. Sustituye al viejo
@@ -19,10 +20,13 @@ import IconoTinta from './ui/IconoTinta.jsx'
 // descargas idénticas al montar el deck. La promesa se suelta a los 5s: ya
 // pasó la ventana en que coinciden y no queremos retener los bytes.
 // Volumen de la música de fondo. Antes iba a 1.0 y se sentía alta frente a
-// los efectos y a la voz; Oscar la pidió más baja tres veces (0.87 y 0.72 el
-// 2026-10-24; 0.5 el 2026-11-05, para que no tape los sonidos del juego). Las
-// canciones promedian -16 a -19 dB: a 0.5 las pisadas le asoman unos 5 dB.
-const MUSIC_VOLUME = 0.5
+// los efectos y a la voz; Oscar la pidió más baja cuatro veces (0.87 y 0.72 el
+// 2026-10-24; 0.5 el 2026-11-05; el 2026-11-22 quedó en la mezcla del sitio,
+// lib/mezcla.js: los efectos mandan sobre la música).
+const MUSIC_VOLUME = VOLUMEN_MUSICA
+// El TTS baja la música a esta parte de su volumen (antes, 0.1 fijo con la
+// música a 0.5).
+const TTS_DUCK = 0.2
 // Skin Poltergeist (ver marcaLobbyLento): lo más que la canción puede avanzar
 // entre dos reportes de posición sin contar como brinco, y dónde se guardan los
 // segundos ya oídos.
@@ -411,8 +415,7 @@ export default function MusicPlayer({
       if (!g || !ctx || silenciadaRef.current) return
       try {
         g.gain.cancelScheduledValues(ctx.currentTime)
-        // Smooth fade to 10% over 0.8 seconds
-        g.gain.setTargetAtTime(0.1, ctx.currentTime, 0.25)
+        g.gain.setTargetAtTime(MUSIC_VOLUME * TTS_DUCK, ctx.currentTime, 0.25)
       } catch { }
     }
     const onTTSStop = () => {

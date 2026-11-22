@@ -1,6 +1,8 @@
 // Small utility for playing SFX from /public
 // Tries public/fx first, then root of public as fallback
 
+import { REFUERZO_SFX } from './mezcla.js'
+
 const cache = new Map()
 // Simple HTMLAudio instance pool per clip to avoid creating objects on each play
 const pool = new Map() // name -> { url, nodes: HTMLAudioElement[], idx: number }
@@ -8,6 +10,8 @@ const POOL_SIZE = 4
 // WebAudio (better latency, less jank)
 let audioCtx = null
 let masterGainNode = null
+const LIMITE_DB = -3.5
+const LIMITE_RATIO = 20
 const bufferCache = new Map() // name -> AudioBuffer
 
 function ensureAudioContext() {
@@ -18,7 +22,26 @@ function ensureAudioContext() {
   audioCtx = new Ctor()
   masterGainNode = audioCtx.createGain()
   masterGainNode.gain.value = silencio ? 0 : masterVolume
-  masterGainNode.connect(audioCtx.destination)
+  // Los efectos van por encima de la música (lib/mezcla.js). El limitador
+  // atrapa lo que se junta (un trueno con choques y bips) antes de saturar;
+  // debajo de su umbral no toca nada. El compresor de Web Audio sube todo con
+  // una compensación propia (la ganancia que le quita a 0 dB, a la 0.6) y no
+  // se puede apagar: `compensa` la descuenta, así lo que no toca el limitador
+  // sube exactamente REFUERZO_SFX.
+  const refuerzo = audioCtx.createGain()
+  refuerzo.gain.value = REFUERZO_SFX
+  const limitador = audioCtx.createDynamicsCompressor()
+  limitador.threshold.value = LIMITE_DB
+  limitador.knee.value = 0
+  limitador.ratio.value = LIMITE_RATIO
+  limitador.attack.value = 0.001
+  limitador.release.value = 0.12
+  const compensa = audioCtx.createGain()
+  compensa.gain.value = Math.pow(10, (0.6 * LIMITE_DB * (1 - 1 / LIMITE_RATIO)) / 20)
+  masterGainNode.connect(refuerzo)
+  refuerzo.connect(limitador)
+  limitador.connect(compensa)
+  compensa.connect(audioCtx.destination)
   return audioCtx
 }
 let enabled = true

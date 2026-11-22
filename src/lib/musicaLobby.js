@@ -11,6 +11,7 @@
 //     (`llegaConSonido`; la bocina arranca encendida).
 // La del lobby es la misma canción del tracklist (songs/, la del servidor).
 import { irisTapando } from './irisTransition.js'
+import { VOLUMEN_MUSICA } from './mezcla.js'
 
 export const LOBBY_SRC = 'songs/MADRE (Lobby Remix).mp3'
 
@@ -30,7 +31,7 @@ export function esCancionLobby(track) {
   try { ruta = decodeURIComponent(ruta) } catch { /* se queda como venía */ }
   return /lobby remix/i.test(track.title || '') || /lobby remix/i.test(ruta)
 }
-const VOLUMEN = 0.5
+const VOLUMEN = VOLUMEN_MUSICA
 const LLAVE = 'skulley_sonido'
 const BASE = import.meta.env.BASE_URL || '/'
 // Lo que tarda en irse la música al cambiar de pantalla, y en entrar la de la
