@@ -29,10 +29,10 @@ function ScoreHUD({ t, isCompactUi = false }) {
         ? { top: 12, left: 12 }
         : { top: 40, left: 40, animation: 'ui-enter-left 0.5s var(--ease-expo-out) 0.25s both' }}
     >
-      <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-black/40 backdrop-blur-md border border-white/[0.08] text-white shadow-md font-marquee uppercase tracking-wide">
+      <div className="inline-flex items-center gap-2 px-4 pt-2.5 pb-2 rounded-[14px] bg-white border-2 border-[#0a0510] shadow-[0_5px_0_0_#0a0510] -translate-y-[5px] text-[#0a0510] font-marquee uppercase tracking-wide">
         <span className={`leading-none ${isCompactUi ? 'text-xl' : 'text-2xl'}`}>
           {t('hud.score')}:{' '}
-          <span style={{ color: score >= 0 ? '#f5ff00' : '#ef4444' }}>
+          <span className="px-1.5 rounded-md" style={score >= 0 ? { background: '#f5ff00' } : { color: '#e11d48' }}>
             {score >= 0 ? `+${score}` : score}
           </span>
         </span>

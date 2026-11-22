@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react'
 import useFocoModal from '../../hooks/useFocoModal.js'
 import { createPortal } from 'react-dom'
-import { XMarkIcon, ArrowDownTrayIcon } from '@heroicons/react/24/solid'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { useShopCartCtx } from '../../lib/shopCartContext.jsx'
 import { useShopData } from '../../lib/shopDataContext.jsx'
@@ -9,6 +8,7 @@ import { fetchOrder, cancelCheckout } from '../../lib/shopApi.js'
 import { readPendingCheckout, clearPendingCheckout } from '../../lib/useShopCart.js'
 import HelpLink from '../help/HelpLink.jsx'
 import { formatPriceWithCurrency } from '../../lib/shopProduct.js'
+import IconoTinta from '../ui/IconoTinta.jsx'
 
 // Estado de un pedido. Se abre solo cuando la URL trae ?pedido=TOKEN:
 //   - regreso de Stripe tras pagar (success_url),
@@ -143,16 +143,16 @@ export default function OrderStatusModal() {
       onPointerDown={(e) => { if (e.target === e.currentTarget) close() }}
     >
       {/* Deja pasar el clic al fondo para que cerrar afuera funcione. */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-xl pointer-events-none" />
+      <div className="absolute inset-0 bg-[#0a0510]/80 pointer-events-none" />
 
       <div className="relative w-full h-full sm:h-auto sm:max-w-xl sm:max-h-[92vh] flex flex-col bg-[#0d0714] border-0 sm:border-2 sm:border-white/12 rounded-none sm:rounded-2xl overflow-hidden text-white">
         <button
           type="button"
           onClick={close}
-          className="absolute top-4 right-4 z-[10] w-11 h-11 grid place-items-center rounded-full border-2 border-white/40 bg-black/50 text-white hover:bg-white hover:text-black hover:border-white active:scale-90 transition-all"
+          className="absolute top-4 right-4 z-[10] w-11 h-11 grid place-items-center burbuja-vidrio"
           aria-label={tr.close}
         >
-          <XMarkIcon className="w-5 h-5" />
+          <IconoTinta nombre="cerrar" tam={30} />
         </button>
 
         <div className="flex-1 overflow-y-auto modal-scroll p-6 sm:p-8 flex flex-col gap-6">
@@ -197,7 +197,7 @@ export default function OrderStatusModal() {
                       }}
                       className="shop-btn shop-btn--primary self-start min-h-[48px] px-6 text-xs gap-2"
                     >
-                      <ArrowDownTrayIcon className="w-5 h-5 flex-shrink-0" aria-hidden />
+                      <IconoTinta nombre="descargar" tam={30} className="flex-shrink-0" />
                       {tr.goToDownloads}
                     </button>
                   )}

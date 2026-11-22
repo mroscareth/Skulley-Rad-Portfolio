@@ -1,5 +1,4 @@
 import React, { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react'
-import { BackwardIcon, ForwardIcon, PlayIcon, PauseIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowsRightLeftIcon, QueueListIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
 import { FUNDIDO_ENTRADA_S, esperarDestape, fundir, esCancionLobby, LOBBY_LENTO_FALTA_S, LOBBY_LENTO_EVENT } from '../lib/musicaLobby.js'
 import { EVENTO_SILENCIO, sitioEnSilencio } from '../lib/silencioSitio.js'
@@ -12,6 +11,7 @@ import {
   ScratchAudioNode,
   ensureScratchWorkletLoaded,
 } from '../lib/ScratchAudioNode.js'
+import IconoTinta from './ui/IconoTinta.jsx'
 
 // Un track se pide por tres caminos a la vez: el buffer del worklet de scratch
 // y los dos lectores de portada con jsmediatags. Sin compartir la promesa, el
@@ -1347,7 +1347,7 @@ export default function MusicPlayer({
               onMouseEnter={() => hoverSfx(0.6)}
               onClick={() => { clickSfx(); setListOpen((o) => !o) }}
             >
-              <QueueListIcon className="w-5 h-5" />
+              <IconoTinta nombre="lista" tam={30} />
             </button>
           )}
           {onClose && (
@@ -1360,7 +1360,7 @@ export default function MusicPlayer({
               onMouseEnter={() => hoverSfx(0.6)}
               onClick={() => { clickSfx(); onClose() }}
             >
-              <XMarkIcon className="w-5 h-5" />
+              <IconoTinta nombre="cerrar" tam={30} />
             </button>
           )}
         </div>
@@ -1446,7 +1446,7 @@ export default function MusicPlayer({
           onMouseEnter={() => hoverSfx(0.6)}
           onClick={() => { clickSfx(); setShuffle((v) => !v) }}
         >
-          <ArrowsRightLeftIcon className="w-5 h-5" />
+          <IconoTinta nombre="intercambiar" tam={30} />
         </button>
         <button
           type="button"
@@ -1458,7 +1458,7 @@ export default function MusicPlayer({
           onMouseEnter={() => hoverSfx(0.6)}
           onClick={() => { clickSfx(); setRepeatOne((v) => !v) }}
         >
-          <ArrowPathIcon className="w-5 h-5" />
+          <IconoTinta nombre="reiniciar" tam={30} />
           <span className="sr-deck__key-badge" aria-hidden="true">1</span>
         </button>
         <a
@@ -1470,7 +1470,7 @@ export default function MusicPlayer({
           onMouseEnter={() => hoverSfx(0.6)}
           onClick={handleDownloadCurrentTrack}
         >
-          <ArrowDownTrayIcon className="w-5 h-5" />
+          <IconoTinta nombre="descargar" tam={30} />
         </a>
 
         {listOpen && (
@@ -1508,7 +1508,7 @@ export default function MusicPlayer({
           onMouseEnter={() => hoverSfx(0.9)}
           onClick={() => stepTrack(-1)}
         >
-          <BackwardIcon className="w-7 h-7" />
+          <IconoTinta nombre="retroceder" tam={42} />
         </button>
         <button
           ref={playBtnRef}
@@ -1520,7 +1520,7 @@ export default function MusicPlayer({
           onMouseEnter={() => hoverSfx(0.9)}
           onClick={() => { clickSfx(); setIsPlaying((v) => !v) }}
         >
-          {isPlaying ? <PauseIcon className="w-8 h-8" /> : <PlayIcon className="w-8 h-8" />}
+          {isPlaying ? <IconoTinta nombre="pausa" tam={48} /> : <IconoTinta nombre="play" tam={48} />}
         </button>
         <button
           type="button"
@@ -1531,7 +1531,7 @@ export default function MusicPlayer({
           onMouseEnter={() => hoverSfx(0.9)}
           onClick={() => stepTrack(1)}
         >
-          <ForwardIcon className="w-7 h-7" />
+          <IconoTinta nombre="adelante" tam={42} />
         </button>
       </div>
 

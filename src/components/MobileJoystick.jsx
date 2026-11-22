@@ -98,13 +98,12 @@ export default function MobileJoystick({ bottomPx = 140, leftPx = 16, radius = 6
       }}
     >
       <div
-        className="absolute inset-0 rounded-full bg-white/10 backdrop-blur-sm border border-white/15"
-        style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.25)' }}
+        className="absolute inset-0 rounded-full bg-white/15 border-2 border-[#0a0510]"
       />
       <div
         ref={knobRef}
-        className="absolute left-1/2 top-1/2 w-12 h-12 rounded-full bg-white/60 border border-white/80"
-        style={{ transform: 'translate(-50%, -50%) translate(0px, 0px)', boxShadow: '0 6px 16px rgba(0,0,0,0.3)' }}
+        className="absolute left-1/2 top-1/2 w-12 h-12 rounded-full bg-white border-2 border-[#0a0510]"
+        style={{ transform: 'translate(-50%, -50%) translate(0px, 0px)', boxShadow: '0 4px 0 0 #0a0510' }}
       />
     </div>
   )

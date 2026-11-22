@@ -1,5 +1,5 @@
 import React from 'react'
-import { BoltIcon } from '@heroicons/react/24/solid'
+import IconoTinta from './ui/IconoTinta.jsx'
 
 export default function PowerBar({
   orientation = 'horizontal', // 'horizontal' | 'vertical'
@@ -115,7 +115,7 @@ export default function PowerBar({
               onPointerUp={() => { try { onPressEnd?.() } catch { } try { setIsPressing(false) } catch { } }}
               onPointerCancel={() => { try { onPressEnd?.() } catch { } try { setIsPressing(false) } catch { } }}
             >
-              <BoltIcon style={{ width: `${boltIconPx}px`, height: `${boltIconPx}px` }} />
+              <IconoTinta nombre="rayo" tam={Math.round(boltIconPx * 1.5)} />
             </button>
           </div>
         </div>
@@ -127,7 +127,7 @@ export default function PowerBar({
         {/* Track (blur + opaque backdrop). Con revealBarOnPress aparece (grow desde
             el botón) solo mientras se presiona. */}
         <div
-          className="mx-auto h-[150px] w-[15px] rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] overflow-hidden relative"
+          className="mx-auto h-[150px] w-[15px] rounded-full bg-[#0a0510]/60 border-2 border-[#0a0510] overflow-hidden relative"
           aria-hidden
           style={{
             boxShadow: glow || '0 4px 20px rgba(0,0,0,0.4)',
@@ -168,7 +168,7 @@ export default function PowerBar({
             onPointerUp={() => { try { onPressEnd?.() } catch { } try { setIsPressing(false) } catch { } }}
             onPointerCancel={() => { try { onPressEnd?.() } catch { } try { setIsPressing(false) } catch { } }}
           >
-            <BoltIcon style={{ width: `${boltIconPx}px`, height: `${boltIconPx}px` }} />
+            <IconoTinta nombre="rayo" tam={Math.round(boltIconPx * 1.5)} />
           </button>
         </div>
       </div>
@@ -186,7 +186,7 @@ export default function PowerBar({
     <div className={`relative w-full ${className}`} style={style}>
       {/* Track (blur + opaque backdrop) */}
       <div
-        className="pointer-events-auto relative h-3 w-full rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] overflow-hidden"
+        className="pointer-events-auto relative h-3 w-full rounded-full bg-[#0a0510]/60 border-2 border-[#0a0510] overflow-hidden"
         style={{
           boxShadow: glow || '0 4px 20px rgba(0,0,0,0.4)',
           transition: 'box-shadow 180ms ease',
@@ -224,7 +224,7 @@ export default function PowerBar({
           onPointerUp={() => { try { onPressEnd?.() } catch { } try { setIsPressing(false) } catch { } }}
           onPointerCancel={() => { try { onPressEnd?.() } catch { } try { setIsPressing(false) } catch { } }}
         >
-          <BoltIcon style={{ width: `${boltIconPx}px`, height: `${boltIconPx}px` }} />
+          <IconoTinta nombre="rayo" tam={Math.round(boltIconPx * 1.5)} />
         </button>
       </div>
     </div>

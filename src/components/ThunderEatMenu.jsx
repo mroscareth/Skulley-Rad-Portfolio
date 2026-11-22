@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { BoltIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
+import IconoTinta from './ui/IconoTinta.jsx'
 
 // ThunderEatMenu — overlay HTML del easter egg "comer el orbe maldito".
 // Self-contained: escucha eventos window que dispara HomeOrbs y emite de vuelta
@@ -182,7 +182,7 @@ export default function ThunderEatMenu() {
             className="argus-beat flex items-center gap-2 min-h-[44px] px-5 py-2 rounded-2xl sm:rounded-full text-white/90 text-xs sm:text-sm font-semibold text-center"
             style={{ backgroundColor: SURFACE, border: `2px solid ${colorRef.current}` }}
           >
-            <BoltIcon className="w-4 h-4 shrink-0" style={{ color: colorRef.current }} aria-hidden />
+            <IconoTinta nombre="rayo" tam={24} cara={colorRef.current} className="shrink-0" />
             <span>{es ? 'Click para invocar el rayo · Esc para cancelar' : 'Click to call the lightning · Esc to cancel'}</span>
           </div>
         </div>

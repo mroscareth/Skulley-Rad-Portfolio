@@ -8,11 +8,11 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useId } from 'react'
-import { MagnifyingGlassIcon, LinkIcon, CheckIcon } from '@heroicons/react/24/solid'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import BlogTTS from './BlogTTS.jsx'
 import { sanitizeHtml } from '../lib/parseRichText.jsx'
 import BlogCard, { tr, coverSrc, postHref, openPost, CoverPlaceholder, PostMeta } from './blog/BlogCard.jsx'
+import IconoTinta from './ui/IconoTinta.jsx'
 
 const API = '/api/blog.php'
 
@@ -287,8 +287,8 @@ function ShareButtons({ url, title }) {
                 ))}
                 <button type="button" onClick={handleCopy} className={`${btnClass} gap-2 px-4`}>
                     {copied
-                        ? <CheckIcon className="w-4 h-4" aria-hidden="true" />
-                        : <LinkIcon className="w-4 h-4" aria-hidden="true" />}
+                        ? <IconoTinta nombre="palomita" tam={24} />
+                        : <IconoTinta nombre="enlace" tam={24} />}
                     <span aria-live="polite">
                         {copied
                             ? (isEs ? 'Enlace copiado' : 'Link copied')
@@ -691,10 +691,7 @@ export default function Section5({ initialPostSlug, onPostSlugChange }) {
                 top-4 + 44px; desde md, top-10 + 48px), que lo tapaban. Desde lg
                 cabe centrado entre los dos grupos, en el mismo renglón. */}
             <div className="relative max-w-xl mx-auto mt-12 md:mt-[4.75rem] lg:mt-4 mb-5 sm:mb-6">
-                <MagnifyingGlassIcon
-                    className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/45"
-                    aria-hidden="true"
-                />
+                <IconoTinta nombre="lupa" tam={30} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 opacity-60" />
                 <input
                     type="search"
                     enterKeyHint="search"

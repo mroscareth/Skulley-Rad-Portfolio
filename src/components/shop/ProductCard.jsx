@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react'
-import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
 import { useShopData } from '../../lib/shopDataContext.jsx'
 import { usePriceWithDiscount } from '../../lib/usePriceWithDiscount.js'
 import ProductMeta from './ProductMeta.jsx'
@@ -7,6 +6,7 @@ import PriceTag from './PriceTag.jsx'
 import AddButton from './AddButton.jsx'
 import SoldOutTape from './SoldOutTape.jsx'
 import { clicDeSpa, shopHref } from '../../lib/sectionRouting.js'
+import IconoTinta from '../ui/IconoTinta.jsx'
 
 const AUTOPLAY_MS = 2800       // autoplay continuo (en reposo)
 const HOVER_CYCLE_MS = 1400    // más rápido al hover (desktop)
@@ -134,9 +134,9 @@ export default function ProductCard({ product, lang = 'en', onAdd, onInspect }) 
                 setImageIndex((i) => (i - 1 + gallery.length) % gallery.length)
               }}
               aria-label={isEn ? 'Previous image' : 'Imagen anterior'}
-              className={`absolute left-2 top-1/2 -translate-y-1/2 z-[5] w-8 h-8 grid place-items-center rounded-full border-2 border-white/40 bg-black/50 text-white hover:bg-white hover:text-black hover:border-white active:scale-90 transition-all ${hover ? 'opacity-100' : 'opacity-70 sm:opacity-0'}`}
+              className={`absolute left-2 top-1/2 -translate-y-1/2 z-[5] w-8 h-8 grid place-items-center burbuja-vidrio ${hover ? 'opacity-100' : 'opacity-70 sm:opacity-0'}`}
             >
-              <ChevronLeftIcon className="w-4 h-4" />
+              <IconoTinta nombre="chevronIzq" tam={24} />
             </button>
             <button
               type="button"
@@ -145,9 +145,9 @@ export default function ProductCard({ product, lang = 'en', onAdd, onInspect }) 
                 setImageIndex((i) => (i + 1) % gallery.length)
               }}
               aria-label={isEn ? 'Next image' : 'Imagen siguiente'}
-              className={`absolute right-2 top-1/2 -translate-y-1/2 z-[5] w-8 h-8 grid place-items-center rounded-full border-2 border-white/40 bg-black/50 text-white hover:bg-white hover:text-black hover:border-white active:scale-90 transition-all ${hover ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+              className={`absolute right-2 top-1/2 -translate-y-1/2 z-[5] w-8 h-8 grid place-items-center burbuja-vidrio ${hover ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
             >
-              <ChevronRightIcon className="w-4 h-4" />
+              <IconoTinta nombre="chevronDer" tam={24} />
             </button>
           </>
         )}

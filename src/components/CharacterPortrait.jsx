@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { XMarkIcon, ArrowLeftIcon } from '@heroicons/react/24/solid'
 import IconoTinta from './ui/IconoTinta.jsx'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF, useAnimations } from '@react-three/drei'
@@ -1139,7 +1138,7 @@ export default function CharacterPortrait({
       </div>
       {/* Light controls (interactive) */}
       {showUI && (
-        <div className="pointer-events-auto select-none p-2 rounded-md bg-black/50 backdrop-blur-md border border-white/[0.08] text-white w-52 space-y-2">
+        <div className="pointer-events-auto select-none p-2 rounded-md bg-[#0d0714] border-2 border-white/[0.12] text-white w-52 space-y-2">
           <div className="text-xs font-semibold opacity-90">{t('portrait.uiTitle')}</div>
           {/* Camera */}
           <div className="text-[11px] font-medium opacity-80 mt-1">{t('portrait.labels.camera')}</div>

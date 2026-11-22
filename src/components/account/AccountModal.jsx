@@ -1,10 +1,5 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
 import useFocoModal from '../../hooks/useFocoModal.js'
-import {
-  ArrowRightOnRectangleIcon, ArrowTopRightOnSquareIcon, UserCircleIcon,
-  ShoppingBagIcon, TicketIcon, CheckCircleIcon, XMarkIcon, ArrowDownTrayIcon,
-  CheckIcon, ClockIcon, PauseCircleIcon, LockClosedIcon,
-} from '@heroicons/react/24/solid'
 import { playSfx } from '../../lib/sfx.js'
 import { ACHIEVEMENTS, localizeAchievement, PIXEL_SKIN_SCORE_THRESHOLD } from '../../lib/achievementsCatalog.js'
 import { useSlimeSlugs } from '../../lib/slimeSlugs.js'
@@ -15,6 +10,7 @@ import { GOLD_SKIN_THRESHOLD, SILVER_SCORE } from '../GameOverModal.jsx'
 import { useShopData } from '../../lib/shopDataContext.jsx'
 import HelpLink from '../help/HelpLink.jsx'
 import SoldOutTape from '../shop/SoldOutTape.jsx'
+import IconoTinta from '../ui/IconoTinta.jsx'
 
 const API_BASE = `${import.meta.env.BASE_URL}api/profile.php`
 
@@ -143,7 +139,7 @@ export default function AccountModal({
       aria-labelledby={titleId}
       onPointerDown={(e) => { if (e.target === e.currentTarget) onClose?.() }}
     >
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-xl pointer-events-none" />
+      <div className="absolute inset-0 bg-[#0a0510]/80 pointer-events-none" />
 
       <div
         ref={panelRef}
@@ -154,10 +150,10 @@ export default function AccountModal({
         <button
           type="button"
           onClick={close}
-          className={`absolute top-4 right-4 z-[10] w-11 h-11 grid place-items-center rounded-full border-2 border-white/40 bg-black/50 text-white hover:bg-white hover:text-black hover:border-white active:scale-90 transition-all ${FOCUS_RING}`}
+          className={`absolute top-4 right-4 z-[10] w-11 h-11 grid place-items-center burbuja-vidrio ${FOCUS_RING}`}
           aria-label={t ? t('common.close') : (isEs ? 'Cerrar' : 'Close')}
         >
-          <XMarkIcon className="w-5 h-5" />
+          <IconoTinta nombre="cerrar" tam={30} />
         </button>
 
         {/* Nombre + una línea de detalle, como la card y el detalle de
@@ -169,7 +165,7 @@ export default function AccountModal({
               ? <img src={avatar} alt="" className="h-14 w-14 flex-shrink-0 rounded-full object-cover" />
               : (
                 <div className="h-14 w-14 flex-shrink-0 rounded-full bg-[#150a1d] grid place-items-center" aria-hidden>
-                  <UserCircleIcon className="w-8 h-8 text-white/35" />
+                  <IconoTinta nombre="usuario" tam={48} className="opacity-60" />
                 </div>
               )}
             <div className="min-w-0 flex-1">
@@ -251,7 +247,7 @@ export default function AccountModal({
             onClick={logout}
             className={`shop-btn shop-btn--primary shrink-0 min-h-[44px] px-5 text-xs ${FOCUS_RING}`}
           >
-            <ArrowRightOnRectangleIcon className="w-4 h-4" aria-hidden />
+            <IconoTinta nombre="salir" tam={24} />
             {isEs ? 'Cerrar sesión' : 'Log out'}
           </button>
         </div>
@@ -320,7 +316,7 @@ function ScoreTab({ privyId, displayName, isEs }) {
                     <span className="truncate">{row.name}</span>
                     {!!row.golden_ticket && (
                       <>
-                        <TicketIcon className={`w-4 h-4 flex-shrink-0 ${row.ticket_tier === 'silver' ? 'text-[#cbd5e1]' : 'text-amarillo'}`} />
+                        <IconoTinta nombre="boleto" tam={24} cara={row.ticket_tier === 'silver' ? '#cbd5e1' : '#f5ff00'} className="flex-shrink-0" />
                         <span className="sr-only">
                           {isEs ? 'Tiene un ' : 'Has a '}{row.ticket_tier === 'silver' ? 'Silver Ticket' : 'Golden Ticket'}
                         </span>
@@ -468,7 +464,7 @@ function AchievementsTab({ achievements, unlockedAt, userProfile, lang, isEs, t 
                               : 'bg-white/[0.06] text-white/45'}`}
                           >
                             {done
-                              ? <CheckCircleIcon className="w-3 h-3" aria-hidden />
+                              ? <IconoTinta nombre="palomitaCirculo" tam={20} />
                               : <span className="w-3 h-3 rounded-full border border-current opacity-60" aria-hidden />}
                             {t ? t(`nav.${sid}`) : sid}
                           </span>
@@ -575,7 +571,7 @@ function OrdersTab({ privyId, isEs }) {
   if (!orders || orders.length === 0) {
     return (
       <div className="flex flex-col items-center text-center py-10">
-        <ShoppingBagIcon className="w-14 h-14 text-white/15 mb-4" aria-hidden />
+        <IconoTinta nombre="bolsa" tam={84} className="opacity-30 mb-4" />
         <p className="text-base font-semibold text-white/80">{isEs ? 'Aún no tienes pedidos.' : "You don't have any orders yet."}</p>
         <p className="text-sm text-white/55 mt-2">{isEs ? 'Lo que compres en la tienda aparece aquí, con su envío.' : 'What you buy in the store shows up here, with its shipping.'}</p>
         <button
@@ -637,7 +633,7 @@ function OrdersTab({ privyId, isEs }) {
                   aria-label={isEs ? `Rastrear envío (${tracking})` : `Track shipment (${tracking})`}
                 >
                   {isEs ? 'Rastrear envío' : 'Track shipment'}
-                  <ArrowTopRightOnSquareIcon className="w-4 h-4" aria-hidden />
+                  <IconoTinta nombre="externo" tam={24} />
                 </a>
               )}
             </div>
@@ -772,7 +768,7 @@ function DownloadsTab({ items, dailyLimit, isEs }) {
   if (!items.length) {
     return (
       <div className="flex flex-col items-center text-center py-10">
-        <ArrowDownTrayIcon className="w-14 h-14 text-white/15 mb-4" aria-hidden />
+        <IconoTinta nombre="descargar" tam={84} className="opacity-30 mb-4" />
         <p className="text-base font-semibold text-white/80">{isEs ? 'Esta cuenta no tiene descargas.' : "This account doesn't have any downloads."}</p>
         <p className="text-sm text-white/55 mt-2 max-w-[40ch]">
           {isEs
@@ -805,7 +801,7 @@ function DownloadsTab({ items, dailyLimit, isEs }) {
 
       {/* La ayuda justo donde surge la duda (H10), corta. */}
       <div className="mt-8 flex items-start gap-2.5 text-sm text-white/55 leading-relaxed max-w-3xl">
-        <LockClosedIcon className="w-4 h-4 shrink-0 mt-0.5 text-white/35" aria-hidden />
+        <IconoTinta nombre="candado" tam={24} className="shrink-0 mt-0.5 opacity-60" />
         <p>
           {isEs
             ? `Cada descarga usa un enlace de un solo uso y el archivo lleva tus datos de compra. Puedes bajar cada archivo hasta ${dailyLimit} veces al día.`
@@ -835,14 +831,14 @@ function DownloadCard({ item: it, left, dailyLimit, busy, started, failed, onDow
   if (it.paused) {
     action = (
       <span className="shrink-0 inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-white/45">
-        <PauseCircleIcon className="w-4 h-4" aria-hidden />
+        <IconoTinta nombre="pausaCirculo" tam={24} />
         {isEs ? 'En pausa' : 'Paused'}
       </span>
     )
   } else if (!available.length) {
     action = (
       <span className="shrink-0 inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-white/45">
-        <ClockIcon className="w-4 h-4" aria-hidden />
+        <IconoTinta nombre="reloj" tam={24} />
         {isEs ? 'Mañana' : 'Tomorrow'}
       </span>
     )
@@ -864,7 +860,7 @@ function DownloadCard({ item: it, left, dailyLimit, busy, started, failed, onDow
       >
         {working
           ? <span className="w-4 h-4 rounded-full border-2 border-black/25 border-t-black animate-spin" aria-hidden />
-          : done ? <CheckIcon className="w-4 h-4 -ml-0.5" aria-hidden /> : <ArrowDownTrayIcon className="w-4 h-4 -ml-0.5" aria-hidden />}
+          : done ? <IconoTinta nombre="palomita" tam={24} className="-ml-0.5" /> : <IconoTinta nombre="descargar" tam={24} className="-ml-0.5" />}
         <span>{label}</span>
       </button>
     )
@@ -885,7 +881,7 @@ function DownloadCard({ item: it, left, dailyLimit, busy, started, failed, onDow
       <div className="shop-card__frame">
         {it.image
           ? <img src={it.image} alt="" className="absolute inset-0 w-full h-full object-contain z-[1]" />
-          : <div className="absolute inset-0 grid place-items-center" aria-hidden><ArrowDownTrayIcon className="w-12 h-12 text-white/15" /></div>}
+          : <div className="absolute inset-0 grid place-items-center" aria-hidden><IconoTinta nombre="descargar" tam={72} className="opacity-30" /></div>}
         {it.paused && <SoldOutTape label={isEs ? 'En pausa' : 'Paused'} />}
       </div>
 
@@ -926,7 +922,7 @@ function DownloadCard({ item: it, left, dailyLimit, busy, started, failed, onDow
                 >
                   {isBusy
                     ? <span className="w-4 h-4 rounded-full border-2 border-white/25 border-t-white animate-spin" aria-hidden />
-                    : started?.fileId === f.id ? <CheckIcon className="w-4 h-4 text-emerald-300" aria-hidden /> : <ArrowDownTrayIcon className="w-4 h-4" aria-hidden />}
+                    : started?.fileId === f.id ? <IconoTinta nombre="palomita" tam={24} /> : <IconoTinta nombre="descargar" tam={24} />}
                 </button>
               )}
             </li>

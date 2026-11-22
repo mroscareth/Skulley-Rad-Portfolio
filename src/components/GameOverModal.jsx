@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import useFocoModal from '../hooks/useFocoModal.js'
-import { CheckCircleIcon, TrophyIcon, InformationCircleIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import { useShopData } from '../lib/shopDataContext.jsx'
 import { lastRunStats } from '../lib/gameSession.js'
 import { TicketArt } from './GoldenTicketBadge.jsx'
 import { PRIZE_RAYS, Sparkle } from './argusArt.jsx'
+import IconoTinta from './ui/IconoTinta.jsx'
 
 // Puntajes de los tickets: los manda el servidor (game-tickets.php, por el
 // catálogo de la tienda); estos son el respaldo mientras llegan.
@@ -340,7 +340,7 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
       `}</style>
 
       {/* Backdrop — §6.1: con /70 el blur sí se nota */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-xl pointer-events-none" />
+      <div className="absolute inset-0 bg-[#0a0510]/80 pointer-events-none" />
 
       <div className="argus-panel relative w-[min(560px,94vw)] max-h-[90vh] overflow-y-auto modal-scroll p-5 sm:p-7 text-white">
         {/* Encabezado: cómo te fue y cerrar (el botón redondo del sitio, §4.2). */}
@@ -354,11 +354,11 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
           <button
             type="button"
             onClick={handleExit}
-            className={`shrink-0 w-11 h-11 grid place-items-center rounded-full border-2 border-white/40 bg-black/50 text-white hover:bg-white hover:text-black hover:border-white active:scale-90 transition-all ${FOCUS_RING}`}
+            className={`shrink-0 w-11 h-11 grid place-items-center burbuja-vidrio ${FOCUS_RING}`}
             style={{ visibility: done ? 'visible' : 'hidden' }}
             aria-label={tr.close}
           >
-            <XMarkIcon className="w-5 h-5" />
+            <IconoTinta nombre="cerrar" tam={30} />
           </button>
         </div>
 
@@ -462,19 +462,19 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
           <div className="argus-beat mt-6 pt-5 border-t-2 border-white/10 flex flex-col gap-3">
             {noTicketText && (
               <p className="flex items-start gap-2.5 text-white/70 text-sm">
-                <InformationCircleIcon className="w-5 h-5 shrink-0 text-white/45" aria-hidden />
+                <IconoTinta nombre="info" tam={30} className="shrink-0 opacity-60" />
                 {noTicketText}
               </p>
             )}
             {showSaved && (
               isNewHighScore ? (
                 <p className="game-over-pop flex items-center gap-2.5 text-[#f5ff00] font-bold text-sm sm:text-base">
-                  <TrophyIcon className="w-5 h-5 shrink-0" aria-hidden />
+                  <IconoTinta nombre="trofeo" tam={30} className="shrink-0" />
                   {tr.savedBest}
                 </p>
               ) : (
                 <p className="flex items-center gap-2.5 text-white/75 font-semibold text-sm">
-                  <CheckCircleIcon className="w-5 h-5 shrink-0 text-white/50" aria-hidden />
+                  <IconoTinta nombre="palomitaCirculo" tam={30} className="shrink-0 opacity-60" />
                   {tr.saved}
                 </p>
               )
@@ -489,7 +489,7 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
             )}
             {claimed && (
               <p className="game-over-pop flex items-center gap-2.5 text-[#f5ff00] font-bold text-sm sm:text-base">
-                <TrophyIcon className="w-5 h-5 shrink-0" aria-hidden />
+                <IconoTinta nombre="trofeo" tam={30} className="shrink-0" />
                 {tr.savedBest}
               </p>
             )}

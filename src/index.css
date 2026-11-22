@@ -4426,16 +4426,6 @@ div:has(> #privy-dialog-backdrop) {
   letter-spacing: 0.1em;
 }
 
-/* La otra opción, sobre el personaje: el glass de los botones flotantes
-   (§6.1), no un ghost transparente que se perdería encima del dibujo. */
-.msh-btn--vidrio {
-  background: rgba(0, 0, 0, 0.4);
-  color: #ffffff;
-  border-color: rgba(255, 255, 255, 0.2);
-  -webkit-backdrop-filter: blur(24px);
-  backdrop-filter: blur(24px);
-}
-
 .msh-btn--audio:focus-visible {
   outline: 2px solid #ffffff;
   outline-offset: 3px;
@@ -6937,70 +6927,6 @@ div:has(> #privy-dialog-backdrop) {
   height: calc(var(--tam, 3rem) * 0.42);
 }
 
-/* Vidrio líquido (Oscar: "como el liquid glass de Apple") para las burbujas y
-   la hamburguesa de la versión rápida. Sobre el azul plano no hay nada que
-   refractar, así que todo es luz difusa y sin contorno (Oscar: el filo de
-   1 px se leía como stroke): vidrio claro casi transparente con su
-   desenfoque, brillo arriba a la izquierda (::before), luz de rebote abajo y
-   una orilla iridiscente apenas visible abajo (::after). isolation: los dos
-   pseudo van debajo del ícono. */
-.burbuja-vidrio {
-  isolation: isolate;
-  color: #ffffff;
-  border: 0;
-  background: rgba(255, 255, 255, 0.07);
-  -webkit-backdrop-filter: blur(10px) saturate(170%) brightness(1.12);
-  backdrop-filter: blur(10px) saturate(170%) brightness(1.12);
-  box-shadow:
-    inset 0 2px 6px -2px rgba(255, 255, 255, 0.45),
-    inset 0 -8px 14px -8px rgba(255, 255, 255, 0.3),
-    inset 0 0 12px rgba(255, 255, 255, 0.07),
-    0 8px 22px rgba(0, 4, 40, 0.24);
-  transition: transform 260ms var(--ease-expo-out), background-color 200ms linear;
-}
-
-.burbuja-vidrio::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border-radius: inherit;
-  background: radial-gradient(120% 95% at 28% 12%, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0) 46%);
-  pointer-events: none;
-}
-
-.burbuja-vidrio::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border-radius: inherit;
-  padding: 1px;
-  opacity: 0.45;
-  background: linear-gradient(200deg, transparent 60%, rgba(255, 130, 210, 0.55) 76%, rgba(120, 210, 255, 0.6) 86%, rgba(170, 255, 180, 0.45) 96%);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  pointer-events: none;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .burbuja-vidrio:hover {
-    background: rgba(255, 255, 255, 0.14);
-    transform: translateY(-1px) scale(1.07);
-  }
-}
-
-.burbuja-vidrio:focus-visible {
-  outline: 2px solid #ffffff;
-  outline-offset: 3px;
-}
-
-/* Sin backdrop-filter el vidrio sería un hoyo: un poco más de tinte. */
-@supports not (backdrop-filter: blur(1px)) {
-  .burbuja-vidrio { background: rgba(255, 255, 255, 0.16); }
-}
-
 @keyframes qh-burbuja-entra {
   from { opacity: 0; transform: scale(0.35); }
   60% { opacity: 1; transform: scale(1.08); }
@@ -7704,7 +7630,158 @@ div:has(> #privy-dialog-backdrop) {
 }
 .dsp-gotas { display: none; }
 
+/* Terminar la partida: tecla roja. */
+.tecla-roja.burbuja-vidrio { background: #ff3b3b; color: #ffffff; }
+@media (hover: hover) and (pointer: fine) {
+  .tecla-roja.burbuja-vidrio:hover { background: #ff5c5c; }
+}
+
+/* Las pestañas de Customize en compacto: la misma placa, más chica. */
+.nav-tinta__item--chico { min-height: 38px; padding: 0.2em 0.7rem 0; font-size: 0.95rem; }
+
+/* Chips de tinta (partes, props y skins de Customize): redondos e impresos;
+   el elegido se levanta, y lo que señalas también. */
+.chip-tinta {
+  --alto: 0px;
+  border: 2px solid #0a0510;
+  border-radius: 9999px;
+  background: #18205a;
+  box-shadow: 0 var(--alto) 0 0 #0a0510;
+  transform: translateY(calc(var(--alto) * -1));
+  transition: transform 160ms var(--ease-spring), box-shadow 160ms var(--ease-spring), background-color 120ms linear;
+}
+.chip-tinta.es-elegido { --alto: 5px; background: #ffffff; }
+.chip-tinta--amarillo.es-elegido { background: var(--amarillo); }
+@media (hover: hover) and (pointer: fine) {
+  .chip-tinta:not(:disabled):hover { --alto: 5px; transform: translateY(-5px); filter: none; }
+}
+.chip-tinta:not(:disabled):active { --alto: 1px; transform: translateY(-1px); transition-duration: 60ms; }
+.chip-tinta:focus-visible { outline: 3px solid #ffffff; outline-offset: 4px; }
+.skin-chip__swatch.chip-tinta { background: #0a0510; }
+.chip-tinta__tip { box-shadow: 0 3px 0 0 #0a0510; }
+
+/* Los botones del sitio (la acción principal en amarillo y la secundaria)
+   también son teclas: la principal levantada, la secundaria impresa hasta
+   que la señalas. */
+.shop-btn--primary,
+.shop-btn--ghost {
+  --alto: 5px;
+  border-radius: 14px;
+  box-shadow: 0 var(--alto) 0 0 #0a0510;
+  transform: translateY(calc(var(--alto) * -1));
+  transition: transform 160ms var(--ease-spring), box-shadow 160ms var(--ease-spring),
+    background-color 120ms linear, color 120ms linear, border-color 120ms linear;
+}
+.shop-btn--primary { border-color: #0a0510; }
+.shop-btn--ghost { --alto: 0px; }
+@media (hover: hover) and (pointer: fine) {
+  .shop-btn--primary:not(:disabled):hover { --alto: 7px; transform: translateY(-7px); filter: none; border-color: #0a0510; }
+  .shop-btn--ghost:not(:disabled):hover { --alto: 5px; transform: translateY(-5px); filter: none; background: #ffffff; color: #0a0510; border-color: #0a0510; }
+}
+.shop-btn--primary:not(:disabled):active,
+.shop-btn--ghost:not(:disabled):active { --alto: 1px; transform: translateY(-1px); transition-duration: 60ms; }
+.shop-btn--primary:disabled { --alto: 0px; }
+.shop-stepper.shop-btn--primary:hover { --alto: 5px; transform: translateY(-5px); }
+.shop-btn--primary:focus-visible,
+.shop-btn--ghost:focus-visible { outline: 3px solid #ffffff; outline-offset: 4px; }
+
+/* El chip marcado (filtros, variantes, idioma) se levanta en su amarillo. */
+.shop-chip[aria-selected='true'],
+.shop-chip[aria-pressed='true'] {
+  border-color: #0a0510;
+  box-shadow: 0 4px 0 0 #0a0510;
+  transform: translateY(-4px);
+}
+
+/* El editor del wallpaper: las cápsulas son placas impresas; la herramienta
+   elegida y lo que señalas se levantan. */
+.dwp-cap {
+  gap: 4px;
+  padding: 8px 8px 6px;
+  border: 0;
+  border-radius: 18px;
+  background: #18205a;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+.dwp-h,
+.dwp-chip {
+  --alto: 0px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  box-shadow: 0 var(--alto) 0 0 #0a0510;
+  transform: translateY(calc(var(--alto) * -1));
+  transition: transform 160ms var(--ease-spring), box-shadow 160ms var(--ease-spring),
+    background-color 120ms linear, color 120ms linear, border-color 120ms linear;
+}
+.dwp-chip { font-family: var(--font-display); font-weight: 400; font-size: 15px; letter-spacing: 0.03em; padding-top: 0.15em; }
+.dwp-h[aria-pressed='true'],
+.dwp-h[aria-pressed='true']:hover,
+.dwp-chip[aria-pressed='true'] {
+  --alto: 5px;
+  background: #ffffff;
+  color: #0a0510;
+  border-color: #0a0510;
+  transform: translateY(-5px);
+}
+@media (hover: hover) and (pointer: fine) {
+  .dwp-h:hover:not(:disabled),
+  .dwp-chip:hover:not([aria-pressed='true']) {
+    --alto: 5px;
+    background: #ffffff;
+    color: #0a0510;
+    border-color: #0a0510;
+    transform: translateY(-5px);
+    filter: none;
+  }
+}
+.dwp-h:active:not(:disabled),
+.dwp-chip:active { --alto: 1px; transform: translateY(-1px); transition-duration: 60ms; }
+.dwp-sep { background: rgba(255, 255, 255, 0.18); }
+.dwp-boton.burbuja-vidrio { min-height: 44px; }
+
+/* Customize del teléfono: el fondo en su tecla con el nombre en tinta, y el
+   prop puesto en amarillo con su filo. */
+.mcz .mcz-fondo .color-well__label { color: #0a0510; font-family: var(--font-display); font-weight: 400; letter-spacing: 0.04em; }
+.mcz .mcz-fondo .color-well__swatch { border: 2px solid #0a0510; }
+.mcz .mcz-prop.is-puesto { border-color: #0a0510; }
+/* En el panel oscuro del teléfono las skins conservan su aro magenta. */
+.mcz .chip-tinta { transform: none; }
+.mcz-pista {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border-color: #0a0510;
+  background: #ffffff;
+  color: #0a0510;
+  font-weight: 700;
+}
+
+/* El play grande de la historia en pausa: tecla. */
+.dsp-pausa-centro {
+  --alto: 6px;
+  border: 2px solid #0a0510;
+  border-radius: 22px;
+  background: #ffffff;
+  color: #0a0510;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: 0 var(--alto) 0 0 #0a0510;
+  transform: translate(-50%, calc(-50% - var(--alto)));
+  transition: transform 160ms var(--ease-spring), box-shadow 160ms var(--ease-spring);
+  animation: dsp-pausa-entra-tecla 220ms var(--ease-expo-out) both;
+}
+.dsp-pausa-centro:hover { --alto: 8px; background: #ffffff; transform: translate(-50%, calc(-50% - var(--alto))); filter: none; }
+.dsp-pausa-centro:active { --alto: 1px; transform: translate(-50%, calc(-50% - var(--alto))); }
+.dsp-pausa-centro .icono-tinta { margin-left: 0.2rem; }
+@keyframes dsp-pausa-entra-tecla {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.85); }
+  to { opacity: 1; transform: translate(-50%, calc(-50% - var(--alto, 6px))); }
+}
+.dsp-tiempo__btn:hover { background: rgba(255, 255, 255, 0.12); }
+
 @media (prefers-reduced-motion: reduce) {
-  .burbuja-vidrio, .msh-btn--vidrio, .puertas .puerta-modo, .nav-tinta__item { transition: background-color 120ms linear, color 120ms linear; }
-  .dsp-idioma-burbuja.burbuja-vidrio, .mobile-close.burbuja-vidrio { animation: none; }
+  .burbuja-vidrio, .msh-btn--vidrio, .puertas .puerta-modo, .nav-tinta__item,
+  .chip-tinta, .shop-btn--primary, .shop-btn--ghost, .dwp-h, .dwp-chip { transition: background-color 120ms linear, color 120ms linear; }
+  .dsp-idioma-burbuja.burbuja-vidrio, .mobile-close.burbuja-vidrio, .dsp-pausa-centro { animation: none; }
 }

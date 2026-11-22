@@ -20,16 +20,8 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback, useId } from 'react'
-import {
-    PlayIcon,
-    PauseIcon,
-    BackwardIcon,
-    ForwardIcon,
-    StopIcon,
-    SpeakerWaveIcon,
-    ChevronDownIcon,
-} from '@heroicons/react/24/solid'
 import { urlVoz, cadenaCyberVox } from '../lib/cyberVox.js'
+import IconoTinta from './ui/IconoTinta.jsx'
 
 
 // ─── Waveform Canvas ───
@@ -552,7 +544,7 @@ export default function BlogTTS({ htmlContent, plainText, lang = 'en' }) {
                 className="w-full flex items-center gap-3 sm:gap-4 min-h-14 px-4 sm:px-5 py-3 text-left rounded-2xl focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-section-blog"
             >
                 <span className="shrink-0 grid place-items-center w-10 h-10 rounded-full bg-section-blog text-[#0a0510]">
-                    <SpeakerWaveIcon className="w-5 h-5" aria-hidden="true" />
+                    <IconoTinta nombre="bocina" tam={30} />
                 </span>
                 <span className="flex-1 min-w-0 font-bold text-white text-base sm:text-lg leading-snug">
                     {statusLabel}
@@ -562,10 +554,7 @@ export default function BlogTTS({ htmlContent, plainText, lang = 'en' }) {
                         {fmtTime(elapsed)} / {fmtTime(totalTime)}
                     </span>
                 )}
-                <ChevronDownIcon
-                    className={`shrink-0 w-5 h-5 text-white/50 transition-transform duration-300 ${collapsed ? '' : 'rotate-180'}`}
-                    aria-hidden="true"
-                />
+                <IconoTinta nombre="chevronAbajo" tam={28} className={`shrink-0 transition-transform duration-300 ${collapsed ? '' : 'rotate-180'}`} />
             </button>
 
             {/* Expandable player. `inert` mientras está cerrado: si no, los
@@ -623,7 +612,7 @@ export default function BlogTTS({ htmlContent, plainText, lang = 'en' }) {
                             {/* Transport controls */}
                             <div className="mt-4 flex items-center justify-center gap-2">
                                 <TBtn onClick={() => handleSkip(-1)} disabled={!active} title={labels.prev}>
-                                    <BackwardIcon className="w-5 h-5" aria-hidden="true" />
+                                    <IconoTinta nombre="retroceder" tam={30} />
                                 </TBtn>
 
                                 {!active || !playing ? (
@@ -632,7 +621,7 @@ export default function BlogTTS({ htmlContent, plainText, lang = 'en' }) {
                                         onClick={handlePlay}
                                         className="inline-flex items-center justify-center gap-2 h-11 px-6 rounded-full bg-section-blog text-[#0a0510] font-bold text-sm uppercase tracking-[0.14em] hover:bg-[#ff8a33] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-blog"
                                     >
-                                        <PlayIcon className="w-5 h-5" aria-hidden="true" />
+                                        <IconoTinta nombre="play" tam={30} />
                                         <span>{labels.play}</span>
                                     </button>
                                 ) : (
@@ -641,17 +630,17 @@ export default function BlogTTS({ htmlContent, plainText, lang = 'en' }) {
                                         onClick={handlePause}
                                         className="inline-flex items-center justify-center gap-2 h-11 px-6 rounded-full bg-section-blog text-[#0a0510] font-bold text-sm uppercase tracking-[0.14em] hover:bg-[#ff8a33] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-blog"
                                     >
-                                        <PauseIcon className="w-5 h-5" aria-hidden="true" />
+                                        <IconoTinta nombre="pausa" tam={30} />
                                         <span>{labels.pause}</span>
                                     </button>
                                 )}
 
                                 <TBtn onClick={() => handleSkip(1)} disabled={!active} title={labels.next}>
-                                    <ForwardIcon className="w-5 h-5" aria-hidden="true" />
+                                    <IconoTinta nombre="adelante" tam={30} />
                                 </TBtn>
 
                                 <TBtn onClick={handleStop} disabled={!active} title={labels.stop}>
-                                    <StopIcon className="w-4 h-4" aria-hidden="true" />
+                                    <IconoTinta nombre="detener" tam={24} />
                                 </TBtn>
                             </div>
                         </div>

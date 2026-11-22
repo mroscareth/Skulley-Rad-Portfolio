@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react'
-import KickIcon from '../icons/KickIcon.jsx'
+import IconoTinta from '../ui/IconoTinta.jsx'
 
 // Botón de patada táctil: mantener = cargar, soltar = patear. Simula la barra
 // espaciadora (la escucha Player.jsx), igual que el ⚡ simula la E del poder.
@@ -47,7 +47,7 @@ export default function MobileKickButton({ label, style }) {
         ...style,
       }}
     >
-      <KickIcon className="w-7 h-7" />
+      <IconoTinta nombre="patada" tam={42} />
     </button>
   )
 }

@@ -35,7 +35,7 @@ export default function RegionChip({ lang }) {
         onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
         aria-haspopup="true"
         aria-expanded={open}
-        className={`h-11 md:h-12 px-3.5 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-3xl border transition-colors ${open ? 'bg-white border-white text-black' : 'bg-black/40 border-white/[0.08] text-white hover:bg-white/[0.15]'}`}
+        className={`h-11 md:h-12 px-3.5 grid place-items-center burbuja-vidrio ${open ? 'tecla-amarilla' : ''}`}
         aria-label={isEn
           ? `Shipping destination and currency — ${region.name_en}, ${region.currency}`
           : `Destino de envío y moneda — ${region.name_es}, ${region.currency}`}
@@ -52,7 +52,7 @@ export default function RegionChip({ lang }) {
         <div
           role="group"
           aria-label={isEn ? 'Shipping destination and currency' : 'Destino de envío y moneda'}
-          className="absolute top-full right-0 mt-3 min-w-[218px] p-2 rounded-2xl bg-black/80 backdrop-blur-2xl border border-white/[0.1] shadow-[0_18px_50px_rgba(0,0,0,0.6)]"
+          className="absolute top-full right-0 mt-3 min-w-[218px] p-2 rounded-2xl bg-[#0d0714] border-2 border-white/[0.12]"
         >
           <p className="px-2.5 pt-1 pb-2 text-[10px] tracking-[0.16em] uppercase text-white/45 font-bold">
             {isEn ? 'Ship to' : 'Enviar a'}

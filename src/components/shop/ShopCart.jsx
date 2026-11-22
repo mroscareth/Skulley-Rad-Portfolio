@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ShoppingCartIcon, XMarkIcon, MinusIcon, PlusIcon, TicketIcon, TrashIcon, LockClosedIcon, UserCircleIcon } from '@heroicons/react/24/solid'
 import IconoTinta from '../ui/IconoTinta.jsx'
 import { useShopCartCtx } from '../../lib/shopCartContext.jsx'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
@@ -291,7 +290,7 @@ export default function ShopCart({
       {/* Velo de los modales (§6.1): /70 + blur. Se funde él solo; la opacity
           nunca va en un ancestro o el blur deja de ver la página. */}
       <div
-        className={`absolute inset-0 bg-black/70 backdrop-blur-xl transition-opacity duration-400 ease-out ${open ? 'opacity-100' : 'opacity-0'}`}
+        className={`absolute inset-0 bg-[#0a0510]/80 transition-opacity duration-400 ease-out ${open ? 'opacity-100' : 'opacity-0'}`}
         onClick={onClose}
       />
       <aside
@@ -310,17 +309,17 @@ export default function ShopCart({
           <button
             type="button"
             onClick={onClose}
-            className={`w-11 h-11 shrink-0 grid place-items-center rounded-full border-2 border-white/40 bg-black/50 text-white hover:bg-white hover:text-black hover:border-white active:scale-90 transition-all ${FOCUS_RING}`}
+            className={`w-11 h-11 shrink-0 grid place-items-center burbuja-vidrio ${FOCUS_RING}`}
             aria-label={tr.closeAria}
           >
-            <XMarkIcon className="w-5 h-5" />
+            <IconoTinta nombre="cerrar" tam={30} />
           </button>
         </header>
 
         <div className="flex-1 min-h-0 overflow-y-auto modal-scroll px-5 sm:px-7">
           {!hasItems ? (
             <div className="min-h-full flex flex-col items-center justify-center text-center py-16">
-              <ShoppingCartIcon className="w-14 h-14 text-white/15" aria-hidden />
+              <IconoTinta nombre="carrito" tam={84} className="opacity-30" />
               <p className="mt-5 text-lg font-bold text-white">{tr.emptyTitle}</p>
               <p className="mt-1.5 text-[0.9375rem] text-white/60 leading-relaxed max-w-[28ch]">{tr.emptyBody}</p>
               <button
@@ -371,7 +370,7 @@ export default function ShopCart({
                           aria-label={tr.removeAria(title)}
                           data-tip={tr.removeAria(title)}
                         >
-                          <TrashIcon className="w-[18px] h-[18px]" />
+                          <IconoTinta nombre="basura" tam={27} />
                         </button>
                       </div>
                       <div className="mt-auto pt-3 flex items-center justify-between gap-3">
@@ -386,7 +385,7 @@ export default function ShopCart({
                               className={`w-10 h-10 grid place-items-center text-white hover:bg-white/10 rounded-full disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent active:scale-90 ${FOCUS_RING}`}
                               aria-label={isEn ? 'Decrease quantity' : 'Reducir cantidad'}
                             >
-                              <MinusIcon className="w-4 h-4" />
+                              <IconoTinta nombre="menos" tam={24} />
                             </button>
                             <span className="w-7 text-center text-white font-bold text-base tabular-nums" aria-live="polite">{it.qty}</span>
                             <button
@@ -401,7 +400,7 @@ export default function ShopCart({
                               className={`w-10 h-10 grid place-items-center text-white hover:bg-white/10 rounded-full disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent active:scale-90 ${FOCUS_RING}`}
                               aria-label={isEn ? 'Increase quantity' : 'Aumentar cantidad'}
                             >
-                              <PlusIcon className="w-4 h-4" />
+                              <IconoTinta nombre="mas" tam={24} />
                             </button>
                           </div>
                         )}
@@ -450,7 +449,7 @@ export default function ShopCart({
                 del panel. Usarlo o guardarlo se decide aquí mismo. */}
             {hasItems && goldenTicketAvailable && (
               <div className="px-5 sm:px-7 py-4 border-t-2 border-white/10 flex items-center gap-3">
-                <TicketIcon className={`w-6 h-6 shrink-0 ${ticketTier === 'silver' ? 'text-[#cbd5e1]' : 'text-amarillo'}`} aria-hidden />
+                <IconoTinta nombre="boleto" tam={36} cara={ticketTier === 'silver' ? '#cbd5e1' : '#f5ff00'} className="shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold text-white">{activeDiscount ? tr.ticketApplied : tr.ticketTitle}</p>
                   <p className="text-sm text-white/60">
@@ -488,7 +487,7 @@ export default function ShopCart({
                       onClick={requestLogin}
                       className={`shop-btn shop-btn--primary ml-auto shrink-0 min-h-[52px] px-5 sm:px-6 text-xs gap-2 ${FOCUS_RING}`}
                     >
-                      <UserCircleIcon className="w-4 h-4 shrink-0" aria-hidden />
+                      <IconoTinta nombre="usuario" tam={24} className="shrink-0" />
                       <span>{checkoutEnabled ? tr.signIn : tr.paused}</span>
                     </button>
                   ) : (
@@ -498,7 +497,7 @@ export default function ShopCart({
                       onClick={handleCheckout}
                       className={`shop-btn shop-btn--primary ml-auto shrink-0 min-h-[52px] px-5 sm:px-6 text-xs gap-2 ${FOCUS_RING}`}
                     >
-                      {checkoutEnabled && !checkingOut && <LockClosedIcon className="w-4 h-4 shrink-0" aria-hidden />}
+                      {checkoutEnabled && !checkingOut && <IconoTinta nombre="candado" tam={24} className="shrink-0" />}
                       <span>{checkingOut ? tr.redirecting : (checkoutEnabled ? tr.proceed : tr.paused)}</span>
                     </button>
                   )}

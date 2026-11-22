@@ -497,7 +497,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
       {/* Hover tooltip */}
       {hover.active && (
         <div
-          className="fixed z-[13060] pointer-events-none px-4 py-2 rounded-full bg-black/70 backdrop-blur-sm text-white text-sm font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.35)] border border-white/10"
+          className="fixed z-[13060] pointer-events-none px-4 py-2 rounded-[12px] bg-white text-[#0a0510] text-sm font-bold border-2 border-[#0a0510] shadow-[0_4px_0_0_#0a0510]"
           style={{ left: `${hover.x + 12}px`, top: `${hover.y + 12}px` }}
         >
           <span className="mr-1" aria-hidden>✨</span>{hover.title}
@@ -513,7 +513,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
         return (
           <div
             ref={detailOverlayRef}
-            className={`fixed inset-0 z-[14000] bg-[#0a0510]/90 backdrop-blur-sm outline-none ${(!detailOpening && !detailClosing) ? 'pointer-events-auto' : 'pointer-events-none'} overflow-y-auto no-native-scrollbar transition-opacity ${detailOpening ? 'duration-600' : 'duration-300'} ease-out ${detailClosing || detailOpening ? 'opacity-0' : 'opacity-100'}`}
+            className={`fixed inset-0 z-[14000] bg-[#0a0510]/95 outline-none ${(!detailOpening && !detailClosing) ? 'pointer-events-auto' : 'pointer-events-none'} overflow-y-auto no-native-scrollbar transition-opacity ${detailOpening ? 'duration-600' : 'duration-300'} ease-out ${detailClosing || detailOpening ? 'opacity-0' : 'opacity-100'}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby={projTitle ? 'project-detail-title' : undefined}

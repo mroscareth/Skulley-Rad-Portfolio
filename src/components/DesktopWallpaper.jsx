@@ -1,12 +1,11 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ArrowDownTrayIcon, XMarkIcon } from '@heroicons/react/24/solid'
-import { ArrowLeftIcon, ArrowPathIcon, FaceSmileIcon, HandRaisedIcon, MagnifyingGlassPlusIcon, MinusIcon, PlusIcon, QuestionMarkCircleIcon, ViewfinderCircleIcon } from '@heroicons/react/24/outline'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import { playSfx } from '../lib/sfx.js'
 import ColorWell from './ColorWell.jsx'
 import { GIRO_POR_PX, WALLPAPER_H, WALLPAPER_W, WALLPAPER_W_POCA_MEMORIA, wallpaperEstado as est } from '../lib/wallpaperEscritorio.js'
 import { dibujarTexto, FUENTES_TEXTO } from '../lib/wallpaperTexto.js'
 import { STICKERS } from '../lib/wallpaperStickers.js'
+import IconoTinta from './ui/IconoTinta.jsx'
 
 // El marco del wallpaper de escritorio, encima de Skulley aislado (se abre desde
 // Customize). Tiene la proporción del archivo y lo que cae adentro es lo que sale.
@@ -39,12 +38,12 @@ const ANCHO_MAX = 0.9
 
 // Los gestos del escenario. Texto, Stickers y Fondo dejan girar a Skulley.
 const HERRAMIENTAS = [
-  { id: 'rota', tecla: 'R', label: 'customizer.wallToolRotate', Icono: ArrowPathIcon },
-  { id: 'mano', tecla: 'H', label: 'customizer.wallToolMove', Icono: HandRaisedIcon },
-  { id: 'zoom', tecla: 'Z', label: 'customizer.wallToolZoom', Icono: MagnifyingGlassPlusIcon },
+  { id: 'rota', tecla: 'R', label: 'customizer.wallToolRotate', icono: 'reiniciar' },
+  { id: 'mano', tecla: 'H', label: 'customizer.wallToolMove', icono: 'mano' },
+  { id: 'zoom', tecla: 'Z', label: 'customizer.wallToolZoom', icono: 'lupaMas' },
   { sep: true },
   { id: 'texto', tecla: 'T', label: 'customizer.wallText' },
-  ...(STICKERS.length ? [{ id: 'stickers', tecla: 'S', label: 'customizer.wallStickers', Icono: FaceSmileIcon }] : []),
+  ...(STICKERS.length ? [{ id: 'stickers', tecla: 'S', label: 'customizer.wallStickers', icono: 'sonrisa' }] : []),
   { sep: true },
   { id: 'fondo', tecla: 'F', label: 'customizer.wallBg' },
 ]
@@ -618,7 +617,7 @@ export default function DesktopWallpaper({ lista = false, onSalir, fondo, onFond
               onPointerDown={(e) => onStickerDown(e, seleccionado, 'gira')}
               aria-hidden="true"
             >
-              <ArrowPathIcon className="w-3.5 h-3.5" strokeWidth={2.5} style={{ transform: `rotate(${-seleccionado.r}rad)` }} />
+              <IconoTinta nombre="reiniciar" tam={22} style={{ transform: `rotate(${-seleccionado.r}rad)` }} />
             </span>
             <button
               type="button"
@@ -628,7 +627,7 @@ export default function DesktopWallpaper({ lista = false, onSalir, fondo, onFond
               onPointerDown={(e) => e.stopPropagation()}
               onClick={() => quitarPegado(seleccionado.n)}
             >
-              <XMarkIcon className="w-3.5 h-3.5" style={{ transform: `rotate(${-seleccionado.r}rad)` }} />
+              <IconoTinta nombre="cerrar" tam={22} style={{ transform: `rotate(${-seleccionado.r}rad)` }} />
             </button>
           </div>
         )}
@@ -636,10 +635,10 @@ export default function DesktopWallpaper({ lista = false, onSalir, fondo, onFond
 
       <div className="dwp-cap dwp-cap--atras" inert={!lista || undefined}>
         <button type="button" className="dwp-h" onClick={salir} aria-label={t('common.back')} data-tip={t('common.back')} data-tip-side="bottom">
-          <ArrowLeftIcon className="w-5 h-5" />
+          <IconoTinta nombre="atras" tam={30} />
         </button>
         <button type="button" className="dwp-h" onClick={abrirGuia} aria-label={t('customizer.wallGuideHelp')} data-tip={t('customizer.wallGuideHelp')} data-tip-side="bottom">
-          <QuestionMarkCircleIcon className="w-[22px] h-[22px]" />
+          <IconoTinta nombre="pregunta" tam={33} />
         </button>
       </div>
 
@@ -654,7 +653,7 @@ export default function DesktopWallpaper({ lista = false, onSalir, fondo, onFond
             data-tip={`${t(h.label)} (${h.tecla})`}
             onClick={() => { setHerramienta(h.id); try { playSfx('click', { volume: 1.0 }) } catch { } }}
           >
-            {h.Icono && <h.Icono className="w-[22px] h-[22px]" />}
+            {h.icono && <IconoTinta nombre={h.icono} tam={32} />}
             {h.id === 'texto' && <span className="dwp-t" aria-hidden="true">T</span>}
             {h.id === 'fondo' && <span className="dwp-relleno" style={{ backgroundColor: fondo }} aria-hidden="true" />}
           </button>
@@ -663,14 +662,14 @@ export default function DesktopWallpaper({ lista = false, onSalir, fondo, onFond
 
       <div className="dwp-cap dwp-cap--archivo" inert={!lista || undefined}>
         <button type="button" className="dwp-h" onClick={() => acercarAlCentro(1 / ZOOM_PASO)} disabled={zoomPct <= 100} aria-label={t('customizer.wallZoomOut')} data-tip={t('customizer.wallZoomOut')} data-tip-side="bottom">
-          <MinusIcon className="w-[18px] h-[18px]" />
+          <IconoTinta nombre="menos" tam={27} />
         </button>
         <span className="dwp-zoom" role="status">{zoomPct} %</span>
         <button type="button" className="dwp-h" onClick={() => acercarAlCentro(ZOOM_PASO)} disabled={zoomPct >= ZOOM_MAX * 100} aria-label={t('customizer.wallZoomIn')} data-tip={t('customizer.wallZoomIn')} data-tip-side="bottom">
-          <PlusIcon className="w-[18px] h-[18px]" />
+          <IconoTinta nombre="mas" tam={27} />
         </button>
         <button type="button" className="dwp-h" onClick={centrar} aria-label={t('customizer.wallCenter')} data-tip={`${t('customizer.wallCenter')} (C)`} data-tip-side="bottom">
-          <ViewfinderCircleIcon className="w-[22px] h-[22px]" />
+          <IconoTinta nombre="mira" tam={33} />
         </button>
         <span className="dwp-sep" />
         <p className="dwp-dato" role="status">
@@ -678,12 +677,12 @@ export default function DesktopWallpaper({ lista = false, onSalir, fondo, onFond
         </p>
         <button
           type="button"
-          className="shop-btn shop-btn--primary dwp-boton"
+          className="shop-btn shop-btn--primary dwp-boton burbuja-vidrio tecla-amarilla"
           onClick={archivo ? guardar : crear}
           disabled={creando}
           aria-busy={creando}
         >
-          <ArrowDownTrayIcon className="w-4 h-4" aria-hidden="true" />
+          <IconoTinta nombre="descargar" tam={24} />
           {archivo ? t('customizer.wallSave') : fallo ? t('customizer.wallRetry') : t('customizer.wallCreate')}
         </button>
       </div>

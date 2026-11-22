@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { CameraIcon, ForwardIcon, PlayIcon } from '@heroicons/react/24/solid'
 import BarraHistoria from './BarraHistoria.jsx'
 import IconoTinta from './ui/IconoTinta.jsx'
 import { fotoDeHistoria } from '../lib/fotoHistoria.js'
@@ -497,7 +496,7 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
       )}
       {fase === 'historia' && pausada && (
         <button type="button" className="dsp-pausa-centro" onClick={alternarPausa} aria-label={es ? 'Seguir' : 'Play'}>
-          <PlayIcon aria-hidden="true" />
+          <IconoTinta nombre="play" tam={56} />
         </button>
       )}
 
@@ -506,18 +505,18 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
           <>
             <button
               type="button"
-              className="h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-elev-lg transition-colors disabled:opacity-50"
+              className="h-12 w-12 grid place-items-center burbuja-vidrio disabled:opacity-50"
               onClick={tomarFoto}
               disabled={fotografiando}
               aria-label={es ? 'Tomar foto (PNG para wallpaper)' : 'Take a photo (PNG wallpaper)'}
               data-tip={es ? 'Foto en PNG para wallpaper' : 'PNG wallpaper photo'}
               data-tip-side="bottom"
             >
-              <CameraIcon className="w-5 h-5" aria-hidden="true" />
+              <IconoTinta nombre="camara" tam={30} />
             </button>
             <button type="button" className="shop-btn msh-btn msh-btn--vidrio dsp-saltar" onClick={terminarHistoria}>
               {es ? 'Saltar' : 'Skip'}
-              <ForwardIcon aria-hidden="true" />
+              <IconoTinta nombre="adelante" tam={26} />
             </button>
           </>
         )}

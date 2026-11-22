@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
 import { HERO_BULLETINS } from '../../lib/shopMockData.js'
 import { useShopData } from '../../lib/shopDataContext.jsx'
+import IconoTinta from '../ui/IconoTinta.jsx'
 
 const AUTOPLAY_MS = 6000
 const TRANSITION_MS = 650
@@ -148,17 +148,17 @@ export default function ShopHero({ lang = 'en', onCtaClick }) {
         type="button"
         onClick={prev}
         aria-label={ariaPrev}
-        className="absolute left-3 sm:left-8 top-1/2 -translate-y-1/2 z-[5] w-11 h-11 sm:w-14 sm:h-14 grid place-items-center rounded-full border-2 border-white/40 bg-black/40 text-white hover:bg-white hover:text-black hover:border-white active:scale-90 transition-all"
+        className="absolute left-3 sm:left-8 top-1/2 -translate-y-1/2 z-[5] w-11 h-11 sm:w-14 sm:h-14 grid place-items-center burbuja-vidrio"
       >
-        <ChevronLeftIcon className="w-5 h-5 sm:w-6 sm:h-6" />
+        <IconoTinta nombre="chevronIzq" tam={30} />
       </button>
       <button
         type="button"
         onClick={next}
         aria-label={ariaNext}
-        className="absolute right-3 sm:right-8 top-1/2 -translate-y-1/2 z-[5] w-11 h-11 sm:w-14 sm:h-14 grid place-items-center rounded-full border-2 border-white/40 bg-black/40 text-white hover:bg-white hover:text-black hover:border-white active:scale-90 transition-all"
+        className="absolute right-3 sm:right-8 top-1/2 -translate-y-1/2 z-[5] w-11 h-11 sm:w-14 sm:h-14 grid place-items-center burbuja-vidrio"
       >
-        <ChevronRightIcon className="w-5 h-5 sm:w-6 sm:h-6" />
+        <IconoTinta nombre="chevronDer" tam={30} />
       </button>
 
       {/* Dots */}

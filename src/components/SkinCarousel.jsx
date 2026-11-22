@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, useLayoutEffect, useCallback } from 'react'
-import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
+import IconoTinta from './ui/IconoTinta.jsx'
 
 // Carousel INFINITO de skins para mobile: muestra 3 a la vez, loop modular real
 // (índice mod N), con drag/swipe + flechas y animación de slide. Renderiza solo
@@ -80,10 +80,10 @@ export default function SkinCarousel({ skins = [], renderChip, lang = 'en' }) {
       <button
         type="button"
         onClick={() => arrow(-1)}
-        className="shrink-0 h-9 w-9 rounded-full grid place-items-center bg-black/40 backdrop-blur-md border border-white/[0.16] text-white/90 hover:bg-black/55 transition-colors shadow-elev-sm"
+        className="shrink-0 h-11 w-11 grid place-items-center burbuja-vidrio"
         aria-label={lang === 'es' ? 'Anterior' : 'Previous'}
       >
-        <ChevronLeftIcon className="w-5 h-5" />
+        <IconoTinta nombre="chevronIzq" tam={30} />
       </button>
       <div
         ref={wrapRef}
@@ -114,10 +114,10 @@ export default function SkinCarousel({ skins = [], renderChip, lang = 'en' }) {
       <button
         type="button"
         onClick={() => arrow(1)}
-        className="shrink-0 h-9 w-9 rounded-full grid place-items-center bg-black/40 backdrop-blur-md border border-white/[0.16] text-white/90 hover:bg-black/55 transition-colors shadow-elev-sm"
+        className="shrink-0 h-11 w-11 grid place-items-center burbuja-vidrio"
         aria-label={lang === 'es' ? 'Siguiente' : 'Next'}
       >
-        <ChevronRightIcon className="w-5 h-5" />
+        <IconoTinta nombre="chevronDer" tam={30} />
       </button>
     </div>
   )

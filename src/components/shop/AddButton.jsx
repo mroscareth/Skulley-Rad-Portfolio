@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { CheckIcon, ChevronRightIcon, MinusIcon, PlusIcon, ShoppingCartIcon, TrashIcon } from '@heroicons/react/24/solid'
 import { useShopCartCtx } from '../../lib/shopCartContext.jsx'
 import { removeFromCart } from '../../lib/addToCart.js'
+import IconoTinta from '../ui/IconoTinta.jsx'
 
 const ADDED_MS = 1800 // cuánto se queda el botón en "Agregado"
 
@@ -111,7 +111,7 @@ export default function AddButton({ product, lang = 'en', onAdd, className = '' 
             indicador nunca queda más angosto que el botón que reemplazó, y
             crece solo si − cantidad + no le cabe. */}
         <span className={`shop-stepper__molde ${className}`} aria-hidden>
-          <ShoppingCartIcon className="w-4 h-4 -ml-0.5" />
+          <IconoTinta nombre="carrito" tam={24} className="-ml-0.5" />
           <span>{tr.add}</span>
         </span>
         <span className="shop-stepper__fila">
@@ -126,7 +126,7 @@ export default function AddButton({ product, lang = 'en', onAdd, className = '' 
             removeFromCart(cart, product.id, product.defaultVariantId, qty - 1)
           }}
         >
-          {qty <= 1 ? <TrashIcon className="w-4 h-4" aria-hidden /> : <MinusIcon className="w-4 h-4" aria-hidden />}
+          {qty <= 1 ? <IconoTinta nombre="basura" tam={24} /> : <IconoTinta nombre="menos" tam={24} />}
         </button>
         <span className="shop-stepper__qty" aria-live="polite">
           <span key={qty} className="shop-stepper__num" data-dir={rueda.dir}>{qty}</span>
@@ -143,7 +143,7 @@ export default function AddButton({ product, lang = 'en', onAdd, className = '' 
             if (!enTope && onAdd) onAdd(product)
           }}
         >
-          <PlusIcon className="w-4 h-4" aria-hidden />
+          <IconoTinta nombre="mas" tam={24} />
         </button>
         </span>
       </div>
@@ -151,7 +151,7 @@ export default function AddButton({ product, lang = 'en', onAdd, className = '' 
   }
 
   const label = isSoldOut ? tr.soldOut : added ? tr.added : needsChoice ? tr.choose : tr.add
-  const LeadIcon = isSoldOut || (needsChoice && !added) ? null : added ? CheckIcon : ShoppingCartIcon
+  const iconoLead = isSoldOut || (needsChoice && !added) ? null : added ? 'palomita' : 'carrito'
   const aria = isSoldOut
     ? `${tr.soldOut}: ${title}`
     : added ? `${tr.added}: ${title}` : needsChoice ? tr.chooseAria : tr.addAria
@@ -171,9 +171,9 @@ export default function AddButton({ product, lang = 'en', onAdd, className = '' 
       }}
       className={`shop-btn shop-btn--primary shrink-0 ${className}`}
     >
-      {LeadIcon && <LeadIcon className="w-4 h-4 -ml-0.5" aria-hidden />}
+      {iconoLead && <IconoTinta nombre={iconoLead} tam={24} className="-ml-0.5" />}
       <span>{label}</span>
-      {needsChoice && !added && !isSoldOut && <ChevronRightIcon className="w-4 h-4 -mr-1" aria-hidden />}
+      {needsChoice && !added && !isSoldOut && <IconoTinta nombre="chevronDer" tam={24} className="-mr-1" />}
     </button>
   )
 }

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
-import KickIcon from '../icons/KickIcon.jsx'
 import { kickChargeLive, KICK_CHARGE_EVENT } from '../../lib/kickChargeLive.js'
+import IconoTinta from '../ui/IconoTinta.jsx'
 
 // Medidor de la patada sobre la main nav. Es el mismo valor que la barra cian
 // sobre la cabeza del personaje, pero en la UI y más grande: ahí se lee con
@@ -55,7 +55,7 @@ export default function KickChargeHud({ label }) {
       aria-valuenow={0}
       aria-hidden={active ? undefined : 'true'}
     >
-      <KickIcon className="kick-hud__icon" />
+      <IconoTinta nombre="patada" tam={30} cara="#22d3ee" className="kick-hud__icon" />
       <div className="kick-hud__track">
         <div ref={fillRef} className="kick-hud__fill" />
         {/* Cuartos marcados con corte duro (ink lines, §14.2): referencia

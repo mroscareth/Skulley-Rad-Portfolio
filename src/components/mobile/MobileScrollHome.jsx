@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { CameraIcon, ChevronDownIcon, ForwardIcon, PlayIcon } from '@heroicons/react/24/solid'
 import IconoTinta from '../ui/IconoTinta.jsx'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { sectionColors } from '../../lib/appHelpers.js'
@@ -690,7 +689,7 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
               {b.hint && audioElegido && (
                 <button type="button" className="msh-scroll-hint" onClick={bajarUno}>
                   <span className="msh-scroll-hint__flechas" aria-hidden="true">
-                    {[0, 1, 2].map((i) => <ChevronDownIcon key={i} style={{ '--i': i }} />)}
+                    {[0, 1, 2].map((i) => <IconoTinta key={i} nombre="chevronAbajo" tam={26} style={{ '--i': i }} />)}
                   </span>
                   {b.hint}
                 </button>
@@ -799,11 +798,11 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
                     href={s.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-elev-lg transition-colors"
+                    className="h-12 w-12 grid place-items-center burbuja-vidrio"
                     aria-label={s.label}
                     data-tip={s.label}
                   >
-                    <img src={s.icon} alt="" aria-hidden className="w-5 h-5 invert" draggable="false" />
+                    <IconoTinta nombre={s.tinta} tam={32} />
                   </a>
                 </li>
               ))}
@@ -824,7 +823,7 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
       <div className="sr-only" aria-live="polite">{historia.linea?.texto || ''}</div>
       {faseHistoria === 'historia' && historia.pausada && (
         <button type="button" className="dsp-pausa-centro" onClick={historia.alternarPausa} aria-label={lang === 'es' ? 'Seguir' : 'Play'}>
-          <PlayIcon aria-hidden="true" />
+          <IconoTinta nombre="play" tam={56} />
         </button>
       )}
       {faseHistoria === 'historia' && (
@@ -844,16 +843,16 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
               sonido van en la barra de reproducción. */}
           <button
             type="button"
-            className="h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-elev-lg transition-colors disabled:opacity-50"
+            className="h-12 w-12 grid place-items-center burbuja-vidrio disabled:opacity-50"
             onClick={tomarFotoHistoria}
             disabled={fotografiando}
             aria-label={lang === 'es' ? 'Tomar foto (PNG para wallpaper)' : 'Take a photo (PNG wallpaper)'}
           >
-            <CameraIcon className="w-5 h-5" aria-hidden="true" />
+            <IconoTinta nombre="camara" tam={30} />
           </button>
           <button type="button" className="shop-btn msh-btn msh-btn--vidrio dsp-saltar" onClick={historia.terminarHistoria}>
             {lang === 'es' ? 'Saltar' : 'Skip'}
-            <ForwardIcon aria-hidden="true" />
+            <IconoTinta nombre="adelante" tam={26} />
           </button>
         </div>
       )}

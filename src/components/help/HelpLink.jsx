@@ -1,5 +1,5 @@
 import React from 'react'
-import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
+import IconoTinta from '../ui/IconoTinta.jsx'
 
 const FOCUS_RING = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e600ff] focus-visible:outline-offset-2'
 
@@ -18,7 +18,7 @@ export default function HelpLink({ lang = 'en', section = '', children, classNam
       className={`inline-flex items-center gap-1.5 text-sm text-white/60 underline underline-offset-4 decoration-white/25 hover:text-white hover:decoration-white/60 transition-colors rounded ${FOCUS_RING} ${className}`}
     >
       {label}
-      <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5 shrink-0 opacity-70" aria-hidden />
+      <IconoTinta nombre="externo" tam={21} className="shrink-0 opacity-70" />
     </a>
   )
 }

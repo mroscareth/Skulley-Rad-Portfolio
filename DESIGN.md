@@ -312,7 +312,10 @@ Pedido por Oscar: **la acción importante va de color y siempre a la derecha, al
 
 ## 6. Tarjetas y superficies
 
-### 6.1 Glass morphism (modales, toasts, paneles)
+### 6.1 Glass morphism — retirado (2026-11-22)
+
+Tinta sólida (§9.1) quitó el vidrio de todo el sitio público: ningún `backdrop-filter` ni `backdrop-blur-*`. Los velos de los modales son planos (`bg-[#0a0510]/80`; el menú de pantalla completa `/90`, porque sin desenfoque el título de atrás estorbaba), los paneles siguen en `#0d0714` plano, los toasts y el puntaje son tarjetas de tinta (cara blanca, filo de 2 px y costado de 5 px) y los botones flotantes son teclas. Lo de abajo queda como historia; no se usa.
+
 
 ```css
 background: rgba(0,0,0,0.4–0.7);
@@ -340,7 +343,7 @@ Tailwind equivalente preset:
 
 ### 6.2 Terminal container y traffic-lights — eliminados
 
-Se eliminaron el 2026-10-23. Paneles y modales siguen el patrón de §14 (`OrderStatusModal` es la referencia): overlay `bg-black/70 backdrop-blur-xl`, panel `#0d0714` con borde 2px `white/12` y `rounded-2xl` (pantalla completa en mobile), título en `display-title display-title--md`, botón de cerrar redondo. Nada de traffic-lights ni títulos `M.A.D.R.E.@mausoleum:~/…`.
+Se eliminaron el 2026-10-23. Paneles y modales siguen el patrón de §14 (`OrderStatusModal` es la referencia): overlay plano `bg-[#0a0510]/80`, panel `#0d0714` con borde 2px `white/12` y `rounded-2xl` (pantalla completa en mobile), título en `display-title display-title--md`, botón de cerrar redondo. Nada de traffic-lights ni títulos `M.A.D.R.E.@mausoleum:~/…`.
 
 ### 6.3 Sombras
 
@@ -478,11 +481,11 @@ Hoy hay valores dispersos (1, 10, 11, 20, 30, 40, 45, **999990**, **9999999**). 
 
 ### 9.1 Librería
 
-**Tinta sólida (desde 2026-11-21):** los botones flotantes del sitio (puertas, pie de la versión simple, menú, renglón de la pantalla principal con su idioma, audio, barra, hamburguesa y cerrar del teléfono, idioma y bocina de la barra de secciones, carrito y cuenta, cerrar sección, cámara, botones del retrato, abanicos de redes y del engrane, y la barra de Customize) usan `IconoTinta` (`src/components/ui/IconoTinta.jsx`, definiciones en `src/lib/iconosTinta.js`): formas vectoriales en retícula de 24, giradas en 3D con su costado de un solo negro, contorno de 2.2 % del tamaño, detalles más finos que el contorno y sin brillos. La fuente de diseño es `diseno/iconos-tinta/iconos-tinta.ai` (Oscar los ajusta ahí; los que vienen de Illustrator llevan `ilustrador: true` y se pintan con trazo centrado). Esos botones son teclas: `.burbuja-vidrio` / `.msh-btn--vidrio` ya no son vidrio sino tecla de tinta (cara plana, borde de 2 px, costado de 5 px que crece al pasar el mouse y se aplasta al presionar; bloque "TINTA SÓLIDA" al final de `index.css`). Una tecla activa (cámara en tercera persona, menú abierto, Customize abierto, skin dorada, abanico abierto) va en amarillo (`.tecla-amarilla`). Las teclas con su propio `transform` en línea (abanicos, música del retrato) restan `var(--alto, 5px)` en ese transform para seguir levantadas. Su `position: relative` va en `@layer components` para que `fixed` y `absolute` de Tailwind le ganen; fuera de capa le ganaba a todo y sacaba de su lugar a los botones fijos. En la barra de Customize las pestañas van en la placa de `.nav-tinta` (la puesta se levanta), y el idioma del preloader se aprieta y se va en vez de tronar. Fuera de la fase 1 siguen con Heroicons el menú de pantalla completa (redes y cuenta en círculos oscuros), el resto de la UI y el CMS.
+**Tinta sólida (desde 2026-11-21):** los botones flotantes del sitio (puertas, pie de la versión simple, menú, renglón de la pantalla principal con su idioma, audio, barra, hamburguesa y cerrar del teléfono, idioma y bocina de la barra de secciones, carrito y cuenta, cerrar sección, cámara, botones del retrato, abanicos de redes y del engrane, y la barra de Customize) usan `IconoTinta` (`src/components/ui/IconoTinta.jsx`, definiciones en `src/lib/iconosTinta.js`): formas vectoriales en retícula de 24, giradas en 3D con su costado de un solo negro, contorno de 2.2 % del tamaño, detalles más finos que el contorno y sin brillos. La fuente de diseño es `diseno/iconos-tinta/iconos-tinta.ai` (Oscar los ajusta ahí; los que vienen de Illustrator llevan `ilustrador: true` y se pintan con trazo centrado). Esos botones son teclas: `.burbuja-vidrio` / `.msh-btn--vidrio` ya no son vidrio sino tecla de tinta (cara plana, borde de 2 px, costado de 5 px que crece al pasar el mouse y se aplasta al presionar; bloque "TINTA SÓLIDA" al final de `index.css`). Una tecla activa (cámara en tercera persona, menú abierto, Customize abierto, skin dorada, abanico abierto) va en amarillo (`.tecla-amarilla`). Las teclas con su propio `transform` en línea (abanicos, música del retrato) restan `var(--alto, 5px)` en ese transform para seguir levantadas. Su `position: relative` va en `@layer components` para que `fixed` y `absolute` de Tailwind le ganen; fuera de capa le ganaba a todo y sacaba de su lugar a los botones fijos. En la barra de Customize las pestañas van en la placa de `.nav-tinta` (la puesta se levanta), y el idioma del preloader se aprieta y se va en vez de tronar.
 
-**`@heroicons/react/24/solid`** como estándar único fuera de lo de arriba. No mezclar con lucide, feather, etc.
+**Todo el sitio público (desde 2026-11-22):** no queda ningún Heroicon fuera del CMS; uno solo junto a los de tinta rompe el sistema. Un ícono nuevo se dibuja en `iconosTinta.js` (retícula de 24, trazos de 2 unidades o más; `rejilla: 32` o `256` reusa trazos de otra retícula, como las prendas y la patada) y se revisa en una hoja de contacto a 20–56 px antes de usarlo. `tam` es la caja con el costado: la figura mide unos dos tercios, así que un ícono que antes era `w-5` (20 px) va en `tam` 30 a 34. Los colores de un ícono van en su cara (`cara`: el boleto dorado o plateado, el rayo del menú del trueno, la patada del HUD), nunca en `text-*`. Las redes (X, Instagram, Behance, LinkedIn) también son de tinta (`SOCIAL_LINKS` lleva `tinta`). Además de las teclas: `.shop-btn--primary` es tecla levantada en amarillo y `.shop-btn--ghost` tecla impresa que se levanta en blanco al señalarla; el `.shop-chip` marcado se levanta en su amarillo; `.chip-tinta` son los chips redondos de Customize (partes, props y skins), impresos en `#18205a` y el elegido levantado en blanco (o en amarillo, el prop puesto); las cápsulas del editor del wallpaper (`.dwp-cap`) son placas como la de `.nav-tinta`. La parte Cabeza de Customize es la calavera de Skulley (`calavera`), nunca una calavera genérica (Oscar).
 
-Iconos más usados: `PlayIcon`, `PauseIcon`, `XMarkIcon`, `ChevronLeft/Right/Up/DownIcon`, `BoltIcon`, `MusicalNoteIcon`, `PlusIcon`, `PencilSquareIcon`, `TrashIcon`, `EyeIcon`, `EyeSlashIcon`, `Cog6ToothIcon`, `InformationCircleIcon`, `UserCircleIcon`, `Bars3Icon`.
+**`@heroicons/react/24/solid`** solo en el CMS (§15).
 
 ### 9.2 Tamaños canónicos
 
@@ -496,7 +499,7 @@ Iconos más usados: `PlayIcon`, `PauseIcon`, `XMarkIcon`, `ChevronLeft/Right/Up/
 
 ### 9.3 SVG custom
 
-Solo cuando Heroicons no tiene el concepto (ej. `GamepadIcon` en `App.jsx`). Mantenerlos inline en el componente que los usa o extraer a `src/components/icons/` si se reutilizan.
+Ya no hay SVG de íconos sueltos en el sitio público: todo concepto nuevo se dibuja en `src/lib/iconosTinta.js` (§9.1). `GamepadIcon` y `KickIcon` se borraron el 2026-11-22 (ahora `control` y `patada`).
 
 ---
 
@@ -570,6 +573,10 @@ Nuevos tokens Tailwind disponibles (§6.3):
 ---
 
 ## Changelog
+
+**2026-11-22 — Tinta sólida en todo el sitio**
+- Oscar: "dale a todo lo que falta". Los ~55 Heroicons que quedaban fuera del CMS (modales, tienda, reproductor, historia, wallpaper, menú, Customize) pasaron a `IconoTinta`, con 47 íconos nuevos en la retícula; las prendas y las partes del cuerpo usan sus siluetas de antes, ya en tinta, y Behance tiene el suyo.
+- Se fue el vidrio que quedaba: velos planos, toasts y puntaje como tarjetas de tinta, botones de cerrar y flechas como teclas, los botones principales y secundarios como teclas, chips de Customize como `.chip-tinta` y el editor del wallpaper en placas. §6.1 queda retirado.
 
 **2026-11-19 — El trato de Argus pasa de modal a escena**
 - Oscar: "quiero hacer cinemática la interacción con Argus, como la tenemos con M.A.D.R.E.". El `.site-modal` del trato (retrato en 3D, pestañas El trato / Premios) y el modal de reglas (`SphereGameModal`) se van: Skulley camina hasta Argus, la cámara se pone sobre su hombro y Argus habla en el globo de los diálogos (barras de cine, tinta, runas que se revelan). Después del trato, un menú: a jugar, cómo se juega, qué gano, ahora no.

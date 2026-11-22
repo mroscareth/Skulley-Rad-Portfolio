@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import useFocoModal from '../../hooks/useFocoModal.js'
 import { createPortal } from 'react-dom'
-import { XMarkIcon, MinusIcon, PlusIcon, ChevronLeftIcon, ChevronRightIcon, ShoppingCartIcon } from '@heroicons/react/24/solid'
 import { findVariantBySelection } from '../../lib/shopProduct.js'
 import { usePriceWithDiscount } from '../../lib/usePriceWithDiscount.js'
 import ProductMeta from './ProductMeta.jsx'
@@ -9,6 +8,7 @@ import PriceTag from './PriceTag.jsx'
 import SoldOutTape from './SoldOutTape.jsx'
 import ProductDescription from './ProductDescription.jsx'
 import HelpLink from '../help/HelpLink.jsx'
+import IconoTinta from '../ui/IconoTinta.jsx'
 
 // Detalle de una pieza. Misma anatomía que la card (DESIGN.md §14.6), en
 // grande: nombre y línea de detalle arriba, descripción, opciones y ficha en
@@ -240,16 +240,16 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
       aria-label={title}
     >
       {/* Alpha <= /70 + blur fuerte: DESIGN.md §6.1 regla 2. */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-xl pointer-events-none" />
+      <div className="absolute inset-0 bg-[#0a0510]/80 pointer-events-none" />
 
       <div className="shop-detail site-modal">
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 z-[10] w-11 h-11 grid place-items-center rounded-full border-2 border-white/40 bg-black/50 text-white hover:bg-white hover:text-black hover:border-white active:scale-90 transition-all"
+          className="absolute top-4 right-4 z-[10] w-11 h-11 grid place-items-center burbuja-vidrio"
           aria-label={tr.closeAria}
         >
-          <XMarkIcon className="w-5 h-5" />
+          <IconoTinta nombre="cerrar" tam={30} />
         </button>
 
         <div className="flex-1 min-h-0 overflow-y-auto modal-scroll grid grid-cols-1 lg:grid-cols-[1.1fr_1fr]">
@@ -273,17 +273,17 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
                     type="button"
                     onClick={() => setImageIndex((i) => (i - 1 + gallery.length) % gallery.length)}
                     aria-label={isEn ? 'Previous image' : 'Imagen anterior'}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 z-[6] w-11 h-11 grid place-items-center rounded-full border-2 border-white/40 bg-black/50 text-white hover:bg-white hover:text-black hover:border-white active:scale-90 transition-all"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 z-[6] w-11 h-11 grid place-items-center burbuja-vidrio"
                   >
-                    <ChevronLeftIcon className="w-5 h-5" />
+                    <IconoTinta nombre="chevronIzq" tam={30} />
                   </button>
                   <button
                     type="button"
                     onClick={() => setImageIndex((i) => (i + 1) % gallery.length)}
                     aria-label={isEn ? 'Next image' : 'Imagen siguiente'}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 z-[6] w-11 h-11 grid place-items-center rounded-full border-2 border-white/40 bg-black/50 text-white hover:bg-white hover:text-black hover:border-white active:scale-90 transition-all"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 z-[6] w-11 h-11 grid place-items-center burbuja-vidrio"
                   >
-                    <ChevronRightIcon className="w-5 h-5" />
+                    <IconoTinta nombre="chevronDer" tam={30} />
                   </button>
                 </>
               )}
@@ -364,7 +364,7 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
                       className="w-11 h-11 grid place-items-center text-white hover:bg-white/10 rounded-full disabled:opacity-30 disabled:cursor-not-allowed active:scale-90"
                       aria-label={isEn ? 'Decrease quantity' : 'Reducir cantidad'}
                     >
-                      <MinusIcon className="w-4 h-4" />
+                      <IconoTinta nombre="menos" tam={24} />
                     </button>
                     <span className="w-8 text-center text-white font-bold text-base tabular-nums" aria-live="polite">{qty}</span>
                     <button
@@ -374,7 +374,7 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
                       className="w-11 h-11 grid place-items-center text-white hover:bg-white/10 rounded-full disabled:opacity-30 disabled:cursor-not-allowed active:scale-90"
                       aria-label={isEn ? 'Increase quantity' : 'Aumentar cantidad'}
                     >
-                      <PlusIcon className="w-4 h-4" />
+                      <IconoTinta nombre="mas" tam={24} />
                     </button>
                   </div>
                 </fieldset>
@@ -421,7 +421,7 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
                 onClick={handleAdd}
                 className="shop-btn shop-btn--primary shrink-0 min-h-[52px] px-6 text-sm"
               >
-                {!addDisabled && <ShoppingCartIcon className="w-5 h-5 shrink-0" aria-hidden />}
+                {!addDisabled && <IconoTinta nombre="carrito" tam={30} className="shrink-0" />}
                 <span>{ctaLabel}</span>
               </button>
             </div>

@@ -114,7 +114,6 @@ const DialogoMadre = lazy(importDialogoMadre)
 const importAvisoMadre = () => import('./components/drone/AvisoMadre.jsx')
 const AvisoMadre = lazy(importAvisoMadre)
 import IconoTinta from './components/ui/IconoTinta.jsx'
-import { MusicalNoteIcon, VideoCameraIcon, BackwardIcon } from '@heroicons/react/24/solid'
 import { playSfx, preloadSfx, unlockSfx } from './lib/sfx.js'
 import { silenciarSitio, useSilencioSitio } from './lib/silencioSitio.js'
 import useGlobalSfx from './hooks/useGlobalSfx.js'
@@ -2858,7 +2857,7 @@ function SiteApp() {
     if (!toastInitRef.current) { toastInitRef.current = true; return }
     if (showMusic !== prevMusicRef.current) {
       prevMusicRef.current = showMusic
-      gameToast({ key: 'dj-mode', message: showMusic ? (lang === 'es' ? 'Modo DJ encendido' : 'DJ Mode on') : (lang === 'es' ? 'Modo DJ apagado' : 'DJ Mode off'), type: 'info', icon: <MusicalNoteIcon className="w-4 h-4" />, duration: 2000 })
+      gameToast({ key: 'dj-mode', message: showMusic ? (lang === 'es' ? 'Modo DJ encendido' : 'DJ Mode on') : (lang === 'es' ? 'Modo DJ apagado' : 'DJ Mode off'), type: 'info', icon: <IconoTinta nombre="nota" tam={24} />, duration: 2000 })
     }
   }, [showMusic]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -2872,7 +2871,7 @@ function SiteApp() {
     if (!toastInitRef.current) return
     if (cameraMode !== prevCameraRef.current) {
       prevCameraRef.current = cameraMode
-      gameToast({ message: cameraMode === 'third-person' ? (lang === 'es' ? 'Camara: tercera persona' : 'Camera: third person') : (lang === 'es' ? 'Camara: vista superior' : 'Camera: top-down'), type: 'info', icon: <VideoCameraIcon className="w-4 h-4" />, duration: 2000 })
+      gameToast({ message: cameraMode === 'third-person' ? (lang === 'es' ? 'Camara: tercera persona' : 'Camera: third person') : (lang === 'es' ? 'Camara: vista superior' : 'Camera: top-down'), type: 'info', icon: <IconoTinta nombre="video" tam={24} />, duration: 2000 })
     }
   }, [cameraMode]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -3748,7 +3747,7 @@ function SiteApp() {
             {[
               { key: 'x', href: 'https://x.com/mroscareth', tooltip: 'X', tinta: 'x', dx: 0, dy: -56 },
               { key: 'ig', href: 'https://www.instagram.com/skulleyrad', tooltip: 'Instagram', tinta: 'instagram', dx: 0, dy: -112 },
-              { key: 'be', href: 'https://www.behance.net/mroscar', tooltip: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg`, dx: 0, dy: -168 },
+              { key: 'be', href: 'https://www.behance.net/mroscar', tooltip: 'Behance', tinta: 'behance', dx: 0, dy: -168 },
               { key: 'li', href: 'https://www.linkedin.com/in/omoctezuma/', tooltip: 'LinkedIn', tinta: 'linkedin', dx: 0, dy: -224 },
             ].map((s) => (
               <a
@@ -3767,7 +3766,7 @@ function SiteApp() {
                 }}
                 aria-label={s.tooltip}
               >
-                {s.tinta ? <IconoTinta nombre={s.tinta} tam={32} /> : <img src={s.icon} alt="" aria-hidden className="w-5 h-5" draggable="false" />}
+                <IconoTinta nombre={s.tinta} tam={32} />
               </a>
             ))}
             <button
@@ -4031,7 +4030,7 @@ function SiteApp() {
               terminarPartidaRef.current?.()
             }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-            className={`h-9 px-5 rounded-full bg-red-600/90 hover:bg-red-500 active:bg-red-700 text-white text-xs font-marquee uppercase tracking-widest shadow-lg shadow-red-900/30 backdrop-blur-sm transition-all duration-200 ${isCompactUi ? 'animate-ui-enter-up' : ''}`}
+            className={`h-11 px-5 burbuja-vidrio tecla-roja text-sm font-marquee uppercase tracking-widest ${isCompactUi ? 'animate-ui-enter-up' : ''}`}
             style={isCompactUi ? undefined : { animation: 'ui-enter-up 0.5s var(--ease-expo-out) 0.25s both' }}
           >
             {t('game.endGame')}
@@ -4063,7 +4062,7 @@ function SiteApp() {
       {vhsRewindActive && (
         <div aria-hidden className="fixed inset-0 pointer-events-none" style={{ zIndex: 99999991 }}>
           <div className="rewind-badge">
-            <BackwardIcon className="rewind-badge__icon" />
+            <IconoTinta nombre="retroceder" tam={34} className="rewind-badge__icon" />
             <span className="display-title rewind-badge__label">REW</span>
           </div>
         </div>
@@ -4207,5 +4206,5 @@ function SiteApp() {
   )
 }
 
-// GamepadIcon y BlobShadow viven en sus propios archivos (ver los imports de arriba).
+// BlobShadow vive en su propio archivo (ver los imports de arriba).
 

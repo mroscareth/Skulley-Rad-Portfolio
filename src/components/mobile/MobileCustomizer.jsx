@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowsPointingInIcon, DevicePhoneMobileIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { playSfx } from '../../lib/sfx.js'
 import { getCharacterColors, setCharacterColors, randomVividColor, CHARACTER_COLOR_EVENT } from '../../lib/characterColors.js'
@@ -10,6 +9,7 @@ import SkinChip from '../SkinChip.jsx'
 import ColorWell from '../ColorWell.jsx'
 import { ICONOS_PROP } from '../CharacterCustomizer.jsx'
 import { ACCESORIOS, ACCESORIOS_EVENT, getAccesorios, setAccesorio, propDesbloqueado } from '../../lib/accesoriosEstado.js'
+import IconoTinta from '../ui/IconoTinta.jsx'
 
 // La versión ligera del personalizador de escritorio (CharacterCustomizer) para
 // la home de teléfono: cuatro skins, un color por parte solo en Personalizada y
@@ -46,7 +46,7 @@ const RUEDA = 0.0015
 // Los botones de ícono (cerrar, Restablecer vista, el dado) son los flotantes
 // del sitio: las mismas clases que la X de las secciones y la hamburguesa
 // (MobileApp), vidrio oscuro de 48 px.
-const BOTON_HUD = 'h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15] transition-colors'
+const BOTON_HUD = 'h-12 w-12 grid place-items-center burbuja-vidrio'
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
 const distancia = (a, b) => Math.hypot(a.x - b.x, a.y - b.y)
@@ -105,19 +105,6 @@ function capturar(personalizaRef, { ancho, fondo }) {
     }, 30000)
     pz.captura = pedido
   })
-}
-
-function DiceIcon({ className }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="3" y="3" width="18" height="18" rx="4" />
-      <circle cx="8" cy="8" r="1.25" fill="currentColor" stroke="none" />
-      <circle cx="16" cy="8" r="1.25" fill="currentColor" stroke="none" />
-      <circle cx="12" cy="12" r="1.25" fill="currentColor" stroke="none" />
-      <circle cx="8" cy="16" r="1.25" fill="currentColor" stroke="none" />
-      <circle cx="16" cy="16" r="1.25" fill="currentColor" stroke="none" />
-    </svg>
-  )
 }
 
 export default function MobileCustomizer({ open = false, onClose, personalizaRef, onFondo }) {
@@ -575,7 +562,7 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
           data-tip-side="bottom"
           tabIndex={open ? 0 : -1}
         >
-          <XMarkIcon className="w-5 h-5" />
+          <IconoTinta nombre="cerrar" tam={30} />
         </button>
         <div className="mcz-arriba-der">
           {conZoom && !wall && (
@@ -587,7 +574,7 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
               data-tip={t('customizer.resetView')}
               data-tip-side="bottom"
             >
-              <ArrowsPointingInIcon className="w-5 h-5" />
+              <IconoTinta nombre="encoger" tam={30} />
             </button>
           )}
           {/* El fondo, sobre el escenario (pedido de Oscar: en el panel se
@@ -638,7 +625,7 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
                 su misma anatomía: círculo de vidrio y nombre abajo. */}
             <button type="button" className="mcz-dado" onClick={alAzar}>
               <span className={`${BOTON_HUD} mcz-dado__circulo`} aria-hidden="true">
-                <DiceIcon className="w-4 h-4" />
+                <IconoTinta nombre="dado" tam={24} />
               </span>
               <span className="color-well__label">{t('customizer.randomize')}</span>
             </button>
@@ -665,7 +652,7 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
                   aria-label={accion}
                   data-tip={accion}
                 >
-                  {Icono && <Icono className="w-7 h-7" />}
+                  {Icono && <IconoTinta nombre={Icono} tam={34} />}
                 </button>
               )
             })}
@@ -673,10 +660,10 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
           <button
             ref={wallBtnRef}
             type="button"
-            className="shop-btn shop-btn--primary mcz-boton"
+            className="shop-btn shop-btn--primary mcz-boton burbuja-vidrio tecla-amarilla"
             onClick={abrirWall}
           >
-            <DevicePhoneMobileIcon className="w-4 h-4" aria-hidden="true" />
+            <IconoTinta nombre="telefono" tam={24} />
             {t('customizer.wallpaper')}
           </button>
         </div>
@@ -713,7 +700,7 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
           <button
             ref={crearRef}
             type="button"
-            className="shop-btn shop-btn--primary mcz-boton"
+            className="shop-btn shop-btn--primary mcz-boton burbuja-vidrio tecla-amarilla"
             onClick={listo ? guardar : crear}
             disabled={creando}
             aria-busy={creando}

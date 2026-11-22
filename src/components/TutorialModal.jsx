@@ -1,10 +1,9 @@
 import React, { useEffect, useId, useRef, useState } from 'react'
 import useFocoModal from '../hooks/useFocoModal.js'
-import { BoltIcon, MusicalNoteIcon, PaintBrushIcon, VideoCameraIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
 import { useGlitchRunas, textoGlitch } from '../hooks/useGlitchRunas.js'
 import { useTituloOrilla } from '../hooks/useTituloOrilla.js'
-import KickIcon from './icons/KickIcon.jsx'
+import IconoTinta from './ui/IconoTinta.jsx'
 
 const STORAGE_KEY = 'tutorial_shown'
 
@@ -162,7 +161,7 @@ function TutorialModal({ t, open, onClose, tactil = false }) {
       aria-labelledby={tituloId}
       onPointerDown={(e) => { if (e.target === e.currentTarget) salir(onClose) }}
     >
-      <div className="argus-arma__fondo absolute inset-0 bg-black/70 backdrop-blur-xl pointer-events-none" />
+      <div className="argus-arma__fondo absolute inset-0 bg-[#0a0510]/80 pointer-events-none" />
 
       <div
         ref={cajaRef}
@@ -259,9 +258,9 @@ function GlifoTeclado({ id, t, encendida }) {
   if (id === 'portrait') {
     return (
       <>
-        <span className="tuto-boton"><PaintBrushIcon /></span>
-        <span className="tuto-boton tuto-boton--amarillo"><MusicalNoteIcon /></span>
-        <span className="tuto-boton"><VideoCameraIcon /></span>
+        <span className="tuto-boton"><IconoTinta nombre="playera" tam={26} /></span>
+        <span className="tuto-boton tuto-boton--amarillo"><IconoTinta nombre="nota" tam={26} /></span>
+        <span className="tuto-boton"><IconoTinta nombre="video" tam={26} /></span>
       </>
     )
   }
@@ -270,8 +269,8 @@ function GlifoTeclado({ id, t, encendida }) {
 
 export function GlifoTactil({ id }) {
   if (id === 'move') return <span className="tuto-joystick"><span /></span>
-  if (id === 'kick') return <span className="tuto-boton"><KickIcon /></span>
-  if (id === 'laser') return <span className="tuto-boton tuto-boton--amarillo"><BoltIcon /></span>
+  if (id === 'kick') return <span className="tuto-boton"><IconoTinta nombre="patada" tam={26} /></span>
+  if (id === 'laser') return <span className="tuto-boton tuto-boton--amarillo"><IconoTinta nombre="rayo" tam={26} /></span>
   return null
 }
 

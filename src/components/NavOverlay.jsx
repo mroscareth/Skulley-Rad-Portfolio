@@ -1,10 +1,9 @@
 import React from 'react'
-import { HomeIcon, InformationCircleIcon, UserIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
 import { sectionColors } from '../lib/appHelpers.js'
-import GamepadIcon from './icons/GamepadIcon.jsx'
 import { useGlitchRunas, textoGlitch } from '../hooks/useGlitchRunas.js'
 import useFocoModal from '../hooks/useFocoModal.js'
+import IconoTinta from './ui/IconoTinta.jsx'
 
 // Tamaño de las palabras: el de antes (10vw, de 40 a 96 px) y además el alto,
 // para que las cinco con sus espacios quepan en la ventana. Cada palabra mide
@@ -15,10 +14,10 @@ const MENU_LETRA = 'clamp(2.5rem, min(10vw, 15dvh - 1.15rem), 6rem)'
 
 // Las redes de Oscar. Las usan este menú y el footer de la home de teléfono.
 export const SOCIAL_LINKS = [
-  { key: 'x', href: 'https://x.com/mroscareth', label: 'X', icon: `${import.meta.env.BASE_URL}x.svg` },
-  { key: 'ig', href: 'https://www.instagram.com/skulleyrad', label: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg` },
-  { key: 'be', href: 'https://www.behance.net/mroscar', label: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg` },
-  { key: 'li', href: 'https://www.linkedin.com/in/omoctezuma/', label: 'LinkedIn', icon: `${import.meta.env.BASE_URL}linkedin.svg` },
+  { key: 'x', href: 'https://x.com/mroscareth', label: 'X', tinta: 'x' },
+  { key: 'ig', href: 'https://www.instagram.com/skulleyrad', label: 'Instagram', tinta: 'instagram' },
+  { key: 'be', href: 'https://www.behance.net/mroscar', label: 'Behance', tinta: 'behance' },
+  { key: 'li', href: 'https://www.linkedin.com/in/omoctezuma/', label: 'LinkedIn', tinta: 'linkedin' },
 ]
 
 // Una palabra del menú que entra escrita en SKULLEYGLYPH y se glitchea a su
@@ -111,7 +110,7 @@ export default function NavOverlay({
         }
       `}</style>
       {/* /70 y no /85: con más tinta el blur deja de notarse (DESIGN.md §6.1). */}
-      <div className={`fixed inset-0 bg-black/70 backdrop-blur-xl transition-opacity duration-[260ms] ${visible ? 'opacity-100' : 'opacity-0'}`} />
+      <div className={`fixed inset-0 bg-[#0a0510]/90 transition-opacity duration-[260ms] ${visible ? 'opacity-100' : 'opacity-0'}`} />
       <div
         className={`relative m-auto py-6 pointer-events-auto grid w-full max-w-3xl px-8 place-items-center transition-all duration-[260ms] ${visible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-[0.98]'}`}
         style={{ '--menu-letra': MENU_LETRA, rowGap: 'calc(var(--menu-letra) * 0.42)' }}
@@ -151,11 +150,11 @@ export default function NavOverlay({
               type="button"
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
               onClick={() => { try { onInicio() } catch { } }}
-              className="h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-xl border transition-colors bg-black/50 border-white/[0.08] text-white hover:bg-white/[0.15]"
+              className="h-12 w-12 grid place-items-center burbuja-vidrio"
               aria-label={inicioLabel}
               data-tip={inicioLabel}
             >
-              <HomeIcon className="w-5 h-5" />
+              <IconoTinta nombre="casa" tam={30} />
             </button>
           )}
           {/* Socials */}
@@ -167,11 +166,11 @@ export default function NavOverlay({
               rel="noopener noreferrer"
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
               onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { } }}
-              className="h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-elev-lg transition-colors"
+              className="h-12 w-12 grid place-items-center burbuja-vidrio"
               aria-label={s.label}
               data-tip={s.label}
             >
-              <img src={s.icon} alt="" aria-hidden className="w-5 h-5 invert" draggable="false" />
+              <IconoTinta nombre={s.tinta} tam={32} />
             </a>
           ))}
           {/* Tutorial/Info — solo donde hay juego que explicar: el sitio de
@@ -184,11 +183,11 @@ export default function NavOverlay({
                 try { playSfx('click', { volume: 1.0 }) } catch { }
                 try { openTutorial() } catch { }
               }}
-              className="h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-xl border transition-colors bg-black/50 border-white/[0.08] text-white hover:bg-white/[0.15]"
+              className="h-12 w-12 grid place-items-center burbuja-vidrio"
               aria-label={t('tutorial.showTutorial')}
               data-tip={t('tutorial.showTutorial')}
             >
-              <InformationCircleIcon className="w-5 h-5" />
+              <IconoTinta nombre="info" tam={30} />
             </button>
           )}
           {/* Login / Logout — siempre visible en el menú para que el flujo
@@ -202,11 +201,11 @@ export default function NavOverlay({
                 try { playSfx('click', { volume: 1.0 }) } catch { }
                 try { onLogin() } catch { }
               }}
-              className="h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-xl border transition-colors bg-black/50 border-white/[0.08] text-white hover:bg-white/[0.15]"
+              className="h-12 w-12 grid place-items-center burbuja-vidrio"
               aria-label="Login"
               data-tip="Login"
             >
-              <UserIcon className="w-5 h-5" />
+              <IconoTinta nombre="usuario" tam={30} />
             </button>
           )}
           {/* Game UI: normalmente NO va en el menú (se quitó por pedido). PERO al
@@ -223,11 +222,11 @@ export default function NavOverlay({
                 try { onToggleForceCompactUi() } catch { }
                 try { onClose?.() } catch { }
               }}
-              className="h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-xl border transition-colors bg-white/20 border-white/40 text-white hover:bg-white/30"
+              className="h-12 w-12 grid place-items-center burbuja-vidrio tecla-amarilla"
               aria-label={t('common.mobileUiOff')}
               data-tip={t('common.mobileUiOff')}
             >
-              <GamepadIcon className="w-5 h-5" />
+              <IconoTinta nombre="control" tam={30} />
             </button>
           )}
 

@@ -74,22 +74,17 @@ export function GameToastProvider({ children }) {
         aria-relevant="additions removals"
       >
         {toasts.map((t) => {
-          const borderMap = {
-            info: 'border-white/[0.12]',
-            success: 'border-emerald-400/40',
-            portal: '',
-          }
-          const borderClass = t.borderColor ? '' : (borderMap[t.type] || borderMap.info)
+          const punto = t.borderColor || (t.type === 'success' ? '#34d399' : null)
           return (
             <div
               key={t.id}
               role="status"
-              className={`pointer-events-auto px-5 py-2.5 rounded-full bg-black/70 backdrop-blur-xl border shadow-[0_8px_32px_rgba(0,0,0,0.4)] flex items-center gap-3 font-marquee text-white text-sm uppercase tracking-wide ${borderClass} ${t.exiting ? 'animate-toast-exit' : 'animate-toast-enter'}`}
-              style={t.borderColor ? { borderColor: `${t.borderColor}55` } : undefined}
+              className={`pointer-events-auto px-5 py-2.5 rounded-[14px] bg-white border-2 border-[#0a0510] shadow-[0_5px_0_0_#0a0510] flex items-center gap-3 font-marquee text-[#0a0510] text-sm uppercase tracking-wide ${t.exiting ? 'animate-toast-exit' : 'animate-toast-enter'}`}
               onClick={() => dismiss(t.id)}
             >
               <span key={t.bump} className={`flex items-center gap-3 ${t.bump ? 'animate-toast-bump' : ''}`}>
-                {t.icon && <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-white">{t.icon}</span>}
+                {punto && <span className="flex-shrink-0 w-3.5 h-3.5 rounded-full border-2 border-[#0a0510]" style={{ background: punto }} aria-hidden="true" />}
+                {t.icon && <span className="flex-shrink-0 flex items-center justify-center">{t.icon}</span>}
                 <span>{t.message}</span>
               </span>
             </div>

@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import useFocoModal from '../../hooks/useFocoModal.js'
 import Lenis from 'lenis'
-import { XMarkIcon } from '@heroicons/react/24/solid'
 import { ProjectDetailArticle, useProjectDetail } from '../work/ProjectDetail.jsx'
+import IconoTinta from '../ui/IconoTinta.jsx'
 
 // Un proyecto abierto aparte en la versión rápida de escritorio: su propia
 // página encima de la home, sin pasar por Work (pedido de Oscar). La ficha es
@@ -98,13 +98,13 @@ export default function QuickProject({ slug, onCerrar, onLista, lang }) {
       />
       <button
         type="button"
-        className="qp-cerrar h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15] transition-colors"
+        className="qp-cerrar h-12 w-12 grid place-items-center burbuja-vidrio"
         onClick={onCerrar}
         aria-label={es ? 'Cerrar proyecto' : 'Close project'}
         data-tip={es ? 'Cerrar' : 'Close'}
         data-tip-side="bottom"
       >
-        <XMarkIcon className="w-5 h-5" />
+        <IconoTinta nombre="cerrar" tam={30} />
       </button>
     </div>
   )

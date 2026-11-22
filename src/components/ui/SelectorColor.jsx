@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowUturnLeftIcon } from '@heroicons/react/24/solid'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { playSfx } from '../../lib/sfx.js'
+import IconoTinta from './IconoTinta.jsx'
 
 // El selector de color del sitio (reemplazó al <input type="color"> nativo,
 // "está bien culero", Oscar, 2026-11-15). Lo abre ColorWell: los colores de
@@ -453,7 +453,7 @@ function Globo({ anclaRef, valor, titulo, onCambio, onCerrar, lados, saliendo })
             aria-label={t('colorPicker.previous', { hex: anterior.toUpperCase() })}
             data-tip={t('colorPicker.previousTip')}
           >
-            <ArrowUturnLeftIcon className="w-[18px] h-[18px]" aria-hidden="true" />
+            <IconoTinta nombre="deshacer" tam={27} />
           </button>
           <label className="selcolor__hex">
             <span aria-hidden="true">#</span>

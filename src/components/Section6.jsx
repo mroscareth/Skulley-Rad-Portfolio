@@ -1,9 +1,9 @@
 import React, { useState } from 'react'
-import { ArrowDownTrayIcon, PencilSquareIcon } from '@heroicons/react/24/solid'
 import { ALPHABET, NUMBERS, SYMBOLS, ACCENTS, ALPHABET_MAP, ALPHABET_META, FONT_WEIGHTS, GLYPH_COUNT, runeFileUrl, fontFileName } from '../lib/runeAlphabet.js'
 import { runeFontFamilyFor } from '../lib/installRuneFont.js'
 import { playSfx } from '../lib/sfx.js'
 import SlimeSlugDOM from './SlimeSlugDOM.jsx'
+import IconoTinta from './ui/IconoTinta.jsx'
 
 const FOCUS_RING = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff6644]'
 
@@ -135,7 +135,7 @@ export default function Section6() {
           />
 
           <label htmlFor="runeInput" className="flex items-center gap-2 mb-3 text-sm font-bold text-white/80">
-            <PencilSquareIcon className="w-4 h-4 text-[#ff6644]" aria-hidden="true" />
+            <IconoTinta nombre="lapiz" tam={24} />
             <span>Your text</span>
           </label>
           <div className="relative">
@@ -200,7 +200,7 @@ export default function Section6() {
             onMouseEnter={hoverSfx}
             className={`shop-btn min-h-14 px-8 text-sm sm:text-base bg-[#ff6644] text-[#0a0510] hover:bg-[#ff8a70] active:scale-95 ${FOCUS_RING}`}
           >
-            <ArrowDownTrayIcon className="w-5 h-5" aria-hidden="true" />
+            <IconoTinta nombre="descargar" tam={30} />
             <span>Download ZIP</span>
           </a>
 
@@ -248,7 +248,7 @@ export default function Section6() {
                 onMouseEnter={hoverSfx}
                 className={`shop-btn shop-btn--ghost min-h-11 px-5 text-xs active:scale-95 ${FOCUS_RING}`}
               >
-                <ArrowDownTrayIcon className="w-4 h-4" aria-hidden="true" />
+                <IconoTinta nombre="descargar" tam={24} />
                 <span>.ttc only</span>
               </a>
               {FONT_WEIGHTS.map((w) => (
@@ -260,7 +260,7 @@ export default function Section6() {
                   onMouseEnter={hoverSfx}
                   className={`shop-btn shop-btn--ghost min-h-11 px-5 text-xs active:scale-95 ${FOCUS_RING}`}
                 >
-                  <ArrowDownTrayIcon className="w-4 h-4" aria-hidden="true" />
+                  <IconoTinta nombre="descargar" tam={24} />
                   <span>{w.name} .otf</span>
                 </a>
               ))}

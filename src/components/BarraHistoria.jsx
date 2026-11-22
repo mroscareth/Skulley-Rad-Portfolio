@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react'
-import { PauseIcon, PlayIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/react/24/solid'
+import IconoTinta from './ui/IconoTinta.jsx'
 
 // La barra de reproducción de "Conocer la historia" (Oscar: que se pueda
 // adelantar y regresar como un video), abajo, en la barra de cine: play/pausa
@@ -82,10 +82,10 @@ export default function BarraHistoria({ progreso, irA, es, pausada, alternarPaus
   return (
     <div className="dsp-tiempo">
       <button type="button" className="dsp-tiempo__btn" onClick={alternarPausa} aria-pressed={pausada} aria-label={pausaTexto} data-tip={pausaTexto}>
-        {pausada ? <PlayIcon aria-hidden="true" /> : <PauseIcon aria-hidden="true" />}
+        <IconoTinta nombre={pausada ? 'play' : 'pausa'} tam={30} />
       </button>
       <button type="button" className="dsp-tiempo__btn" onClick={alternarSonido} aria-pressed={conSonido} aria-label={sonidoTexto} data-tip={sonidoTexto}>
-        {conSonido ? <SpeakerWaveIcon aria-hidden="true" /> : <SpeakerXMarkIcon aria-hidden="true" />}
+        <IconoTinta nombre={conSonido ? 'bocina' : 'mudo'} tam={30} />
       </button>
       <span ref={tiempoRef} className="dsp-tiempo__texto" aria-hidden="true">0:00 / 0:00</span>
       <div

@@ -1,8 +1,8 @@
 import React from 'react'
-import { LockClosedIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
 import { localizeSkin } from '../lib/skinRegistry.js'
 import SkinSwatch from './SkinSwatch.jsx'
+import IconoTinta from './ui/IconoTinta.jsx'
 
 // Chip de skin: la vista previa animada (SkinSwatch) en un círculo y el nombre
 // abajo. Lo comparten el personalizador de escritorio (columna o carousel) y
@@ -22,13 +22,7 @@ export default function SkinChip({ skin, lang = 'en', active = false, owned = tr
         onMouseEnter={() => { if (owned) { try { playSfx('hover', { volume: 0.9 }) } catch { } } }}
         aria-pressed={active}
         aria-label={loc.label}
-        className={`skin-chip__swatch relative w-12 h-12 md:w-16 md:h-16 rounded-full border-2 overflow-hidden grid place-items-center transition-all ${
-          active
-            ? 'border-white shadow-[0_0_14px_rgba(255,255,255,0.5)] scale-105'
-            : owned
-              ? 'border-white/20 hover:border-white/60'
-              : 'border-white/[0.08] cursor-not-allowed'
-        }`}
+        className={`skin-chip__swatch chip-tinta relative w-12 h-12 md:w-16 md:h-16 overflow-hidden grid place-items-center${active ? ' es-elegido' : ''}${owned ? '' : ' cursor-not-allowed'}`}
       >
         {/* Locked: gris (grayscale) + candado, como el Golden. Pasamos
             active=false a los locked → caen al gradiente estático y los
@@ -41,16 +35,16 @@ export default function SkinChip({ skin, lang = 'en', active = false, owned = tr
           <SkinSwatch skin={skin} active={live && owned} />
         </span>
         {!owned && (
-          <span className="absolute inset-0 rounded-full grid place-items-center bg-black/45">
-            <LockClosedIcon className="w-4 h-4 text-white/85" />
+          <span className="absolute inset-0 rounded-full grid place-items-center bg-[#0a0510]/45">
+            <IconoTinta nombre="candado" tam={24} />
           </span>
         )}
       </button>
       <div className="skin-chip__label mt-1 w-12 md:w-16 text-[9px] md:text-[10px] text-center leading-tight opacity-80 truncate">{loc.label}</div>
       {!owned && (
-        <div className={`pointer-events-none absolute px-2.5 py-1.5 rounded-lg bg-black/90 border border-white/10 text-[10px] text-white/85 w-40 text-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-10 ${inCarousel ? 'bottom-full left-1/2 -translate-x-1/2 mb-2' : 'left-full top-0 ml-2'}`}>
+        <div className={`chip-tinta__tip pointer-events-none absolute px-2.5 py-1.5 rounded-[10px] bg-white border-2 border-[#0a0510] text-[11px] font-bold text-[#0a0510] w-40 text-center opacity-0 group-hover:opacity-100 transition-opacity z-10 ${inCarousel ? 'bottom-full left-1/2 -translate-x-1/2 mb-2' : 'left-full top-0 ml-2'}`}>
           {lang === 'es' ? 'No has ganado este skin' : "You haven't earned this skin"}
-          {loc.hint && <><br /><span className="opacity-60">{loc.hint}</span></>}
+          {loc.hint && <><br /><span className="font-semibold opacity-70">{loc.hint}</span></>}
         </div>
       )}
     </div>

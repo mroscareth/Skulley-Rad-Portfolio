@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo } from 'react'
-import { ArrowLeftIcon } from '@heroicons/react/24/solid'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { useShopData } from '../../lib/shopDataContext.jsx'
 import { buildHelp } from './helpContent.js'
+import IconoTinta from '../ui/IconoTinta.jsx'
 
 const FOCUS_RING = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e600ff] focus-visible:outline-offset-2'
 
@@ -64,13 +64,13 @@ export default function HelpCenter() {
 
   return (
     <div className="h-full overflow-y-auto bg-[#0a0510] text-white">
-      <header className="sticky top-0 z-10 bg-[#0a0510]/90 backdrop-blur-md border-b-2 border-white/10">
+      <header className="sticky top-0 z-10 bg-[#0a0510] border-b-2 border-white/10">
         <div className="max-w-6xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between gap-4">
           <a
             href="/lost-and-found-shop"
             className={`inline-flex items-center gap-2 min-h-[44px] -ml-2 px-2 rounded-full text-sm font-semibold text-white/80 hover:text-white transition-colors ${FOCUS_RING}`}
           >
-            <ArrowLeftIcon className="w-4 h-4" aria-hidden />
+            <IconoTinta nombre="atras" tam={24} />
             {c.back}
           </a>
           <div className="flex gap-2" role="group" aria-label={lang === 'es' ? 'Idioma' : 'Language'}>
