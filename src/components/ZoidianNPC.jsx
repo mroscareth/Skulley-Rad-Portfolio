@@ -1125,6 +1125,11 @@ export default function ZoidianNPC({
   // Argus espera un beat (que el flash y las piezas registren), se carcajea y remata.
   const { t } = useLanguage()
   const mockAnchorRef = useRef(null)
+  // Lo que ningún globo debe tapar (el suyo ni el de Skulley o M.A.D.R.E.), desde
+  // el ancla del pecho, medido con los vértices: el 95 % cabe en un radio de 0.41
+  // de su alto (las puntas de brazos y cadera llegan a 0.44 y las cubre el margen
+  // de la caja en pantalla), y llega hasta arriba del "!" que le flota (y = 4.1).
+  const cuerpoVineta = useMemo(() => ({ abajo: targetHeight * 0.55, arriba: targetHeight * 0.45 + 1.3, radio: targetHeight * 0.41 }), [targetHeight])
   const [mock, setMock] = useState({ on: false, typed: '', full: '' })
   const mockTimersRef = useRef([])
   useEffect(() => {
@@ -1155,6 +1160,8 @@ export default function ZoidianNPC({
       }, delay))
     }
     const burla = (key) => { sayMock(key); reaccionar('Risa', 450) }
+    // desarrollo: window.__argusDice('texto') le pone una frase (probar los globos)
+    if (import.meta.env.DEV) window.__argusDice = (texto, dura = 6000) => sayMock(texto, { delay: 0, dura })
     // Los rayos (Oscar, 2026-11-19): solo comenta si le pegan a alguien. A
     // Skulley, cualquiera que lo despiece (la esfera que cae en un portal, el
     // castigo de M.A.D.R.E., el easter egg); a M.A.D.R.E., solo el de la esfera
@@ -1355,6 +1362,7 @@ export default function ZoidianNPC({
         displayText={mock.typed}
         layoutText={mock.full}
         offset={[2.5, 0.1, 0]}
+        evitar={cuerpoVineta}
       />
     </>
   )

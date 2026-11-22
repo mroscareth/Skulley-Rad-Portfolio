@@ -40,6 +40,9 @@ import { useLanguage } from '../../i18n/LanguageContext.jsx'
 
 const TAM = 1.35           // ancho del drone en el mundo (Skulley mide ~2.5)
 const ALTO = 2.6           // altura de vuelo, al centro del drone
+// Lo que ningún globo debe tapar, desde el ancla de su viñeta (0.35 arriba de su
+// centro): alas, pantalla y el fuego de la turbina, medido con los vértices.
+const CUERPO_VINETA = { abajo: 1.1, arriba: 0.3, radio: 0.95 }
 const VEL = { paseo: 1.4, prisa: 8, oferta: 13, castigo: 15 }
 const ARGUS = { x: 0, z: 12.9 }
 // El portal donde ofrece la tienda: el de Store (Oscar, 2026-11-19; primero lo
@@ -110,7 +113,9 @@ export default function DroneNPC({
   useEffect(() => {
     if (!import.meta.env.DEV) return undefined
     window.__dronOferta = () => { est.current.ofertaEspera = 0; setProbarOferta((n) => n + 1) }
-    return () => { delete window.__dronOferta }
+    // y window.__dronDice('texto', segundos) le pone una frase (probar los globos)
+    window.__dronDice = (texto, dura = 6) => { est.current.dice = { texto, t: 0, dura } }
+    return () => { delete window.__dronOferta; delete window.__dronDice }
   }, [])
   const onHablarRef = useRef(onHablar)
   onHablarRef.current = onHablar
@@ -861,7 +866,7 @@ export default function DroneNPC({
       </group>
       {/* la viñeta va fuera del grupo girado: SpeechBubble3D mira a cámara con padre sin rotación */}
       <object3D ref={anclaRef} />
-      <SpeechBubble3D anchorRef={anclaRef} visible={vineta.on} displayText={vineta.texto} layoutText={vineta.layout || textos.portal} offset={[1.3, 0.6, 0]} />
+      <SpeechBubble3D anchorRef={anclaRef} visible={vineta.on} displayText={vineta.texto} layoutText={vineta.layout || textos.portal} offset={[1.3, 0.6, 0]} evitar={CUERPO_VINETA} />
     </>
   )
 }
