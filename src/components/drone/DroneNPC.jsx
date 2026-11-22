@@ -838,7 +838,6 @@ export default function DroneNPC({
         ref={grupoRef}
         caraRef={caraRef}
         size={TAM}
-        outlineWorld={0.02}
         caraAuto={false}
         accion={accion.nombre}
         accionN={accion.n}

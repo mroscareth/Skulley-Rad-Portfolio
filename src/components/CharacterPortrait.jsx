@@ -1060,8 +1060,12 @@ export default function CharacterPortrait({
               <EffectComposer multisampling={0} resolutionScale={isLowPerf ? 0.9 : 0.8}>
                 {/* Portrait bloom (needed after lowering glow intensity) */}
                 <Bloom mipmapBlur intensity={0.85} luminanceThreshold={0.72} luminanceSmoothing={0.18} />
-                {/* Toon ink lines de crease (mismo look que la escena principal). */}
-                <EdgeInkEffect bufferRef={portraitNormalTexture} thickness={1.1} strength={0.9} threshold={0.3} soft={0.16} color={skinLineColor} />
+                {/* Toon ink lines de crease (mismo look que la escena principal).
+                    El retrato no lleva hull: su silueta es el borde interno, que
+                    va después del bloom (sin él, la silueta salía del Laplaciano:
+                    de un pixel, gris y cortada). */}
+                <EdgeInkEffect bufferRef={portraitNormalTexture} thickness={1.1} strength={0.9} threshold={0.3} soft={0.16} color={skinLineColor}
+                  silhouette silhouetteWidth={2.4} silhouetteStrength={1} />
                 {dotEnabled && (
                   <DotScreen
                     blendFunction={{

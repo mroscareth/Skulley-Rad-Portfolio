@@ -58,7 +58,7 @@ export default function ArgusDemo() {
         <Camara cerca={cerca} />
         <Suspense fallback={null}>
           <Giro giro={giro}>
-            <ZoidianModel targetHeight={3.2} lookAtRef={objRef} ctrlRef={ctrlRef} hablaRef={hablaRef} pushRef={pushRef} variedad={variedad} outlineWorld={0.012} />
+            <ZoidianModel targetHeight={3.2} lookAtRef={objRef} ctrlRef={ctrlRef} hablaRef={hablaRef} pushRef={pushRef} variedad={variedad} />
           </Giro>
         </Suspense>
         <EffectComposer multisampling={0}>

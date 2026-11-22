@@ -618,10 +618,11 @@ export default function PostFX({
             internos parciales tipo planetono/Hi-Fi Rush). Complementa al outline
             de hull (silueta) — se usan AMBOS. Firma visual del personaje: activo en
             TODOS los dispositivos (incl. mobile/iPad/Tesla) vía `edgeInkEnabled`
-            (default true). */}
+            (default true). La silueta la da solo el hull, con su grosor medido en
+            pantalla (contornoPantalla.js): el borde interno que se le sumaba aquí
+            lo engordaba al doble de cerca. */}
         {edgeInkEnabled && (
-          <EdgeInkEffect bufferRef={characterNormalTexture} thickness={1.3} strength={0.9} threshold={0.3} soft={0.16} color={skinLineColor}
-            silhouette silhouetteWidth={2.2} silhouetteStrength={1.0} />
+          <EdgeInkEffect bufferRef={characterNormalTexture} protegerDelBloom thickness={1.3} strength={0.9} threshold={0.3} soft={0.16} color={skinLineColor} />
         )}
         {/* TransitionWarp disabled — shader's Effect registration caused black
             screen issues across the pipeline. Keeping the component definition

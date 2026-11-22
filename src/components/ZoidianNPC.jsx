@@ -7,6 +7,7 @@ import { extendGLTFLoaderKTX2 } from '../lib/ktx2Setup.js'
 import { applyToonBanding } from '../lib/toonBanding.js'
 import { applyNeonOrb } from '../lib/applyNeonOrb.js'
 import makeHullOutline from '../lib/makeHullOutline.js'
+import { crearUniformContorno, medirContorno, glslContorno } from '../lib/contornoPantalla.js'
 import { sectionColors } from '../lib/appHelpers.js'
 import SpeechBubble3D from './SpeechBubble3D.jsx'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
@@ -280,17 +281,17 @@ function valorExpr(nombre, k) {
 //   escribe, mueve la quijada y gesticula (clip Hablar).
 // `variedad`: idles de variedad cada tanto (en el retrato no).
 // `pitchMax`: cuánto puede levantar la cabeza (rad).
-// `outlineWorld`: grosor del contorno en unidades del mundo.
-export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColor = '#000000', outlineWorld = 0.02, pushRef = null, onMeasured, toon = null, pitchMax = 0.45, ctrlRef = null, hablaRef = null, variedad = false, dialogoRef = null }) {
+export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColor = '#000000', pushRef = null, onMeasured, toon = null, pitchMax = 0.45, ctrlRef = null, hablaRef = null, variedad = false, dialogoRef = null }) {
   const groupRef = useRef()
   const { scene: srcScene, animations } = useGLTF(ZOIDIAN_URL, true, true, extendGLTFLoaderKTX2)
 
   const cloned = useMemo(() => {
     const c = SkeletonUtils.clone(srcScene)
     // Contorno de hull invertido — MISMA receta que el outline de Skulley
-    // (Player.jsx): MeshBasicMaterial negro BackSide extruido a lo largo de la
+    // (Player.jsx): MeshBasicMaterial negro BackSide inflado a lo largo de la
     // normal DESPUÉS del skinning, así el trazo se deforma con los clips, la
-    // cara y el head-tracking. El grosor va en unidades del objeto.
+    // cara y el head-tracking. El grosor se mide en pantalla (contornoPantalla.js):
+    // en el mundo salía de 1 px en el juego y grueso en el diálogo del trato.
     const outlineMat = new THREE.MeshBasicMaterial({
       color: 0x000000, side: THREE.BackSide, transparent: false, depthWrite: true, depthTest: true, fog: false, toneMapped: false,
     })
@@ -298,19 +299,19 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
     // las aristas duras y abrían picos) y con un grosor por pieza (`grosorHull`, ver
     // prepararHull): los dientes delgado, la boca por dentro y lo muy chiquito sin
     // contorno (Oscar: "el stroke se ve de muy mala calidad").
+    const contorno = crearUniformContorno()
+    c.userData.__contorno = contorno
     outlineMat.onBeforeCompile = (shader) => {
-      shader.uniforms.outlineThickness = { value: c.userData.__outlineThickness || 0.012 }
-      c.userData.__outlineUniform = shader.uniforms.outlineThickness
+      shader.uniforms.uContorno = contorno
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', `#include <common>
-        uniform float outlineThickness;
+        uniform float uContorno;
         attribute vec3 normalSuave;
         attribute float grosorHull;`)
         .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = normalSuave;')
-        .replace('#include <project_vertex>', `transformed += normalize(objectNormal) * outlineThickness * grosorHull;
-        #include <project_vertex>`)
+        .replace('#include <project_vertex>', glslContorno({ normalSinPiel: 'normalSuave', factor: 'grosorHull' }))
     }
-    outlineMat.customProgramCacheKey = () => 'contornoArgus2'
+    outlineMat.customProgramCacheKey = () => 'contornoArgus3'
     const skinnedMeshes = []
     c.traverse((o) => {
       if (!(o.isMesh || o.isSkinnedMesh)) return
@@ -441,11 +442,18 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
     return { scale, offset: [-center.x * scale, -box.min.y * scale, -center.z * scale], height: targetHeight }
   }, [cloned, targetHeight])
 
-  useMemo(() => {
-    const t = outlineWorld / fit.scale
-    cloned.userData.__outlineThickness = t
-    if (cloned.userData.__outlineUniform) cloned.userData.__outlineUniform.value = t
-  }, [cloned, fit.scale, outlineWorld])
+  // El grosor del contorno, con lo alto que se ve Argus en esta cámara
+  const _contornoCentro = useMemo(() => new THREE.Vector3(), [])
+  const _contornoEscala = useMemo(() => new THREE.Vector3(), [])
+  useFrame(({ camera, size, gl }) => {
+    const g = groupRef.current
+    if (!g) return
+    g.getWorldPosition(_contornoCentro)
+    g.getWorldScale(_contornoEscala)
+    const alto = fit.height * _contornoEscala.y
+    _contornoCentro.y += alto * 0.5
+    medirContorno(cloned.userData.__contorno, camera, size, gl.getPixelRatio(), _contornoCentro, alto)
+  })
 
   useEffect(() => { try { onMeasured?.(fit) } catch { } }, [fit, onMeasured])
   useEffect(() => {

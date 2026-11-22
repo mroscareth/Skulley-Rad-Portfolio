@@ -21,6 +21,7 @@ import { extendGLTFLoaderKTX2, detectKTX2Support } from '../lib/ktx2Setup.js'
 import LightningBolt from './fx/LightningBolt.jsx'
 import { playFootstep, playOrbKick, playLaserBlast, playFireballShot, startLaserCharge, updateLaserCharge, stopLaserCharge } from '../lib/homeSounds.js'
 import makeHullOutline from '../lib/makeHullOutline.js'
+import { crearUniformContorno, medirContorno, glslContorno } from '../lib/contornoPantalla.js'
 import { applyToonBanding } from '../lib/toonBanding.js'
 import { KICK_BONES, KICK_A, KICK_B, KICK_ROOT_A, KICK_ROOT_B } from '../lib/kickPose.js'
 import {
@@ -65,6 +66,8 @@ const CLIC_VENTANA_MS = 1200
 // Lo que la viñeta no debe tapar, desde su ancla (a 1.85 del piso): medido con
 // los vértices, Skulley llega a 2.81 con la cresta y la cabeza abre 0.70.
 const VINETA_EVITA = { abajo: 1.85, arriba: 1.05, radio: 0.75 }
+// Para el grosor del contorno: de los pies a la punta de la cresta.
+const ALTO_SKULLEY = 2.85
 
 // Expose a module-level global helper so it runs even if the component never mounts.
 // This avoids the case where a render/Canvas error prevents useEffect from running.
@@ -2532,6 +2535,8 @@ export default function Player({
                 outlineMesh.name = rigid.name + '_outline'
                 outlineMesh.renderOrder = -1
                 outlineMesh.userData.__disassembleOwned = false // shared material
+                // sin marca para la tinta: en el normal-pass sería otra variante del
+                // programa (three la llavea con las luces) y compilaría en el rayo
                 rigid.add(outlineMesh)
               } catch { }
             }
@@ -7126,11 +7131,12 @@ export default function Player({
     )
   }
 
-  // Outline material (inverted hull) - optimized for performance
-  // Expansion happens AFTER skinning in model-space so bone transforms don't
-  // distort the thickness.  objectNormal is the skinned normal (from
-  // skinnormal_vertex) and transformed is the skinned position (from
-  // skinning_vertex) — both in the same coordinate space.
+  // Outline material (inverted hull). Se infla DESPUÉS de la piel, a lo largo de
+  // la normal ya posada, y en el espacio de la vista lo justo para medir en
+  // pantalla lo de `contornoPantalla.js` (antes era una cantidad fija del mundo:
+  // de lejos se rompía y de cerca engordaba). `uContorno` lo pone cada cuadro el
+  // useFrame de abajo con lo alto que se ve Skulley.
+  const contornoUniform = useMemo(() => crearUniformContorno(), [])
   const outlineMaterial = useMemo(() => {
     const mat = new THREE.MeshBasicMaterial({
       color: 0x000000,
@@ -7147,33 +7153,49 @@ export default function Player({
       toneMapped: false,
     })
     mat.onBeforeCompile = (shader) => {
-      shader.uniforms.outlineThickness = { value: 0.012 }
+      shader.uniforms.uContorno = contornoUniform
       shader.vertexShader = shader.vertexShader.replace(
         '#include <common>',
         `#include <common>
-        uniform float outlineThickness;`
+        uniform float uContorno;`
       )
-      // Inject expansion AFTER skinning_vertex (which skins `transformed`)
-      // but BEFORE project_vertex (which computes gl_Position).
-      // At this point objectNormal is the bone-transformed normal and
-      // transformed is the bone-transformed position — same space.
       // OJO: en MeshBasicMaterial `objectNormal` solo se declara con
       // USE_SKINNING. Este material se comparte, y compilar su variante
-      // no-skinned (meshes rígidos ocultos, o el compileAsync del warm-up)
+      // no-skinned (las piezas del despiece, el compileAsync del warm-up)
       // tronaba con "objectNormal: undeclared identifier" — ahí el atributo
       // crudo `normal` es la misma normal en object-space.
-      shader.vertexShader = shader.vertexShader.replace(
-        '#include <project_vertex>',
-        `#ifdef USE_SKINNING
-        transformed += normalize(objectNormal) * outlineThickness;
-        #else
-        transformed += normalize(normal) * outlineThickness;
-        #endif
-        #include <project_vertex>`
-      )
+      shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', glslContorno())
     }
     return mat
-  }, [])
+  }, [contornoUniform])
+
+  // Lo mismo, negro y sin profundidad, para marcar en el buffer de normales de la
+  // tinta dónde cae el contorno: EdgeInk le quita ahí el bloom que se le sumó
+  // encima (el brillo de la skin lo lavaba a verde, "se ve transparente"). Mismo
+  // programa que el del color: no compila nada nuevo.
+  const outlineMarcaMaterial = useMemo(() => {
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      side: THREE.BackSide,
+      depthWrite: false,
+      depthTest: true,
+      fog: false,
+      toneMapped: false,
+    })
+    mat.onBeforeCompile = outlineMaterial.onBeforeCompile
+    return mat
+  }, [outlineMaterial])
+
+  // Lo alto que mide Skulley de los pies a la punta del mohawk (medido con sus
+  // vértices: 2.83–2.91 según la pose). El centro va a la mitad.
+  const _contornoCentro = useMemo(() => new THREE.Vector3(), [])
+  useFrame(({ camera: cam, size, gl: renderer }) => {
+    const p = playerRef.current
+    if (!p) return
+    p.getWorldPosition(_contornoCentro)
+    _contornoCentro.y += ALTO_SKULLEY * 0.5
+    medirContorno(contornoUniform, cam, size, renderer.getPixelRatio(), _contornoCentro, ALTO_SKULLEY)
+  })
 
   // El mismo contorno, sin color y escribiendo profundidad.
   const outlineDepthMaterial = useMemo(() => {
@@ -7252,7 +7274,14 @@ export default function Player({
           m.renderOrder = -1
           return m
         }
-        probes = [mk(rigidMat), mk(outlineMaterial)]
+        // El contorno se calienta con un material propio con su mismo shader (el
+        // mismo programa). Con el compartido, si en estos cuadros corría el
+        // fundido de Skulley (applyModelOpacity no salta esta malla, que no se
+        // llama `_outline`), el material del contorno se quedaba en opacity 0
+        // y Skulley perdía el hull el resto de la visita.
+        const contornoMat = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide, depthWrite: false, fog: false, toneMapped: false })
+        contornoMat.onBeforeCompile = outlineMaterial.onBeforeCompile
+        probes = [mk(rigidMat), mk(contornoMat)]
         probes.forEach((m) => scene.add(m))
 
         // Tres frames: montar → rasterizar → compilar. Luego se van.
@@ -7261,6 +7290,9 @@ export default function Player({
           if (++n < 3) { raf = requestAnimationFrame(tick); return }
           probes.forEach((m) => { try { scene.remove(m) } catch { } })
           try { rigidMat.dispose?.() } catch { }
+          // contornoMat no se libera: soltaría el programa sin piel que acaba de
+          // compilar (el de las piezas del despiece) y se volvería a compilar en
+          // el primer rayo
           probes = []
         }
         raf = requestAnimationFrame(tick)
@@ -7315,6 +7347,7 @@ export default function Player({
         outlineMesh.castShadow = false
         outlineMesh.receiveShadow = false
         outlineMesh.renderOrder = 1
+        outlineMesh.userData.marcaContorno = outlineMarcaMaterial
         original.renderOrder = 2
 
         const depthMesh = new THREE.SkinnedMesh(original.geometry, outlineDepthMaterial)
@@ -7366,7 +7399,7 @@ export default function Player({
         outlineAddedRef.current = false
       } catch { }
     }
-  }, [outlineEnabled, scene, outlineMaterial, outlineDepthMaterial])
+  }, [outlineEnabled, scene, outlineMaterial, outlineDepthMaterial, outlineMarcaMaterial])
 
   // Un cuerpo transparente (fundidos, modo orbe) se pinta después de este pase y sus
   // propios contornos lo taparían.

@@ -1,7 +1,8 @@
-import { useMemo, useRef } from 'react'
+import { useContext, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { Effect, BlendFunction } from 'postprocessing'
+import { Effect, BlendFunction, BloomEffect } from 'postprocessing'
+import { EffectComposerContext } from '@react-three/postprocessing'
 
 // Toon ink lines (estilo planetono / Hi-Fi Rush). Detección de bordes por
 // LAPLACIANO sobre un buffer de normales geométricas EXCLUSIVO del personaje
@@ -30,12 +31,22 @@ export default function EdgeInkEffect({
   // construcción (cada pixel del borde se entinta → sin huecos al alejar) y
   // BARATO: solo corre sobre la geometría (región chica), no sobre el fondo.
   // Es un borde INTERNO → nunca agranda la silueta hacia afuera, así que no se
-  // percibe que "crece". Complementa al hull: de cerca el hull manda (grueso),
-  // de lejos (cuando el hull se vuelve sub-pixel y se rompe) este lo rellena.
+  // percibe que "crece". Es la silueta de lo que no lleva hull (el retrato y el
+  // rig del preloader y del teléfono); la escena ya no lo usa: su hull mide en
+  // pantalla y con este encima engordaba al doble.
   silhouette = false,
   silhouetteWidth = 2.0,     // grosor del borde interno en px (≈ constante en pantalla)
   silhouetteStrength = 1.0,
+  // El bloom va antes que la tinta y se le suma encima al hull (que está en la
+  // escena): con una skin brillante el contorno salía verde, "transparente". El
+  // hull marca su anillo en el buffer de normales (rgb 0 con alfa) y aquí, donde
+  // el color es justo el del hull más lo que sumó el bloom, se le quita ese
+  // bloom. Si algo quedó encima del contorno (una esfera, un brillo), el color no
+  // empata y se respeta. El bloom se busca en el mismo composer (al envoltorio
+  // de <Bloom> no se le puede pasar ref: hace JSON.stringify de sus props).
+  protegerDelBloom = false,
 }) {
+  const composerCtx = useContext(EffectComposerContext)
   const effectRef = useRef()
   const uniformsRef = useRef({
     uEdgeThickness: new THREE.Uniform(thickness),
@@ -50,6 +61,9 @@ export default function EdgeInkEffect({
     uSilhouette: new THREE.Uniform(silhouette ? 1.0 : 0.0),
     uOutlineWidth: new THREE.Uniform(silhouetteWidth),
     uOutlineStrength: new THREE.Uniform(silhouetteStrength),
+    uBloomMap: new THREE.Uniform(null),
+    uBloomK: new THREE.Uniform(0),
+    uProtege: new THREE.Uniform(0),
   })
   useFrame(({ size }) => {
     const u = uniformsRef.current
@@ -80,6 +94,16 @@ export default function EdgeInkEffect({
     // LinearFilter del normal-buffer lo mantienen CONTINUO en vez de mordido.
     u.uOutlineWidth.value = silhouetteWidth * THREE.MathUtils.clamp(sc, 0.25, 1)
     u.uOutlineStrength.value = silhouetteStrength
+    // el composer rearma sus pases cuando cambian los efectos: se busca cada cuadro
+    // (son unos cuantos)
+    let bloom = null
+    const pases = protegerDelBloom ? composerCtx?.composer?.passes : null
+    if (pases) for (const p of pases) for (const e of (p.effects || [])) if (e instanceof BloomEffect) bloom = e
+    const mapa = bloom?.texture || null
+    u.uBloomMap.value = mapa
+    // el bloom se suma (ADD) como textura × intensidad × opacidad de su mezcla
+    u.uBloomK.value = mapa ? (bloom.intensity ?? 1) * (bloom.blendMode?.opacity?.value ?? 1) : 0
+    u.uProtege.value = mapa ? 1 : 0
   })
   useMemo(() => {
     const frag = `
@@ -95,6 +119,9 @@ export default function EdgeInkEffect({
       uniform float uSilhouette;
       uniform float uOutlineWidth;
       uniform float uOutlineStrength;
+      uniform sampler2D uBloomMap;
+      uniform float uBloomK;
+      uniform float uProtege;
       // "Fondo" (0 geometría, 1 fondo) en un uv. El normal-pass deja el fondo en
       // (0,0,0) → dot≈0; la geometría tiene normales codificadas → dot≈0.75. El
       // smoothstep + LinearFilter del buffer dan valor parcial en el borde → AA.
@@ -104,10 +131,21 @@ export default function EdgeInkEffect({
       }
       void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outColor) {
         vec2 t = vec2(uEdgeThickness) / uResolution;
-        vec3 nC = texture2D(uNormalBuffer, uv).rgb;
+        vec4 bufC = texture2D(uNormalBuffer, uv);
+        vec3 nC = bufC.rgb;
         // Solo donde hay geometría (el normal-pass deja ~0 en el fondo). EARLY-OUT:
         // el fondo (la mayor parte de la pantalla) no hace NADA más → barato.
-        if (dot(nC, nC) < 0.001) { outColor = inputColor; return; }
+        if (dot(nC, nC) < 0.001) {
+          outColor = inputColor;
+          // el anillo del hull (rgb 0 con alfa): si lo que se ve es el hull más el
+          // bloom que se le sumó, vuelve a ser tinta
+          if (uProtege > 0.5 && bufC.a > 0.2) {
+            vec3 conBloom = clamp(uEdgeColor + texture2D(uBloomMap, uv).rgb * uBloomK, 0.0, 1.0);
+            float esHull = 1.0 - smoothstep(0.03, 0.1, distance(inputColor.rgb, conBloom));
+            outColor.rgb = mix(inputColor.rgb, uEdgeColor, esHull);
+          }
+          return;
+        }
         vec3 nL = texture2D(uNormalBuffer, uv - vec2(t.x, 0.0)).rgb;
         vec3 nR = texture2D(uNormalBuffer, uv + vec2(t.x, 0.0)).rgb;
         vec3 nU = texture2D(uNormalBuffer, uv + vec2(0.0, t.y)).rgb;

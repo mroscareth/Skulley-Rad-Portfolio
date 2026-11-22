@@ -169,7 +169,14 @@ export default function CharacterNormalPass({ playerRef, enabled = true, target 
       const mat0 = Array.isArray(o.material) ? o.material[0] : o.material
       const effOpacity = mat0 && typeof mat0.opacity === 'number' ? mat0.opacity : 1
       const isBody = !isOutline && effOpacity > 0.1 && (allMeshes || o.isSkinnedMesh || isPiece)
-      if (isBody) {
+      // El hull de color trae su marca (negro, alfa 1, sin profundidad: el cuerpo
+      // la tapa adentro de la silueta, igual que en la escena). En el buffer queda
+      // como un anillo de rgb 0 con alfa, que EdgeInk distingue del fondo (alfa 0).
+      const marca = isOutline && o.userData?.marcaContorno
+      if (marca) {
+        restore.push([o, 'mat', o.material])
+        o.material = marca
+      } else if (isBody) {
         restore.push([o, 'mat', o.material])
         o.material = normalDe(o)
       } else {

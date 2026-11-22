@@ -6,6 +6,7 @@ import * as THREE from 'three'
 import { extendGLTFLoaderKTX2 } from '../../lib/ktx2Setup.js'
 import { applyToonBanding } from '../../lib/toonBanding.js'
 import { crearMaterialPantalla, crearCara } from '../../lib/pantallaDrone.js'
+import { crearUniformContorno, medirContorno, glslContorno } from '../../lib/contornoPantalla.js'
 import TurbinaDrone from './TurbinaDrone.jsx'
 
 // El drone del imperio Etherean (modelo de Oscar) con su rig y sus acciones
@@ -74,16 +75,18 @@ function normalesSuaves(geo) {
   geo.setAttribute('normalSuave', new THREE.BufferAttribute(out, 3))
 }
 
-function materialContorno(grosor) {
+// El grosor se mide en pantalla (contornoPantalla.js): en el mundo salía de un
+// pixel en el juego y grueso en el diálogo.
+function materialContorno(contorno) {
   const m = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide, fog: false, toneMapped: false })
   m.onBeforeCompile = (shader) => {
-    shader.uniforms.uGrosor = grosor
+    shader.uniforms.uContorno = contorno
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec3 normalSuave;\nuniform float uGrosor;')
+      .replace('#include <common>', '#include <common>\nattribute vec3 normalSuave;\nuniform float uContorno;')
       .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = normalSuave;')
-      .replace('#include <project_vertex>', 'transformed += normalize(objectNormal) * uGrosor;\n#include <project_vertex>')
+      .replace('#include <project_vertex>', glslContorno({ normalSinPiel: 'normalSuave' }))
   }
-  m.customProgramCacheKey = () => 'contornoDrone'
+  m.customProgramCacheKey = () => 'contornoDrone2'
   return m
 }
 
@@ -147,7 +150,6 @@ function medirBoquilla(pieles) {
 
 const DroneModel = forwardRef(function DroneModel({
   size = 2,
-  outlineWorld = 0.022,
   accion = 'IdleTranquilo',
   accionN = 0,
   onAccion,
@@ -173,7 +175,7 @@ const DroneModel = forwardRef(function DroneModel({
 
   const armado = useMemo(() => {
     const c = SkeletonUtils.clone(original)
-    const grosor = { value: 0.01 }
+    const grosor = crearUniformContorno()
     const contorno = materialContorno(grosor)
     let pantalla = null
     let pantallaOriginal = null
@@ -223,7 +225,9 @@ const DroneModel = forwardRef(function DroneModel({
     boquilla.position.copy(medirBoquilla(pieles.filter((o) => /Metals|Glows/.test(o.name))).applyMatrix4(inv))
     const dir = new THREE.Vector3(0, 0, -1).transformDirection(inv)
     hueso.add(boquilla)
-    return { c, grosor, contorno, pantalla, pantallaOriginal, pantallaShader, escala, centro, boquilla, dir: dir.toArray(), enojo }
+    // lo alto del modelo contra su lado más largo (`size` es el lado más largo)
+    const altoRel = tam.y * escala
+    return { c, grosor, contorno, pantalla, pantallaOriginal, pantallaShader, escala, centro, boquilla, dir: dir.toArray(), enojo, altoRel }
   }, [original, mapasNormales, toon])
 
   const cara = useMemo(() => crearCara(armado.pantallaShader.userData.pantalla, { auto: caraAuto, rnd: caraRnd }), [armado, caraAuto, caraRnd])
@@ -235,7 +239,17 @@ const DroneModel = forwardRef(function DroneModel({
   }, [armado, ojosOriginales])
 
   const escala = size * armado.escala
-  useEffect(() => { armado.grosor.value = outlineWorld / escala }, [armado, outlineWorld, escala])
+  // el grosor del contorno, con lo alto que se ve en esta cámara (el modelo va
+  // centrado en la raíz)
+  const _contornoCentro = useMemo(() => new THREE.Vector3(), [])
+  const _contornoEscala = useMemo(() => new THREE.Vector3(), [])
+  useFrame(({ camera, size: tamCanvas, gl }) => {
+    const r = raizRef.current
+    if (!r) return
+    r.getWorldPosition(_contornoCentro)
+    r.getWorldScale(_contornoEscala)
+    medirContorno(armado.grosor, camera, tamCanvas, gl.getPixelRatio(), _contornoCentro, size * armado.altoRel * _contornoEscala.y)
+  })
   // el contorno blanco al pasar el mouse (como Argus): un uniform, no compila
   useEffect(() => { armado.contorno.color.set(contornoColor) }, [armado, contornoColor])
 
