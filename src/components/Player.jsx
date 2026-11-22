@@ -48,6 +48,7 @@ const FASE_PISA_WALK = 10 / 40
 const FASE_PISA_CORRER = 0
 import { applyCharacterSkinShader, materialTakesSkin, skinLineColor, SKIN_LINE_COLOR_EVENT, getSkinForcedColors, getCurrentSkinMode } from '../lib/skinShaders.js'
 import LlamaMano from './fx/LlamaMano.jsx'
+import EstelaEsfera from './fx/EstelaEsfera.jsx'
 import { rayoTocaDron, bolaAlEscudo, golpeEscudo } from '../lib/droneNpc.js'
 import { pasoCaminata } from '../lib/caminataAuto.js'
 
@@ -857,6 +858,7 @@ export default function Player({
   const ARRIVAL_NEAR_DIST = 1.4
   const orbOriginOffsetRef = useRef(new THREE.Vector3(0, 0.8, 0))
   const orbMatRef = useRef(null)
+  const orbGroupRef = useRef(null)
   const orbLightRef = useRef(null)
   const orbBaseColorRef = useRef(new THREE.Color('#aee2ff'))
   const orbTargetColorRef = useRef(new THREE.Color('#9ec6ff'))
@@ -7527,7 +7529,7 @@ export default function Player({
         {/* El mohawk en llamas de la skin Inferno. */}
         <LlamaMano raiz={scene} fuente="pelo" />
         {/* Orb sphere + inner sparkles to convey "ser de luz" */}
-        <group position={[0, ORB_HEIGHT, 0]}>
+        <group ref={orbGroupRef} position={[0, ORB_HEIGHT, 0]}>
           {/* Point light: always mounted to warm up the pipeline; intensity 0 when inactive */}
           {/* NOTE: this light is glow/accent; if it casts shadows, it produces a duplicate shadow */}
           <pointLight ref={orbLightRef} intensity={showOrbRef.current ? 6 : 0} distance={12} decay={1.6} />
@@ -7612,6 +7614,8 @@ export default function Player({
       {/* World-space sparks trail (not parented to player) */}
       {/* Mount spark shader always (drawRange 0 when idle) to avoid first-use jank */}
       <ComponenteEstable render={TrailSparks} />
+      {/* Las lenguas de fuego detrás de la esfera al viajar a un portal o caer. */}
+      <EstelaEsfera orbeRef={orbGroupRef} activaRef={orbActiveRef} colorRef={orbMatRef} apagada={prewarm} />
     </>
   )
 }

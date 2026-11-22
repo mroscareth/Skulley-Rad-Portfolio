@@ -4,6 +4,7 @@ import * as THREE from 'three'
 import { getSkinForcedColors, getCurrentSkinMode, SKIN_LINE_COLOR_EVENT } from '../../lib/skinShaders.js'
 import { getCharacterColors, CHARACTER_COLOR_EVENT } from '../../lib/characterColors.js'
 import { uniformsLlama } from '../../lib/toonBanding.js'
+import { BANDAS, VERT_BRASA, FRAG_BRASA } from '../../lib/fuegoToon.js'
 
 // La llama de la mano de Skulley, con todas las skins (Oscar, 2026-11-15: la
 // esfera verde era provisional mientras se hacía este shader). Referencia de
@@ -124,9 +125,6 @@ const ESTELA = { cola: 0.16, fin: 0.25, ancho: 1.1 }
 const BOLAS = 8
 // La llama vuelve a la mano después de explotar la bola.
 const RENACE = { espera: 0.12, dura: 0.6 }
-// Umbrales de las bandas sobre la densidad del campo. La orilla manda y el
-// centro es un núcleo chico (Oscar).
-const BANDAS = { halo: 0.22, hondo: 0.42, medio: 0.95, claro: 1.55, centro: 3.1 }
 const GOTAS = 6
 // Grupos de bocanadas para el descarte barato del shader (ver `agrupa`).
 const GRUPOS = 8
@@ -358,32 +356,6 @@ void main(){
   if (k < 0.15) discard;
   vec3 col = k > 1.35 ? uCentro : (k > 0.95 ? uClaro : (k > 0.5 ? uMedio : uHondo));
   gl_FragColor = vec4(col, 1.0);
-}
-`
-
-const VERT_BRASA = /* glsl */`
-varying vec2 vUv;
-void main(){
-  vUv = position.xy * 2.0;
-  mat4 m = mat4(1.0);
-  #ifdef USE_INSTANCING
-    m = instanceMatrix;
-  #endif
-  vec4 c = modelViewMatrix * vec4(m[3].xyz, 1.0);
-  c.xy += vUv * length(m[0].xyz);
-  gl_Position = projectionMatrix * c;
-}
-`
-
-const FRAG_BRASA = /* glsl */`
-uniform vec3 uHondo;
-uniform vec3 uMedio;
-uniform vec3 uClaro;
-varying vec2 vUv;
-void main(){
-  float d = length(vUv);
-  if (d > 1.0) discard;
-  gl_FragColor = vec4(d < 0.45 ? uClaro : (d < 0.75 ? uMedio : uHondo), 1.0);
 }
 `
 
