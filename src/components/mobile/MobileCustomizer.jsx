@@ -652,7 +652,7 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
                   aria-label={accion}
                   data-tip={accion}
                 >
-                  {Icono && <IconoTinta nombre={Icono} tam={34} />}
+                  {Icono && <IconoTinta nombre={Icono} tam={40} />}
                 </button>
               )
             })}

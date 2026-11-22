@@ -36,7 +36,7 @@ export default function SkinChip({ skin, lang = 'en', active = false, owned = tr
         </span>
         {!owned && (
           <span className="absolute inset-0 rounded-full grid place-items-center bg-[#0a0510]/45">
-            <IconoTinta nombre="candado" tam={24} />
+            <IconoTinta nombre="candado" tam={34} />
           </span>
         )}
       </button>

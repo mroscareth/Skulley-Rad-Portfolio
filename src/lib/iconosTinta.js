@@ -6,7 +6,7 @@
 
 const TINTA = '#0a0510'
 const R = 24
-const estado = { grosor: 5, giro: 1 }
+const estado = { grosor: 7, giro: 1 }
 let cuentaRecortes = 0
 
 function f(n) { return Math.round(n * 1000) / 1000; }

@@ -7658,6 +7658,9 @@ div:has(> #privy-dialog-backdrop) {
 .chip-tinta:not(:disabled):active { --alto: 1px; transform: translateY(-1px); transition-duration: 60ms; }
 .chip-tinta:focus-visible { outline: 3px solid #ffffff; outline-offset: 4px; }
 .skin-chip__swatch.chip-tinta { background: #0a0510; }
+/* El ícono llena el chip (Oscar: chicos no se distinguían); el inline de
+   IconoTinta trae su tam fijo y el chip cambia de 48 a 64 px. */
+.chip-tinta .chip-tinta__icono { width: 88% !important; height: 88% !important; }
 .chip-tinta__tip { box-shadow: 0 3px 0 0 #0a0510; }
 
 /* Los botones del sitio (la acción principal en amarillo y la secundaria)

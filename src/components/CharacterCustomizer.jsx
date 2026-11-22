@@ -107,7 +107,7 @@ function SelectorPartes({ lang, parte, onParte, estado, enFila = false }) {
               aria-label={nombre}
               className={`chip-tinta relative grid place-items-center w-12 h-12 md:w-16 md:h-16${activa ? ' es-elegido' : ''}`}
             >
-              <IconoTinta nombre={p.icono} tam={40} className="chip-tinta__icono" />
+              <IconoTinta nombre={p.icono} tam={60} className="chip-tinta__icono" />
               {conAlgo && <span className="absolute top-0 right-0 w-3 h-3 md:w-3.5 md:h-3.5 rounded-full bg-amarillo border-2 border-[#0a0510]" aria-hidden="true" />}
             </button>
             <div className="mt-1 w-12 md:w-16 text-[9px] md:text-[10px] text-center leading-tight opacity-80 truncate">{nombre}</div>
@@ -155,9 +155,9 @@ function PropsDeParte({ lang, parte, estado, setEstado, enFila = false }) {
                 aria-label={`${nombre}: ${lang === 'es' ? 'bloqueado' : 'locked'}`}
                 className="chip-tinta relative grid place-items-center w-12 h-12 md:w-16 md:h-16 cursor-not-allowed"
               >
-                <IconoTinta nombre={icono} tam={40} className="chip-tinta__icono opacity-40" />
+                <IconoTinta nombre={icono} tam={60} className="chip-tinta__icono opacity-40" />
                 <span className="absolute inset-0 rounded-full grid place-items-center">
-                  <IconoTinta nombre="candado" tam={24} />
+                  <IconoTinta nombre="candado" tam={34} />
                 </span>
               </button>
               <div className="mt-1 w-12 md:w-16 text-[9px] md:text-[10px] text-center leading-tight opacity-80 truncate">{nombre}</div>
@@ -179,7 +179,7 @@ function PropsDeParte({ lang, parte, estado, setEstado, enFila = false }) {
               data-tip={accion}
               className={`chip-tinta grid place-items-center w-12 h-12 md:w-16 md:h-16${puesto ? ' es-elegido chip-tinta--amarillo' : ''}`}
             >
-              <IconoTinta nombre={icono} tam={40} className="chip-tinta__icono" />
+              <IconoTinta nombre={icono} tam={60} className="chip-tinta__icono" />
             </button>
             <div className="mt-1 w-12 md:w-16 text-[9px] md:text-[10px] text-center leading-tight opacity-80 truncate">{nombre}</div>
           </div>
