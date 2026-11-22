@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { XMarkIcon, ArrowLeftIcon, MusicalNoteIcon } from '@heroicons/react/24/solid'
+import { XMarkIcon, ArrowLeftIcon } from '@heroicons/react/24/solid'
+import IconoTinta from './ui/IconoTinta.jsx'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF, useAnimations } from '@react-three/drei'
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
@@ -1126,12 +1127,12 @@ export default function CharacterPortrait({
             type="button"
             onClick={onToggleMusic}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-            className="absolute z-[1] h-11 w-11 rounded-full grid place-items-center border border-black/20 bg-amarillo text-[#0a0510] hover:bg-amarillo-claro transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-            style={{ left: '100%', top: '50%', transform: 'translate(-50%, -50%)' }}
+            className="absolute z-[1] h-11 w-11 grid place-items-center burbuja-vidrio tecla-amarilla"
+            style={{ left: '100%', top: '50%', transform: 'translate(-50%, calc(-50% - var(--alto, 5px)))' }}
             aria-label={t('nav.music')}
             data-tip={t('nav.music')}
           >
-            <MusicalNoteIcon className="w-5 h-5" aria-hidden />
+            <IconoTinta nombre="nota" tam={32} />
           </button>
         )}
         {mode !== 'hero' && <PortraitGlobo compact={isCompactViewport} />}

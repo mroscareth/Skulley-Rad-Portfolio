@@ -119,6 +119,15 @@ var ICONOS = {
   rayo: { n: 'Poder', hoy: 'BoltIcon', capas: [
     { formas: ['M13.6 2L4.6 13.4C4.2 13.9 4.6 14.6 5.2 14.6H10.6L9.4 21.4C9.3 22 10 22.3 10.4 21.8L19.4 10.4C19.8 9.9 19.4 9.2 18.8 9.2H13.4L14.6 2.6C14.7 2 14 1.7 13.6 2Z'] }
   ] },
+  reiniciar: { n: 'Reiniciar', hoy: 'ArrowPathIcon', capas: [
+    { trazos: [{ d: 'M19 12A7 7 0 1 1 12 5', w: 2.8 }], formas: ['M11.2 1.4L17.2 5L11.2 8.6Z'] }
+  ] },
+  info: { n: 'Controles', hoy: 'InformationCircleIcon', capas: [
+    { formas: [circulo(12, 12, 9.8)], tinta: [circulo(12, 7.4, 1.6) + redondo(10.5, 10.4, 3, 8, 1.4)] }
+  ] },
+  chispa: { n: 'Skin dorada', hoy: 'SparklesIcon', capas: [
+    { formas: ['M12 2C12.9 7.6 16.4 11.1 22 12C16.4 12.9 12.9 16.4 12 22C11.1 16.4 7.6 12.9 2 12C7.6 11.1 11.1 7.6 12 2Z'] }
+  ] },
   mundo: { n: 'Idioma', hoy: 'hoy solo texto (ESP / ENG)', capas: [
     { formas: [circulo(12, 12, 10)], lineas: [{ d: 'M12 2a4.3 10 0 1 0 0 20a4.3 10 0 1 0 0-20ZM2 12H22M3.34 7H20.66M3.34 17H20.66', w: 1.4 }] }
   ] },

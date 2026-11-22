@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { SparklesIcon } from '@heroicons/react/24/solid'
+import IconoTinta from './ui/IconoTinta.jsx'
 
 // Skin toggle button — mirrors the cart button layout (ShopCart.jsx) but
 // sits on the UPPER-LEFT of the portrait (θ = 60° from vertical, mirrored).
@@ -63,17 +63,17 @@ export default function SkinToggleButton({ unlocked, preference, onToggle, label
       aria-label={label}
       aria-pressed={isGold}
       data-tip={label}
-      className={`fixed rounded-full w-12 h-12 grid place-items-center border-2 transition-colors ${isGold ? 'bg-amarillo border-amarillo text-[#0a0510] hover:bg-amarillo-claro hover:border-amarillo-claro' : 'bg-black/40 hover:bg-black/60 backdrop-blur-xl border-white/25 text-white hover:border-white'}`}
+      className={`fixed w-12 h-12 grid place-items-center burbuja-vidrio ${isGold ? 'tecla-amarilla' : ''}`}
       style={{
         top: `${buttonPos?.top ?? 16}px`,
         left: `${buttonPos?.left ?? 0}px`,
         zIndex: 999995,
         opacity: portraitOpacity,
         pointerEvents: portraitOpacity < 0.1 ? 'none' : 'auto',
-        transition: 'opacity 200ms ease-out, background-color 160ms, border-color 160ms',
+        transition: 'opacity 200ms ease-out, background-color 160ms, transform 160ms var(--ease-spring), box-shadow 160ms var(--ease-spring)',
       }}
     >
-      <SparklesIcon className="w-6 h-6" />
+      <IconoTinta nombre="chispa" tam={34} />
     </button>
   )
 }

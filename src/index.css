@@ -4572,16 +4572,6 @@ div:has(> #privy-dialog-backdrop) {
   letter-spacing: 0.12em;
 }
 
-/* El blanco de la pestaña puesta se desliza a la otra. */
-.cc-marca {
-  transition: transform 520ms cubic-bezier(0.16, 1, 0.3, 1), width 520ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/* Con alto contraste el sistema quita los fondos: la marca va con borde. */
-@media (forced-colors: active) {
-  .cc-marca { border: 2px solid Highlight; }
-}
-
 /* Cambio entre Skins y Props (Oscar, 2026-11-18): las piezas de la columna que
    se va se encogen y bajan en ola; ya idas, las de la otra suben con un rebote,
    también en ola, la columna derecha un poco después (--cc-base). Los tiempos
@@ -4616,7 +4606,6 @@ div:has(> #privy-dialog-backdrop) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cc-marca { transition: none; }
   [data-fase='sale'] .cc-pieza { animation: cc-pieza-funde-sale 160ms linear both; }
   [data-fase='entra'] .cc-pieza { animation: cc-pieza-funde-entra 200ms linear both; }
 }
@@ -6956,7 +6945,6 @@ div:has(> #privy-dialog-backdrop) {
    una orilla iridiscente apenas visible abajo (::after). isolation: los dos
    pseudo van debajo del ícono. */
 .burbuja-vidrio {
-  position: relative;
   isolation: isolate;
   color: #ffffff;
   border: 0;
@@ -7486,13 +7474,18 @@ div:has(> #privy-dialog-backdrop) {
    para no tocar cada componente que los usa. Los íconos son IconoTinta
    (lib/iconosTinta.js).
    ============================================================ */
+/* En capa: así fixed y absolute de Tailwind le ganan (sin capa le ganaba a
+   cualquier utilidad y sacaba de su lugar a los botones fijos). */
+@layer components {
+  .burbuja-vidrio,
+  .msh-btn--vidrio { position: relative; }
+}
 .icono-tinta { display: inline-block; flex: none; line-height: 0; }
 .icono-tinta > svg { display: block; width: 100%; height: 100%; overflow: visible; }
 
 .burbuja-vidrio,
 .msh-btn--vidrio {
   --alto: 5px;
-  position: relative;
   color: #0a0510;
   background: #ffffff;
   border: 2px solid #0a0510;
@@ -7639,6 +7632,79 @@ div:has(> #privy-dialog-backdrop) {
 }
 .nav-tinta__tecla .icono-tinta { margin-top: -0.12em; }
 
+/* Los abanicos de redes y del engrane: el translate del abanico va en línea
+   (resta --alto para que la tecla siga levantada) y aparecen con opacidad. */
+.burbuja-vidrio.tecla-abanico {
+  transition: transform 260ms var(--ease-spring), opacity 200ms ease-out,
+    box-shadow 160ms var(--ease-spring), background-color 120ms linear;
+}
+
+/* El fondo de Customize en su tecla: el nombre en tinta y la muestra con
+   contorno. */
+.cc-fondo.burbuja-vidrio .color-well__label {
+  color: #0a0510;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  padding-top: 0.15em;
+}
+.cc-fondo.burbuja-vidrio .color-well__swatch { border: 2px solid #0a0510; }
+
+/* La barra del teléfono: teclas sueltas en fila. Los que entran al elegir
+   audio crecen con max-width y overflow oculto: el envoltorio deja aire
+   (padding y margen negativo) para el costado, el globito del carrito y el
+   contorno de foco. */
+.msh-tecla {
+  display: grid;
+  place-items: center;
+  min-width: 3.25rem;
+  height: 3.25rem;
+  padding: 0;
+}
+.msh-tecla.font-marquee {
+  padding: 0.15em 0.9rem 0;
+  font-size: 1.05rem;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.msh-teclas .msh-barra-entra { padding: 12px 8px 4px; margin: -12px -8px -4px; }
+@keyframes msh-barra-entra {
+  from { max-width: 0; opacity: 0; }
+  to { max-width: 6rem; opacity: 1; }
+}
+/* Entran ya levantadas: sin esto, al acabar la animación brincaban --alto. */
+@keyframes msh-hud-entra {
+  from { opacity: 0; transform: translateY(calc(12px - var(--alto, 0px))) scale(0.6); }
+  to { opacity: 1; transform: translateY(calc(var(--alto, 0px) * -1)); }
+}
+.mobile-close.burbuja-vidrio { animation: tecla-sube 360ms var(--ease-expo-out) backwards; }
+@keyframes tecla-sube {
+  from { opacity: 0; transform: translateY(0.5em); }
+  to { opacity: 1; transform: translateY(calc(var(--alto, 5px) * -1)); }
+}
+
+/* El idioma del preloader: ya no es burbuja que truena, es tecla que se
+   aprieta y se va; la del otro idioma sube en su lugar. */
+.dsp-idioma-burbuja.burbuja-vidrio { animation: dsp-tecla-nace 460ms var(--ease-expo-out) backwards; }
+.dsp-idioma-burbuja.burbuja-vidrio.is-revienta {
+  --alto: 1px;
+  animation: dsp-tecla-se-va 200ms ease-in forwards;
+}
+@keyframes dsp-tecla-nace {
+  from { opacity: 0; transform: translateY(8px) scale(0.7); }
+  60% { opacity: 1; transform: translateY(-8px) scale(1.03); }
+  to { opacity: 1; transform: translateY(calc(var(--alto, 5px) * -1)); }
+}
+@keyframes dsp-tecla-se-va {
+  0% { opacity: 1; transform: translateY(-5px); }
+  45% { opacity: 1; transform: translateY(-1px); }
+  100% { opacity: 0; transform: translateY(-1px) scale(0.9); }
+}
+.dsp-gotas { display: none; }
+
 @media (prefers-reduced-motion: reduce) {
   .burbuja-vidrio, .msh-btn--vidrio, .puertas .puerta-modo, .nav-tinta__item { transition: background-color 120ms linear, color 120ms linear; }
+  .dsp-idioma-burbuja.burbuja-vidrio, .mobile-close.burbuja-vidrio { animation: none; }
 }

@@ -1,19 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ArrowPathIcon, ArrowLeftIcon, ComputerDesktopIcon, LockClosedIcon, SwatchIcon } from '@heroicons/react/24/solid'
-
-// Dado (heroicons no tiene dice) — representa randomness para el botón Randomize.
-function DiceIcon({ className }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="3" y="3" width="18" height="18" rx="4" />
-      <circle cx="8" cy="8" r="1.25" fill="currentColor" stroke="none" />
-      <circle cx="16" cy="8" r="1.25" fill="currentColor" stroke="none" />
-      <circle cx="12" cy="12" r="1.25" fill="currentColor" stroke="none" />
-      <circle cx="8" cy="16" r="1.25" fill="currentColor" stroke="none" />
-      <circle cx="16" cy="16" r="1.25" fill="currentColor" stroke="none" />
-    </svg>
-  )
-}
+import { LockClosedIcon, SwatchIcon } from '@heroicons/react/24/solid'
+import IconoTinta from './ui/IconoTinta.jsx'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import { playSfx } from '../lib/sfx.js'
 import {
@@ -360,27 +347,10 @@ const PESTANAS = [
   { id: 'props', es: 'Props', en: 'Props', Icono: TorsoIcon },
 ]
 
-// `enBarra`: dentro de la barra de abajo de escritorio, como segmentos de la
-// cápsula; la puesta en blanco plano, como la herramienta elegida del wallpaper.
-// El blanco es una sola pieza que se desliza a la pestaña puesta, medida del
-// botón (cambia con el idioma y con la fuente al cargar).
+// `enBarra`: dentro de la barra de abajo de escritorio, en la placa impresa de
+// tinta sólida; la puesta se levanta como tecla (.nav-tinta__item.es-activa).
 function Pestanas({ pestana, onPestana, lang, centradas = false, enBarra = false }) {
   const idDe = (id) => `cc-pestana-${id}`
-  const listaRef = useRef(null)
-  const [marca, setMarca] = useState(null)
-  useLayoutEffect(() => {
-    if (!enBarra) return undefined
-    const lista = listaRef.current
-    if (!lista) return undefined
-    const medir = () => {
-      const b = lista.querySelector('[aria-selected="true"]')
-      if (b) setMarca((m) => ({ x: b.offsetLeft, w: b.offsetWidth, anima: m != null }))
-    }
-    medir()
-    const ro = new ResizeObserver(medir)
-    lista.querySelectorAll('[role="tab"]').forEach((b) => ro.observe(b))
-    return () => ro.disconnect()
-  }, [enBarra, pestana, lang])
   const onKeyDown = (e) => {
     const i = PESTANAS.findIndex((p) => p.id === pestana)
     let n = null
@@ -394,14 +364,7 @@ function Pestanas({ pestana, onPestana, lang, centradas = false, enBarra = false
     document.getElementById(idDe(PESTANAS[n].id))?.focus()
   }
   return (
-    <div ref={listaRef} role="tablist" aria-label={lang === 'es' ? 'Guardarropa' : 'Wardrobe'} onKeyDown={onKeyDown} className={`relative flex gap-1.5 ${centradas ? 'justify-center' : ''}`}>
-      {enBarra && marca && (
-        <span
-          className="cc-marca absolute top-0 left-0 h-full rounded-full bg-white"
-          style={{ width: marca.w, transform: `translateX(${marca.x}px)`, transition: marca.anima ? undefined : 'none' }}
-          aria-hidden="true"
-        />
-      )}
+    <div role="tablist" aria-label={lang === 'es' ? 'Guardarropa' : 'Wardrobe'} onKeyDown={onKeyDown} className={`relative flex ${enBarra ? 'nav-tinta__placa' : 'gap-1.5'} ${centradas ? 'justify-center' : ''}`}>
       {PESTANAS.map((p) => {
         const activa = p.id === pestana
         return (
@@ -416,10 +379,10 @@ function Pestanas({ pestana, onPestana, lang, centradas = false, enBarra = false
             onClick={() => { if (activa) return; try { playSfx('click', { volume: 1.0 }) } catch { }; onPestana(p.id) }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.6 }) } catch { } }}
             className={enBarra
-              ? `relative h-11 px-5 flex items-center gap-2 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] whitespace-nowrap transition-colors duration-300 ${activa ? 'text-black' : 'text-white/75 hover:text-white'}`
+              ? `nav-tinta__item font-marquee flex items-center gap-2 whitespace-nowrap${activa ? ' es-activa' : ''}`
               : 'shop-chip h-9 px-4 text-[10px] whitespace-nowrap bg-black/35 backdrop-blur-md [text-shadow:none]'}
           >
-            {enBarra && <p.Icono className="w-4 h-4" aria-hidden="true" />}
+            {enBarra && <IconoTinta nombre={p.id === 'skins' ? 'playera' : 'lentes'} tam={28} />}
             {lang === 'es' ? p.es : p.en}
           </button>
         )
@@ -612,16 +575,16 @@ export default function CharacterCustomizer({
         type="button"
         onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; onClose?.() }}
         onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-        className={`h-11 md:h-12 px-4 flex items-center gap-2 rounded-full bg-black/40 backdrop-blur-md border border-white/[0.16] text-white/90 hover:text-white hover:bg-black/55 transition-colors shadow-elev-sm text-[12px] font-bold uppercase tracking-wide ${open ? 'pointer-events-auto' : 'pointer-events-none'}`}
+        className={`shop-btn burbuja-vidrio h-[52px] px-4 gap-2 text-[13px] ${open ? 'pointer-events-auto' : 'pointer-events-none'}`}
         aria-label={lang === 'es' ? 'Salir' : 'Exit'}
         data-tip={lang === 'es' ? 'Salir' : 'Exit'}
       >
-        <ArrowLeftIcon className="w-4 h-4" />
+        <IconoTinta nombre="atras" tam={30} />
         {lang === 'es' ? 'Salir' : 'Exit'}
       </button>
       {/* El fondo, en el mismo vidrio de Salir (en escritorio va en la barra de abajo). */}
       {compact && (
-        <div className={`cc-fondo h-11 md:h-12 pl-1.5 md:pl-2 pr-4 flex items-center rounded-full bg-black/40 backdrop-blur-md border border-white/[0.16] shadow-elev-sm ${open ? 'pointer-events-auto' : 'pointer-events-none'}`} inert={!open || undefined}>
+        <div className={`cc-fondo burbuja-vidrio h-[52px] pl-1.5 md:pl-2 pr-4 flex items-center ${open ? 'pointer-events-auto' : 'pointer-events-none'}`} inert={!open || undefined}>
           <ColorWell label={t('customizer.wallBg')} value={fondo} onChange={onFondo} />
         </div>
       )}
@@ -712,22 +675,22 @@ export default function CharacterCustomizer({
                 type="button"
                 onClick={onReset}
                 onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-                className="h-11 w-11 rounded-full grid place-items-center bg-black/35 backdrop-blur-md hover:bg-black/50 border border-white/[0.14] text-white transition-colors shadow-elev-sm"
+                className="h-11 w-11 grid place-items-center burbuja-vidrio"
                 aria-label={t('customizer.reset')}
                 data-tip={t('customizer.reset')}
               >
-                <ArrowPathIcon className="w-5 h-5" />
+                <IconoTinta nombre="reiniciar" tam={32} />
               </button>
               {isBase && (
                 <button
                   type="button"
                   onClick={onRandomize}
                   onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-                  className="h-11 w-11 rounded-full grid place-items-center bg-sky-400/20 backdrop-blur-md hover:bg-sky-400/30 border border-sky-400/45 text-white transition-colors shadow-elev-sm"
+                  className="h-11 w-11 grid place-items-center burbuja-vidrio tecla-amarilla"
                   aria-label={t('customizer.randomize')}
                   data-tip={t('customizer.randomize')}
                 >
-                  <DiceIcon className="w-5 h-5" />
+                  <IconoTinta nombre="dado" tam={32} />
                 </button>
               )}
             </div>
@@ -742,24 +705,22 @@ export default function CharacterCustomizer({
           que cambia la interfaz entera: las pestañas, el fondo y el wallpaper. */}
       {!compact && (
         <div
-          className={`cc-barra absolute left-1/2 -translate-x-1/2 bottom-6 md:bottom-10 w-max flex items-center gap-1.5 p-1.5 rounded-full bg-black/40 backdrop-blur-md border border-white/[0.16] text-white transition-all duration-300 ${open ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-6 pointer-events-none'}`}
+          className={`cc-barra absolute left-1/2 -translate-x-1/2 bottom-6 md:bottom-10 w-max flex items-end gap-3 text-white transition-all duration-300 ${open ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-6 pointer-events-none'}`}
           inert={!open || undefined}
         >
           <Pestanas pestana={pestana} onPestana={setPestana} lang={lang} enBarra />
-          <span className="w-px h-6 mx-1.5 bg-white/15" aria-hidden="true" />
-          <div className="cc-fondo h-11 pl-1 pr-3 flex items-center">
+          <div className="cc-fondo burbuja-vidrio h-[52px] pl-1.5 pr-3 flex items-center">
             <ColorWell label={t('customizer.wallBg')} value={fondo} onChange={onFondo} lados={LADOS_BARRA} />
           </div>
           {onWallpaper && (
             <>
-              <span className="w-px h-6 mx-1.5 bg-white/15" aria-hidden="true" />
               <button
                 type="button"
                 onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; onWallpaper() }}
                 onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-                className="shop-btn shop-btn--primary h-11 px-5 gap-2 text-[13px] whitespace-nowrap"
+                className="shop-btn shop-btn--primary burbuja-vidrio tecla-amarilla h-[52px] px-5 gap-2 text-[13px] whitespace-nowrap"
               >
-                <ComputerDesktopIcon className="w-4 h-4" aria-hidden="true" />
+                <IconoTinta nombre="pantalla" tam={30} />
                 {t('customizer.wallpaper')}
               </button>
             </>

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ShoppingCartIcon, XMarkIcon, MinusIcon, PlusIcon, TicketIcon, PaintBrushIcon, TrashIcon, LockClosedIcon, UserCircleIcon } from '@heroicons/react/24/solid'
+import { ShoppingCartIcon, XMarkIcon, MinusIcon, PlusIcon, TicketIcon, TrashIcon, LockClosedIcon, UserCircleIcon } from '@heroicons/react/24/solid'
+import IconoTinta from '../ui/IconoTinta.jsx'
 import { useShopCartCtx } from '../../lib/shopCartContext.jsx'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { useActiveDiscount, GOLDEN_TICKET_DISCOUNT, setGoldenTicketSaved } from '../../lib/useActiveDiscount.js'
@@ -529,17 +530,17 @@ export default function ShopCart({
           onClick={() => { try { onCustomizeToggle?.() } catch { } }}
           aria-label={lang === 'es' ? 'Personalizar personaje' : 'Customize character'}
           data-tip={lang === 'es' ? 'Personalizar personaje' : 'Customize character'}
-          className={`fixed rounded-full w-12 h-12 grid place-items-center backdrop-blur-xl border transition-colors ${customizeOpen ? 'bg-white border-white text-black' :'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
+          className={`fixed w-12 h-12 grid place-items-center burbuja-vidrio ${customizeOpen ? 'tecla-amarilla' : ''}`}
           style={{
             top: `${buttonPos?.top ?? 16}px`,
             left: `${buttonPos?.left ?? 0}px`,
             zIndex: 999995,
             opacity: portraitOpacity,
             pointerEvents: portraitOpacity < 0.1 ? 'none' : 'auto',
-            transition: 'opacity 200ms ease-out, background-color 120ms, border-color 120ms',
+            transition: 'opacity 200ms ease-out, background-color 120ms, transform 160ms var(--ease-spring), box-shadow 160ms var(--ease-spring)',
           }}
         >
-          <PaintBrushIcon className="w-5 h-5" />
+          <IconoTinta nombre="playera" tam={34} />
         </button>
       )}
 

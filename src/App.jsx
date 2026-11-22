@@ -114,7 +114,7 @@ const DialogoMadre = lazy(importDialogoMadre)
 const importAvisoMadre = () => import('./components/drone/AvisoMadre.jsx')
 const AvisoMadre = lazy(importAvisoMadre)
 import IconoTinta from './components/ui/IconoTinta.jsx'
-import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon, UserIcon, UserCircleIcon, ArrowRightOnRectangleIcon, ArrowLeftIcon, SwatchIcon, ShoppingCartIcon, BackwardIcon } from '@heroicons/react/24/solid'
+import { MusicalNoteIcon, VideoCameraIcon, BackwardIcon } from '@heroicons/react/24/solid'
 import { playSfx, preloadSfx, unlockSfx } from './lib/sfx.js'
 import { silenciarSitio, useSilencioSitio } from './lib/silencioSitio.js'
 import useGlobalSfx from './hooks/useGlobalSfx.js'
@@ -156,7 +156,6 @@ const HelpCenter = lazy(() => import('./components/help/HelpCenter.jsx'))
 // achievementsCatalog.js. Bajo a propósito vs el Golden y la skin dorada (6,000)
 // → recompensa temprana.
 
-import GamepadIcon from './components/icons/GamepadIcon.jsx'
 import {
   sectionColors,
   sectionBgOverrides,
@@ -3479,7 +3478,7 @@ function SiteApp() {
           type="button"
           onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setCameraMode((m) => m === 'third-person' ? 'top-down' : 'third-person') }}
           onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-          className={`fixed h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-colors ${cameraMode === 'third-person' ? 'bg-white border-white text-black' :'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
+          className={`fixed h-12 w-12 grid place-items-center burbuja-vidrio ${cameraMode === 'third-person' ? 'tecla-amarilla' : ''}`}
           style={{
             top: `${cameraBtnPos.top}px`,
             left: `${cameraBtnPos.left}px`,
@@ -3491,7 +3490,7 @@ function SiteApp() {
           aria-label={t('tutorial.camera.switch')}
           data-tip={t('tutorial.camera.switch')}
         >
-          <VideoCameraIcon className="w-5 h-5" />
+          <IconoTinta nombre="camara" tam={34} />
         </button>
       )}
 
@@ -3502,11 +3501,11 @@ function SiteApp() {
             type="button"
             onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setCameraMode((m) => m === 'third-person' ? 'top-down' : 'third-person') }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-            className={`pointer-events-auto h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-colors ${cameraMode === 'third-person' ? 'bg-white border-white text-black' :'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
+            className={`pointer-events-auto h-12 w-12 grid place-items-center burbuja-vidrio ${cameraMode === 'third-person' ? 'tecla-amarilla' : ''}`}
             aria-label={t('tutorial.camera.switch')}
             data-tip={t('tutorial.camera.switch')}
           >
-            <VideoCameraIcon className="w-5 h-5" />
+            <IconoTinta nombre="camara" tam={34} />
           </button>
         </div>
       )}
@@ -3537,15 +3536,11 @@ function SiteApp() {
                   else window.dispatchEvent(new CustomEvent('exit-section'))
                 } catch { }
               }}
-              className="h-11 w-11 md:h-12 md:w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] hover:bg-white/[0.15] transition-colors"
+              className="h-11 w-11 md:h-12 md:w-12 grid place-items-center burbuja-vidrio"
               aria-label={sectionCloseMode === 'back' ? t('common.back') : t('portrait.closeSection')}
               data-tip={sectionCloseMode === 'back' ? t('common.back') : t('portrait.closeSection')}
             >
-              {sectionCloseMode === 'back' ? (
-                <ArrowLeftIcon className="w-6 h-6" />
-              ) : (
-                <XMarkIcon className="w-6 h-6" />
-              )}
+              <IconoTinta nombre={sectionCloseMode === 'back' ? 'atras' : 'cerrar'} tam={34} />
             </button>
           </div>
         </div>
@@ -3636,13 +3631,13 @@ function SiteApp() {
             type="button"
             onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; try { window.dispatchEvent(new CustomEvent('shop-cart-open-request')) } catch { } }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-            className="relative h-11 w-11 md:h-12 md:w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-3xl border border-white/[0.08] bg-black/40 text-white hover:bg-white/[0.15] transition-colors"
+            className="relative h-11 w-11 md:h-12 md:w-12 grid place-items-center burbuja-vidrio"
             aria-label={lang === 'es' ? 'Abrir carrito' : 'Open cart'}
             data-tip={lang === 'es' ? 'Abrir carrito' : 'Open cart'}
           >
-            <ShoppingCartIcon className="w-5 h-5" />
+            <IconoTinta nombre="carrito" tam={34} />
             {shopCart?.totalItems > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-[20px] px-1 grid place-items-center rounded-full bg-white text-black text-[11px] font-black border-2 border-[#0a0510]">
+              <span className="absolute -top-2 -right-2 min-w-[20px] h-[20px] px-1 grid place-items-center rounded-full bg-amarillo text-[#0a0510] text-[11px] font-black border-2 border-[#0a0510]">
                 {shopCart.totalItems}
               </span>
             )}
@@ -3653,13 +3648,13 @@ function SiteApp() {
               type="button"
               onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; if (authenticated) { setAccountOpen(true); } else { sessionStorage.setItem('skip_preloader', '1'); if (!authReady) setLoginPending(true); login(); } }}
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-              className="h-11 w-11 md:h-12 md:w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-3xl border border-white/[0.08] transition-colors bg-black/40 text-white hover:bg-white/[0.15]"
+              className="h-11 w-11 md:h-12 md:w-12 grid place-items-center burbuja-vidrio"
               aria-label={authenticated ? t('account.open') : "Login"}
               data-tip={authenticated ? t('account.open') : "Login"}
             >
               {loginPending && !authenticated
-                ? <span className="w-5 h-5 border-2 border-white/70 border-t-transparent rounded-full animate-spin" aria-hidden />
-                : <UserIcon className="w-5 h-5" />}
+                ? <span className="w-5 h-5 border-2 border-[#0a0510]/70 border-t-transparent rounded-full animate-spin" aria-hidden />
+                : <IconoTinta nombre="usuario" tam={34} />}
             </button>
             {/* Online indicator — outside the button, bottom-right */}
             {authenticated && (
@@ -3714,11 +3709,11 @@ function SiteApp() {
               type="button"
               onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setShowMusic((v) => !v) }}
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-              className={`h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-colors ${menuOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${showMusic ? 'bg-white border-white text-black' :'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
+              className={`h-12 w-12 grid place-items-center burbuja-vidrio ${menuOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${showMusic ? 'tecla-amarilla' : ''}`}
               aria-label={t('nav.music')}
               data-tip={t('nav.music')}
             >
-              <MusicalNoteIcon className={`w-5 h-5 ${showMusic ? 'animate-music-pulse' : ''}`} />
+              <IconoTinta nombre="nota" tam={34} />
             </button>
 
             {/* Menu — entry point to sections + settings + socials */}
@@ -3730,12 +3725,12 @@ function SiteApp() {
                 else openMenuAnimated()
               }}
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-              className={`h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-colors ${menuOpen ? 'bg-white border-white text-black' :'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
+              className={`h-12 w-12 grid place-items-center burbuja-vidrio ${menuOpen ? 'tecla-amarilla' : ''}`}
               aria-expanded={menuOpen ? 'true' : 'false'}
               aria-controls="nav-overlay"
               aria-label={t('a11y.openNavigationMenu')}
             >
-              <Bars3Icon className="w-5 h-5" />
+              <IconoTinta nombre={menuOpen ? 'cerrar' : 'menu'} tam={34} />
             </button>
           </div>
         </div>
@@ -3751,10 +3746,10 @@ function SiteApp() {
             inert={uiJuegoOculta}
           >
             {[
-              { key: 'x', href: 'https://x.com/mroscareth', tooltip: 'X', icon: `${import.meta.env.BASE_URL}x.svg`, dx: 0, dy: -52 },
-              { key: 'ig', href: 'https://www.instagram.com/skulleyrad', tooltip: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg`, dx: 0, dy: -104 },
-              { key: 'be', href: 'https://www.behance.net/mroscar', tooltip: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg`, dx: 0, dy: -156 },
-              { key: 'li', href: 'https://www.linkedin.com/in/omoctezuma/', tooltip: 'LinkedIn', icon: `${import.meta.env.BASE_URL}linkedin.svg`, dx: 0, dy: -208 },
+              { key: 'x', href: 'https://x.com/mroscareth', tooltip: 'X', tinta: 'x', dx: 0, dy: -56 },
+              { key: 'ig', href: 'https://www.instagram.com/skulleyrad', tooltip: 'Instagram', tinta: 'instagram', dx: 0, dy: -112 },
+              { key: 'be', href: 'https://www.behance.net/mroscar', tooltip: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg`, dx: 0, dy: -168 },
+              { key: 'li', href: 'https://www.linkedin.com/in/omoctezuma/', tooltip: 'LinkedIn', tinta: 'linkedin', dx: 0, dy: -224 },
             ].map((s) => (
               <a
                 key={s.key}
@@ -3764,15 +3759,15 @@ function SiteApp() {
                 data-tooltip={s.tooltip}
                 onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
                 onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setSocialsOpen(false) }}
-                className="tooltip-black absolute right-0 bottom-0 h-10 w-10 rounded-full bg-black/50 backdrop-blur-3xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-all duration-200"
+                className="tooltip-black absolute right-0 bottom-0 h-11 w-11 grid place-items-center burbuja-vidrio tecla-abanico"
                 style={{
-                  transform: socialsOpen ? `translate(${s.dx}px, ${s.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.9)',
+                  transform: socialsOpen ? `translate(${s.dx}px, calc(${s.dy}px - var(--alto, 5px))) scale(1)` : 'translate(0px, calc(0px - var(--alto, 5px))) scale(0.9)',
                   opacity: socialsOpen ? 1 : 0,
                   pointerEvents: socialsOpen ? 'auto' : 'none',
                 }}
                 aria-label={s.tooltip}
               >
-                <img src={s.icon} alt="" aria-hidden className="w-5 h-5 invert" draggable="false" />
+                {s.tinta ? <IconoTinta nombre={s.tinta} tam={32} /> : <img src={s.icon} alt="" aria-hidden className="w-5 h-5" draggable="false" />}
               </a>
             ))}
             <button
@@ -3780,12 +3775,12 @@ function SiteApp() {
               onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { } setSocialsOpen((v) => !v) }}
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
               onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-              className={`absolute right-0 top-0 h-11 w-11 rounded-full bg-black/50 backdrop-blur-3xl border border-white/[0.08] grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-colors ${socialsOpen ? 'text-white bg-white/[0.15]' : 'text-white hover:bg-white/[0.08]'}`}
+              className={`absolute right-0 top-0 h-11 w-11 grid place-items-center burbuja-vidrio ${socialsOpen ? 'tecla-amarilla' : ''}`}
               aria-expanded={socialsOpen ? 'true' : 'false'}
               aria-label="Redes sociales"
               data-tip="Redes sociales"
             >
-              <HeartIcon className="w-6 h-6" />
+              <IconoTinta nombre="corazon" tam={32} />
             </button>
           </div>
 
@@ -3799,16 +3794,16 @@ function SiteApp() {
                 tooltip: t('tutorial.showTutorial'),
                 active: false,
                 onClick: () => setTutorialOpen(true),
-                render: () => <InformationCircleIcon className="w-5 h-5" />,
-                dx: 0, dy: -52,
+                render: () => <IconoTinta nombre="info" tam={32} />,
+                dx: 0, dy: -56,
               },
               {
                 key: 'mobile-ui',
                 tooltip: 'Game UI',
                 active: forceCompactUi,
                 onClick: () => setForceCompactUi((v) => !v),
-                render: () => <GamepadIcon className="w-5 h-5" />,
-                dx: 0, dy: -104,
+                render: () => <IconoTinta nombre="control" tam={32} />,
+                dx: 0, dy: -112,
               },
               // Camera toggle vive ahora en el borde BOTTOM-LEFT del retrato
               // (mirror del cart de top-right). Removido de este popup para
@@ -3824,9 +3819,9 @@ function SiteApp() {
                   try { it.onClick?.() } catch { }
                   setSettingsOpen(false)
                 }}
-                className={`tooltip-black absolute right-0 bottom-0 h-10 w-10 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-3xl border border-white/[0.08] transition-all duration-200 ${it.active ? 'bg-white/20 text-white' : 'bg-black/50 text-white'}`}
+                className={`tooltip-black absolute right-0 bottom-0 h-11 w-11 grid place-items-center burbuja-vidrio tecla-abanico ${it.active ? 'tecla-amarilla' : ''}`}
                 style={{
-                  transform: settingsOpen ? `translate(${it.dx}px, ${it.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.9)',
+                  transform: settingsOpen ? `translate(${it.dx}px, calc(${it.dy}px - var(--alto, 5px))) scale(1)` : 'translate(0px, calc(0px - var(--alto, 5px))) scale(0.9)',
                   opacity: settingsOpen ? 1 : 0,
                   pointerEvents: settingsOpen ? 'auto' : 'none',
                 }}
@@ -3841,12 +3836,12 @@ function SiteApp() {
               onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { } setSettingsOpen((v) => !v) }}
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
               onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-              className={`absolute right-0 bottom-0 h-11 w-11 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-3xl border border-white/[0.08] transition-colors ${settingsOpen ? 'bg-white/20 text-white' : 'bg-black/50 text-white'}`}
+              className={`absolute right-0 bottom-0 h-11 w-11 grid place-items-center burbuja-vidrio ${settingsOpen ? 'tecla-amarilla' : ''}`}
               aria-expanded={settingsOpen ? 'true' : 'false'}
               aria-label={t('a11y.toggleSettings')}
               data-tip={t('common.settings')}
             >
-              <Cog6ToothIcon className="w-6 h-6" />
+              <IconoTinta nombre="engrane" tam={32} />
             </button>
           </div>
           )}
