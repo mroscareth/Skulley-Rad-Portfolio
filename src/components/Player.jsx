@@ -55,6 +55,7 @@ import { rayoTocaDron, bolaAlEscudo, golpeEscudo } from '../lib/droneNpc.js'
 import { pasoCaminata } from '../lib/caminataAuto.js'
 import { sacarDeObstaculos, sacarAlClaro } from '../lib/obstaculosHome.js'
 import { avisarExplosion } from '../lib/explosionesHome.js'
+import { caidaRetenida } from '../lib/caidaHome.js'
 
 // Identidad fija para un componente definido dentro de otro: `render` cambia en cada
 // render del padre, pero React ve siempre el mismo tipo y no lo vuelve a montar.
@@ -4636,6 +4637,7 @@ export default function Player({
 
   // When navigateToPortalId changes, arm orb mode (supports synthetic 'home' center)
   const lastHandledNavRef = useRef(null)
+  const sfxCaidaPendienteRef = useRef(false)
   // Guard: el effect re-corre cuando `portals`/`onHomeFallStart` cambian de
   // identidad. Sin esto, si eso pasa tras aterrizar (orbActive=false) pero antes
   // de que navTarget vuelva a null, la caída se dispara DOS VECES (la 2da deja el
@@ -4672,9 +4674,11 @@ export default function Player({
     setOrbActive(true)
     if (typeof onOrbStateChange === 'function') onOrbStateChange(true)
     // SFX: orb start
+    sfxCaidaPendienteRef.current = false
     if (fallFromAboveRef.current) {
-      // home mode: fall
-      playSfx('sparkleFall', { volume: 0.9 })
+      // home mode: fall. Si el iris todavía tapa, suena al soltarla (lib/caidaHome.js).
+      if (caidaRetenida()) sfxCaidaPendienteRef.current = true
+      else playSfx('sparkleFall', { volume: 0.9 })
     } else {
       playSfx('magiaInicia', { volume: 0.9 })
     }
@@ -6071,12 +6075,19 @@ export default function Player({
       let dist = dir.length()
       let crossedIn = false
       if (fallFromAboveRef.current) {
-        const fallSpeed = 16
-        pos.y = pos.y - fallSpeed * (dtMoveRef.current || dt)
-        // smooth XZ re-centering toward origin
-        const k = 1 - Math.pow(0.001, (dtMoveRef.current || dt))
-        pos.x = THREE.MathUtils.lerp(pos.x, 0, k)
-        pos.z = THREE.MathUtils.lerp(pos.z, 0, k)
+        // De una sección, espera arriba mientras el iris tapa (lib/caidaHome.js).
+        if (!caidaRetenida()) {
+          if (sfxCaidaPendienteRef.current) {
+            sfxCaidaPendienteRef.current = false
+            playSfx('sparkleFall', { volume: 0.9 })
+          }
+          const fallSpeed = 16
+          pos.y = pos.y - fallSpeed * (dtMoveRef.current || dt)
+          // smooth XZ re-centering toward origin
+          const k = 1 - Math.pow(0.001, (dtMoveRef.current || dt))
+          pos.x = THREE.MathUtils.lerp(pos.x, 0, k)
+          pos.z = THREE.MathUtils.lerp(pos.z, 0, k)
+        }
       } else {
         // Subtle wobble: adds lateral oscillation - reuse vectors
         const steerDir = tmpRef.current.orbSteerDir.copy(dir)

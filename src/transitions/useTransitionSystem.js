@@ -3,6 +3,7 @@ import { sectionColors } from '../lib/appHelpers.js'
 import { puedeViajar, viajarConTrama, terminarViaje } from '../lib/wallpaperEscritorio.js'
 import { irisCubrir, irisDetras, irisOpen, irisTapar, irisWaiting } from '../lib/irisTransition.js'
 import { sectionToPath, pathToSection } from '../lib/sectionRouting.js'
+import { retenerCaida } from '../lib/caidaHome.js'
 
 export const rgbDe = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
 
@@ -257,12 +258,15 @@ export default function useTransitionSystem(deps) {
       // De regreso, el fondo de la sección es el iris: lo de encima se deshace en puntos
       // de su color y se abre donde queda Skulley. Abrirlo antes del montaje lo dejaba
       // atorado, y lo que el home deja para el final de la transición espera a que abra.
+      // La caída de Skulley espera arriba a que se abra (lib/caidaHome.js).
+      retenerCaida(true)
       await irisCubrir({ color: fondoDe(sectionScrollRef.current) })
       const home = section !== 'home' && new Promise((listo) => { homeListoRef.current = listo })
       alCubrir()
       const mascota = window.setTimeout(() => irisWaiting(true), HOME_ESPERA_MS)
       await Promise.race([home, new Promise((listo) => window.setTimeout(listo, HOME_TOPE_MS))])
       window.clearTimeout(mascota)
+      retenerCaida(false)
       await irisOpen({ x: window.innerWidth / 2, y: window.innerHeight * 0.55 })
       termina()
     } else {
