@@ -479,6 +479,13 @@ export default function HomeScene({
   // esferas, Argus, la babosa, el pasto, las sombras, los cristales y el contorno
   // del composer. Solo lo que se dibuja; el juego sigue con `section`.
   const comoHome = section === 'home' || Boolean(sectionHomeWarm)
+  // Las esferas, Argus y el drone se montan la primera vez que la escena está como
+  // home y ya no se desmontan: fuera de ella se ocultan y las esferas se congelan.
+  // Desmontados al salir, al regresar se creaban con materiales nuevos y se
+  // compilaban 10 programas a media caída de Skulley (medido el 2026-11-23).
+  const [npcsMontados, setNpcsMontados] = useState(false)
+  if (!npcsMontados && comoHome && mainWarmStage >= 2) setNpcsMontados(true)
+  const npcsVisibles = comoHome && !saliendoDeHome
   const momentoHome = useMomentoHome()
   // dónde anda la esfera corrupta (el drone de M.A.D.R.E. va a verla de vez en cuando)
   const buscarCorrupta = useRef(() => homeOrbsRef.current?.corrupta?.() || null).current
@@ -685,12 +692,13 @@ export default function HomeScene({
             corrupta acababa en un portal, y su rayo despedazaba a Skulley en pleno
             wallpaper. Yendo a una sección siguen rodando, porque se ven; solo la
             corrupta deja de invocar el rayo. */}
-        {(comoHome && mainWarmStage >= 2 && !saliendoDeHome) && (
+        {npcsMontados && (
+          <group visible={npcsVisibles}>
           <HomeOrbs
             ref={homeOrbsRef}
             playerRef={playerRef}
             lightRigRef={orbLightRigRef}
-            active={section === 'home' && !showPreloaderOverlay && !customizeActive}
+            active={section === 'home' && npcsVisibles && !showPreloaderOverlay && !customizeActive}
             sinRayo={Boolean(navTarget || transitionState.active || preloaderFadingOut)}
             // OLEADA.tope montadas desde el principio: el juego las va soltando por
             // oleadas y fuera del juego se ven OLEADA.libre (HomeOrbs oculta las
@@ -710,6 +718,7 @@ export default function HomeScene({
             onOfferingDelivered={onOfferingDelivered}
             section6Unlocked={section6Unlocked}
           />
+          </group>
         )}
         {/* Bolts pooled (antimatter strike + thunder cast) + su luz de impacto
             COMPARTIDA. Montados PERSISTENTES tras el warmup (mainWarmStage >= 2,
@@ -760,8 +769,8 @@ export default function HomeScene({
             warmup (sin esperar homeLanded) para que sus shaders entren al
             compileAsync del preloader; Suspense PROPIO para no suspender la
             escena entera mientras baja su GLB. */}
-        {comoHome && mainWarmStage >= 2 && !saliendoDeHome && (
-          <>
+        {npcsMontados && (
+          <group visible={npcsVisibles}>
             <Suspense fallback={null}>
               <ZoidianNPC
                 groupRef={zoidianRef}
@@ -777,19 +786,20 @@ export default function HomeScene({
             <SilhouetteShadow
               key={`zoidianshadow:${isMobilePerf ? 1 : 0}`}
               playerRef={zoidianRef}
-              enabled={comoHome}
+              enabled={npcsVisibles}
               size={3.8}
               opacity={Boolean(isMobilePerf || degradedMode) ? 0.42 : 0.52}
               resolution={isMobilePerf ? 128 : 192}
               blur={1.0}
               height={7}
             />
-          </>
+          </group>
         )}
         {/* El drone de M.A.D.R.E.: deambula, ofrece la tienda en el portal de Work,
             habla (DialogoMadre en App) y castiga las trampas. Monta desde el
             warm-up como Argus, con su propio Suspense. */}
-        {comoHome && mainWarmStage >= 2 && !saliendoDeHome && (
+        {npcsMontados && (
+          <group visible={npcsVisibles}>
           <Suspense fallback={null}>
             <DroneNPC
               playerRef={playerRef}
@@ -803,6 +813,7 @@ export default function HomeScene({
               buscarCorrupta={buscarCorrupta}
             />
           </Suspense>
+          </group>
         )}
         {/* Floating "!" — ahora flota ARRIBA del zoidian, mismo trigger.
             Monta desde el warmup y no se desmonta: su luz cuenta para todos los
