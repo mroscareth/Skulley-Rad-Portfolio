@@ -49,6 +49,8 @@ const FASE_PISA_CORRER = 0
 import { applyCharacterSkinShader, materialTakesSkin, skinLineColor, SKIN_LINE_COLOR_EVENT, getSkinForcedColors, getCurrentSkinMode } from '../lib/skinShaders.js'
 import LlamaMano from './fx/LlamaMano.jsx'
 import EstelaEsfera from './fx/EstelaEsfera.jsx'
+import { EstelaTubo } from './fx/EsferaViaje.jsx'
+import { applyNeonOrb } from '../lib/applyNeonOrb.js'
 import { rayoTocaDron, bolaAlEscudo, golpeEscudo } from '../lib/droneNpc.js'
 import { pasoCaminata } from '../lib/caminataAuto.js'
 import { sacarDeObstaculos, sacarAlClaro } from '../lib/obstaculosHome.js'
@@ -6127,11 +6129,9 @@ export default function Player({
         const k = THREE.MathUtils.clamp(1 - distNow / orbStartDistRef.current, 0, 1)
 
         const col = tmpRef.current.orbTempColor.copy(orbBaseColorRef.current).lerp(orbTargetColorRef.current, k)
+        // Solo el brillo: el neón (applyNeonOrb) da las bandas; con 5–7 se quemaba a blanco.
         orbMatRef.current.emissive.copy(col)
-        tmpRef.current.orbTempColor2.copy(col).multiplyScalar(0.9)
-        orbMatRef.current.color.copy(tmpRef.current.orbTempColor2)
-        orbMatRef.current.emissiveIntensity = 5 + 2 * k
-        orbMatRef.current.needsUpdate = true
+        orbMatRef.current.emissiveIntensity = 1.2 + 0.5 * k
         if (orbLightRef.current) {
           orbLightRef.current.color.copy(col)
           // Pre-mounted light: ramp intensity only when active
@@ -7549,7 +7549,9 @@ export default function Player({
           <group visible={showOrbRef.current}>
             <mesh>
               <sphereGeometry args={[0.6, 24, 24]} />
-              <meshStandardMaterial ref={orbMatRef} emissive={new THREE.Color('#aee2ff')} emissiveIntensity={6.5} color={new THREE.Color('#f5fbff')} transparent opacity={0.9} />
+              {/* El neón toon de las esferas del juego (mismos parámetros: mismo programa),
+                  en el color del viaje; antes era una bola blanca quemada (Oscar: "bien feo"). */}
+              <meshStandardMaterial ref={(m) => { orbMatRef.current = m; if (m) applyNeonOrb(m, { steps: 3, rimMul: 0.45, coreMul: 1.8, power: 1.4 }) }} color={'#000000'} emissive={new THREE.Color('#aee2ff')} emissiveIntensity={1.2} roughness={1} metalness={0} transparent opacity={1} />
               <mesh material={orbOutlineMat} raycast={() => null} renderOrder={-1}>
                 <sphereGeometry args={[0.6, 24, 24]} />
               </mesh>
@@ -7626,6 +7628,8 @@ export default function Player({
       <ComponenteEstable render={TrailSparks} />
       {/* Las lenguas de fuego detrás de la esfera al viajar a un portal o caer. */}
       <EstelaEsfera orbeRef={orbGroupRef} activaRef={orbActiveRef} colorRef={orbMatRef} apagada={prewarm} />
+      {/* El tubo 3D que sigue a la esfera y sus chispas (fx/EsferaViaje.jsx). */}
+      <EstelaTubo orbeRef={orbGroupRef} mostrarRef={showOrbRef} colorRef={orbMatRef} apagada={prewarm} />
     </>
   )
 }
