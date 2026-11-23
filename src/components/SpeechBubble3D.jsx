@@ -557,6 +557,44 @@ function avanzarAnim(e, dt) {
   } else quieto(an)
 }
 
+// Los programas que estrena la primera viñeta de la visita (el texto de troika y la
+// trama encima del globo): montados desde el warm-up bajo el piso, donde no se ven,
+// para que se compilen con la escena. Antes se compilaban 2 programas con la primera
+// frase de Skulley, Argus o el drone (un congelón en una visita sin caché).
+// Mismas props que lo que pinta el globo: lo que cambie allá cambia aquí.
+export function PrecalentarGlobo() {
+  const tex = useMemo(() => {
+    const t = new THREE.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1)
+    t.needsUpdate = true
+    return t
+  }, [])
+  useEffect(() => () => tex.dispose(), [tex])
+  return (
+    <group position={[0, -6, 0]} scale={0.01}>
+      <mesh frustumCulled={false}>
+        <planeGeometry args={[1, 1]} />
+        <meshBasicMaterial map={tex} transparent opacity={0.30} />
+      </mesh>
+      <Text
+        fontSize={0.27}
+        maxWidth={2.2}
+        font={`${import.meta.env.BASE_URL}fonts/LuckiestGuy-Regular.ttf`}
+        lineHeight={1.30}
+        letterSpacing={0.025}
+        color={'#111111'}
+        anchorX="center"
+        anchorY="middle"
+        textAlign="center"
+        outlineWidth={0.003}
+        outlineColor={'#fbfbfb'}
+        frustumCulled={false}
+      >
+        a
+      </Text>
+    </group>
+  )
+}
+
 export default function SpeechBubble3D({
   anchorRef,
   visible = false,

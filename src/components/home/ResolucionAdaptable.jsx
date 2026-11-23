@@ -13,7 +13,10 @@ import { useFrame, useThree } from '@react-three/fiber'
 // puede saber si sobra, así que ahí solo baja. Cambiar el DPR redimensiona los
 // buffers del composer (un tirón chico), por eso va por escalones y con
 // paciencia: dos ventanas lentas para bajar, tres holgadas para subir, y si
-// tras subir tiene que volver a bajar, se queda ahí.
+// tras subir tiene que volver a bajar, espera antes de volver a intentar: 20 s,
+// luego 40, 80… (2026-11-22: antes se quedaba ahí toda la sesión, y un bajón
+// pasajero, como otra copia del sitio abierta o un programa pesado, dejaba la
+// home borrosa hasta cerrar la pestaña).
 //
 // El escalón vive en HomeCanvas y entra por la prop `dpr` del <Canvas>, que R3F
 // vuelve a aplicar en cada render (como `frameloop`, rendimiento.md regla 1).
@@ -24,7 +27,7 @@ const VENTANA_MS = 2000
 const ASENTAR_MS = 1500        // tras activarse o tras un cambio, no mide
 const LENTO_MS = 1000 / 55
 const HOLGADO_GPU_MS = 10      // el siguiente escalón tendría que caber aquí
-const TOPE_SUBIDAS = ESCALAS_DPR.length - 1   // lo justo para regresar una vez del fondo
+const ESPERA_REBOTE_MS = 20000 // tras subir y tener que bajar, antes de reintentar (se duplica)
 
 const mediana = (a) => {
   if (!a.length) return null
@@ -45,7 +48,7 @@ export default function ResolucionAdaptable({ activo, escala, onEscala }) {
   if (!st.current) {
     st.current = {
       frames: [], gpu: [], desde: 0, ventana: 0, lentas: 0, holgadas: 0,
-      subidas: 0, congelada: false, ext: undefined, q: null, pend: [],
+      subidas: 0, rebotes: 0, congeladaHasta: 0, ext: undefined, q: null, pend: [],
     }
   }
 
@@ -108,20 +111,24 @@ export default function ResolucionAdaptable({ activo, escala, onEscala }) {
     const lento = frameMs > LENTO_MS && (gpuMs == null || gpuMs > frameMs * 0.7)
     s.lentas = lento ? s.lentas + 1 : 0
     const siguiente = ESCALAS_DPR[i - 1]
-    const holgado = i > 0 && !s.congelada && s.subidas < TOPE_SUBIDAS && gpuMs != null
+    const holgado = i > 0 && t >= s.congeladaHasta && gpuMs != null
       && frameMs < 17 && gpuMs * (siguiente / escala) ** 2 < HOLGADO_GPU_MS
     s.holgadas = holgado ? s.holgadas + 1 : 0
 
     let nueva = escala
     if (s.lentas >= 2 && i < ESCALAS_DPR.length - 1) {
       nueva = ESCALAS_DPR[i + 1]
-      if (s.subidas > 0) s.congelada = true
+      if (s.subidas > 0) {
+        s.congeladaHasta = t + ESPERA_REBOTE_MS * 2 ** s.rebotes
+        s.rebotes += 1
+        s.subidas = 0
+      }
     } else if (s.holgadas >= 3) {
       nueva = siguiente
       s.subidas += 1
     }
     if (typeof window !== 'undefined') {
-      window.__resolucion = { escala: nueva, frameMs: +frameMs.toFixed(1), gpuMs: gpuMs == null ? null : +gpuMs.toFixed(1), temporizador: !!s.ext, congelada: s.congelada }
+      window.__resolucion = { escala: nueva, frameMs: +frameMs.toFixed(1), gpuMs: gpuMs == null ? null : +gpuMs.toFixed(1), temporizador: !!s.ext, congelada: t < s.congeladaHasta }
     }
     if (nueva !== escala) {
       try { sessionStorage.setItem('skulley_dpr_escala', String(nueva)) } catch { }

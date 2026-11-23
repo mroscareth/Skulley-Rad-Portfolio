@@ -448,6 +448,22 @@ Inferno agrega unos 0.2 ms en la toma más cerrada y en el juego no se distingue
 
 De paso: la llama del mohawk traía 8 casillas de bola de fuego que nunca dispara, 16 dibujos vacíos por cuadro con cualquier skin (cada uno pasa por `setProgram` y sube sus uniforms); ya no se crean.
 
+## 2026-11-22 · Tirones con el bosque, los pétalos y lo demás nuevo
+
+Oscar sentía tirones y lentitud en la home después del bosque, los globos, la estela, el drone y los pétalos. Medido en su Brave (laptop, RTX 4060, ventana de 2276 × 1180 a 1.125×, 240 Hz), en skulleyrad.com, visita repetida:
+
+| | Mediana | p95 | Peor cuadro | GPU |
+|---|---|---|---|---|
+| Quieto | 8.4 ms | 12.6 ms | 25 ms | 7.9 ms |
+| Caminando 20 s | 12.4 ms | 16.8 ms | 650 ms (una vez) | 7.6 ms |
+
+- **Lo peor no era el sitio.** El navegador integrado de Claude tuvo otra copia de la home corriendo (una prueba de los pétalos que quedó abierta) y con las dos a la vez todo se volvía unas 5 veces más lento: el JavaScript (`mixer.update` de 0.09 a 1.1 ms) y la GPU (de 7.6 a 48 ms), y la resolución adaptable bajó al 60 %. Al cerrarla se recuperó. Al medir, cerrar toda otra copia del sitio.
+- **La resolución se quedaba trabada.** Si bajaba justo después de subir, se congelaba toda la sesión (y se guarda en sessionStorage). Ahora espera 20 s, 40, 80… y vuelve a intentar.
+- **Lo nuevo no es lo caro.** Cada useFrame cronometrado en desarrollo (`window.__r3f()`, envolviendo `internal.subscribers`), quieto: el render con el composer 3.2 ms de JavaScript, el pase de normales de Skulley 1.1, Player 1.1, la sombra 0.4; bosque, pétalos y pasto, menos de 0.25 cada uno. Apagar el bosque no cambió la GPU (11.9 contra 11.8 ms en esa vista).
+- **Los esqueletos se calculaban en cada pase.** 52 esqueletos (Skulley y sus props, 5,345 huesos) se recalculaban 146 veces por cuadro y subían 147 texturas de huesos: three lo hace en cada `render()`. Con `lib/esqueletoPorCuadro.js`, una vez por cuadro: 67 texturas por cuadro, y en 2 de 3 corridas el p95 bajó de 12.5 a 8.5 ms (la mediana ya iba a 120 por segundo).
+- **El congelón de 650 ms** no se repitió en otras dos vueltas caminando (0 programas compilados). Lo único que compilaba a media partida era la primera viñeta de la visita (2 programas, el texto de troika y la trama): con caché del driver no se nota, sin caché es un congelón. `PrecalentarGlobo` los compila en el warm-up: 0 en la primera frase de Argus y del drone.
+- Cada cuadro hace ~4,200 llamadas a WebGL (~420 dibujos); no cambió con lo nuevo.
+
 ## Reglas
 
 1. **Un Canvas que se pausa necesita las dos cosas:** `PauseFrameloop` y la prop `frameloop` del `<Canvas>` con la misma condición. Solo una no basta.

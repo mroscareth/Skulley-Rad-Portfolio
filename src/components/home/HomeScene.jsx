@@ -11,6 +11,7 @@ import PortalCrystal from '../fx/PortalCrystal.jsx'
 import PortalHitArea from '../fx/PortalHitArea.jsx'
 import Luciernagas from '../fx/Luciernagas.jsx'
 import * as THREE from 'three'
+import '../../lib/esqueletoPorCuadro.js'
 import PauseFrameloop from '../PauseFrameloop.jsx'
 import { compileAsyncSafe } from '../../lib/compileAsyncSafe.js'
 import { homeFramePaused } from '../../lib/homeFrameloop.js'
@@ -246,6 +247,7 @@ import FakeGrass from '../FakeGrass.jsx'
 import PastoPintado from './PastoPintado.jsx'
 import BosquePintado from './BosquePintado.jsx'
 import PetalosCamino from './PetalosCamino.jsx'
+import { PrecalentarGlobo } from '../SpeechBubble3D.jsx'
 import FloatingExclamation from '../FloatingExclamation.jsx'
 import ZoidianNPC from '../ZoidianNPC.jsx'
 import DroneNPC from '../drone/DroneNPC.jsx'
@@ -416,6 +418,14 @@ function ToonKeyLight({ playerRef, intensity = 2.4 }) {
 
 // The entire 3D scene that lives inside <Canvas>. Extracted verbatim from App.jsx.
 // Prop list is large on purpose — App owns the state; this component only renders.
+// En desarrollo, `window.__r3f()` da el estado de R3F del home (para cronometrar
+// cada useFrame y el render: ver rendimiento.md, "Cómo medir").
+function EstadoR3fDev() {
+  const get = useThree((s) => s.get)
+  useEffect(() => { if (import.meta.env.DEV) window.__r3f = get }, [get])
+  return null
+}
+
 export default function HomeScene({
   // state flags
   pageHidden, showPreloaderOverlay, showSectionUi, sectionUiAnimatingOut, sectionCovered, historiaCubre, primerPlano,
@@ -652,6 +662,9 @@ export default function HomeScene({
         {/* Pétalos de cempasúchil donde la tierra tapa el camino escondido
             (home/PetalosCamino.jsx); Skulley los levanta al pasar. Montados siempre. */}
         <PetalosCamino playerRef={playerRef} />
+        {import.meta.env.DEV && <EstadoR3fDev />}
+        {/* Los programas de la primera viñeta, compilados con la escena (SpeechBubble3D). */}
+        <PrecalentarGlobo />
         {/* El bosque del claro (home/BosquePintado.jsx): pinos, peñascos y los menhires
             rúnicos de cada portal. Montado siempre; se compila antes de entrar a la escena. */}
         <BosquePintado playerRef={playerRef} portales={portals} colorPiso={psychoSceneColor || '#204580'} portalMixMap={portalMixMap} visible={comoHome} />
