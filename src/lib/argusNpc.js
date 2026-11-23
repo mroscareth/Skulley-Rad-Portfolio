@@ -6,12 +6,16 @@
 //   { dialogo: true | false }   empieza / termina la escena (con true no hay idles
 //                               de variedad, empujón ni saludo automático; con
 //                               false se limpian la cara y la mirada pedidas)
+//   { escena: true | false }    una escena con M.A.D.R.E. (DroneNPC): sin idles de
+//                               variedad, empujón ni saludo
+//   { dice, dura, tecleo }      dice ese texto en su globo (`dura` en segundos)
+//   { quemar: true }            le cayó el rayo de M.A.D.R.E.: se chamusca
 //   { accion, cara, mirar }     por renglón; solo cuenta lo que venga definido y
 //                               `null` lo borra. accion: un clip (Trato, Senalar,
 //                               Presumir, Encogerse, Celebrar, Saludo, Risa,
 //                               Impresionado…); cara: neutral, feliz, carcajada,
 //                               sorpresa, furia, aburrido, sospecha, apretados,
-//                               encoge; mirar: 'skulley', 'camara' o [x, y, z].
+//                               encoge; mirar: 'skulley', 'camara', 'dron' o [x, y, z].
 // y `argus.hablaUltimo` es el performance.now() de la última letra que dijo
 // (mueve la quijada con el clip Hablar).
 import { escuchar as escucharJuego } from './juegoEsferas.js'
@@ -27,6 +31,10 @@ export const argus = {
   rotY: Math.PI,
   // alto del modelo en la escena (targetHeight de HomeScene)
   alto: 3.2,
+  // en su escena del trato con el jugador / en una escena con M.A.D.R.E. (los
+  // escribe ZoidianNPC; DroneNPC corta la suya si se abre el trato)
+  dialogo: false,
+  escena: false,
 }
 
 const oyentes = new Set()

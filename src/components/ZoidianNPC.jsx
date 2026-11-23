@@ -16,6 +16,8 @@ import { escuchar as escucharJuego, juego } from '../lib/juegoEsferas.js'
 import { crearMaterialMochila, crearCaraMochila } from './argus/pantallaMochila.js'
 import { crearRelojHolograma } from './argus/relojHolograma.js'
 import { argus, escucharArgus, picarArgus, picarArgusLejos, argusEnojado, animoArgus } from '../lib/argusNpc.js'
+import { dron, avisarDron } from '../lib/droneNpc.js'
+import HumoDron from './drone/HumoDron.jsx'
 
 // Zoidian (Argus) — NPC dueño del juego de las esferas. Vive donde antes flotaba
 // solo el "!" amarillo (entre los portales de Store y Contact); ahora el signo
@@ -247,6 +249,12 @@ const MIRADA_CLIP = {
   IdleImpaciente: [[0.4, 2.1, [0.3, -0.4]], [2.5, 3.0, [0.0, 0.3]], [4.6, 5.6, [0.0, -0.05]]],
 }
 
+// Chamuscado por el rayo de M.A.D.R.E. (escenas con ella, lib/escenasArgusMadre.js):
+// negro como de caricatura (los ojos se quedan claros) `dura` segundos y se aclara
+// en `sale`; tiembla `tiembla` segundos y echa humo (HumoDron, el del drone).
+// Se oscurece cambiando el color de sus materiales: no recompila nada.
+export const QUEMA_ARGUS = { dura: 4.5, sale: 3, tiembla: 0.75, negro: 0.86 }
+
 const _v1 = new THREE.Vector3()
 const _v2 = new THREE.Vector3()
 const _v3 = new THREE.Vector3()
@@ -281,7 +289,7 @@ function valorExpr(nombre, k) {
 //   escribe, mueve la quijada y gesticula (clip Hablar).
 // `variedad`: idles de variedad cada tanto (en el retrato no).
 // `pitchMax`: cuánto puede levantar la cabeza (rad).
-export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColor = '#000000', pushRef = null, onMeasured, toon = null, pitchMax = 0.45, ctrlRef = null, hablaRef = null, variedad = false, dialogoRef = null }) {
+export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColor = '#000000', pushRef = null, onMeasured, toon = null, pitchMax = 0.45, ctrlRef = null, hablaRef = null, variedad = false, dialogoRef = null, quemaRef = null }) {
   const groupRef = useRef()
   const { scene: srcScene, animations } = useGLTF(ZOIDIAN_URL, true, true, extendGLTFLoaderKTX2)
 
@@ -313,6 +321,9 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
     }
     outlineMat.customProgramCacheKey = () => 'contornoArgus3'
     const skinnedMeshes = []
+    // los materiales del cuerpo y su color: el chamuscado los oscurece (QUEMA_ARGUS)
+    const cuerpo = []
+    c.userData.__cuerpo = cuerpo
     c.traverse((o) => {
       if (!(o.isMesh || o.isSkinnedMesh)) return
       if (o.name.includes('ojos')) {
@@ -370,6 +381,8 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
       const out = mats.map((m) => {
         const mm = m.clone()
         try { applyToonBanding(mm, { steps: 2, minBand: 0.04, bandIndirect: true, ...toon }) } catch { }
+        // su textura brilla sobre todo por el emisivo: se oscurecen los dos
+        if (mm.color) cuerpo.push({ m: mm, base: mm.color.clone(), baseE: mm.emissive ? mm.emissive.clone() : null })
         return mm
       })
       o.material = Array.isArray(o.material) ? out : out[0]
@@ -651,7 +664,7 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
       e.base = base
       if (!e.uno) cambiar.current(base)
     }
-    if (variedad && !dlg?.on && !e.uno && !hablando && e.reloj > e.proximaVariedad && !(pushRef?.current?.t >= 0)) {
+    if (variedad && !dlg?.on && !dlg?.escena && !e.uno && !hablando && e.reloj > e.proximaVariedad && !(pushRef?.current?.t >= 0)) {
       let total = 0
       const opciones = VARIEDAD.filter(([n]) => n !== e.ultimaVariedad && clips[n])
       for (const [, w] of opciones) total += w
@@ -717,7 +730,36 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
       g.position.y = -Math.max(0, z) * 0.2
     } else {
       e.empujando = false
-      if (g.position.z !== 0 || g.position.y !== 0) g.position.set(0, 0, 0)
+      // chamuscado: tiembla como electrocutado al principio
+      let jx = 0
+      let jz = 0
+      const q0 = quemaRef?.current?.t0 ?? -1
+      if (q0 >= 0) {
+        const tq = (ahora - q0) / 1000
+        if (tq < QUEMA_ARGUS.tiembla) {
+          const a = 1 - tq / QUEMA_ARGUS.tiembla
+          jx = Math.sin(tq * 97) * 0.07 * a
+          jz = Math.cos(tq * 71) * 0.05 * a
+        }
+      }
+      if (g.position.x !== jx || g.position.z !== jz || g.position.y !== 0) g.position.set(jx, 0, jz)
+    }
+    // chamuscado: negro de caricatura y se aclara solo (el color, sin recompilar)
+    {
+      const q0 = quemaRef?.current?.t0 ?? -1
+      let nivel = 0
+      if (q0 >= 0) {
+        const tq = (ahora - q0) / 1000
+        nivel = tq < QUEMA_ARGUS.dura ? 1 : Math.max(0, 1 - (tq - QUEMA_ARGUS.dura) / QUEMA_ARGUS.sale)
+      }
+      if (nivel !== (e.quemado || 0)) {
+        e.quemado = nivel
+        const f = 1 - QUEMA_ARGUS.negro * nivel
+        for (const it of cloned.userData.__cuerpo || []) {
+          it.m.color.copy(it.base).multiplyScalar(f)
+          if (it.baseE) it.m.emissive.copy(it.baseE).multiplyScalar(f)
+        }
+      }
     }
 
     // ── head tracking hacia lookAtRef (giro en ejes del mundo, encima del clip) ──
@@ -732,6 +774,7 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
     // a quién ve: Skulley (a su cara, no a los pies), o lo que pida la escena del trato
     let hayMira = false
     if (dlg?.mirar === 'camara') { _mir.copy(state.camera.position); hayMira = true }
+    else if (dlg?.mirar === 'dron') { _mir.set(dron.pos.x, dron.pos.y, dron.pos.z); hayMira = true }
     else if (Array.isArray(dlg?.mirar)) { _mir.set(dlg.mirar[0], dlg.mirar[1], dlg.mirar[2]); hayMira = true }
     else if (target) { target.getWorldPosition(_mir); _mir.y += 1.4; hayMira = true }
     if (hayMira && headBone) {
@@ -1103,7 +1146,10 @@ export default function ZoidianNPC({
   // La escena del trato (ZoidianDialog, lib/argusNpc.js): con `dialogo` no hay
   // idles de variedad, empujón ni saludo automático; cara y mirada pedidas mandan
   // hasta el siguiente renglón y la acción de cada renglón se fuerza.
-  const dialogoRef = useRef({ on: false, cara: null, mirar: null, furiaHasta: 0, furiaCara: 'furia', enfadoHasta: 0 })
+  const dialogoRef = useRef({ on: false, escena: false, cara: null, mirar: null, furiaHasta: 0, furiaCara: 'furia', enfadoHasta: 0 })
+  // el rayo de M.A.D.R.E. en sus escenas: desde cuándo está chamuscado (QUEMA_ARGUS)
+  const quemaRef = useRef({ t0: -1 })
+  const humoRef = useRef({ pos: new THREE.Vector3(position[0], targetHeight * 0.8, position[2]), nivel: 0 })
   // lo que dice en su globo (sayMock, del efecto de las burlas): lo usan el enojo y el reclamo
   const decirRef = useRef(null)
   const reclamoRef = useRef(0)
@@ -1113,7 +1159,21 @@ export default function ZoidianNPC({
     const d = dialogoRef.current
     if (msg.dialogo !== undefined) {
       d.on = Boolean(msg.dialogo)
+      argus.dialogo = d.on
       if (!d.on) { d.cara = null; d.mirar = null }
+    }
+    // una escena con M.A.D.R.E. (DroneNPC, lib/escenasArgusMadre.js): sin idles de
+    // variedad, empujón ni saludo; la ve a ella y dice lo que le toca en su globo
+    if (msg.escena !== undefined) {
+      d.escena = Boolean(msg.escena)
+      argus.escena = d.escena
+      if (!d.escena && !d.on) { d.cara = null; d.mirar = null }
+    }
+    if (msg.dice) decirRef.current?.(null, { texto: msg.dice, delay: 0, dura: (msg.dura || 3) * 1000, tecleo: msg.tecleo || 30 })
+    if (msg.quemar) {
+      quemaRef.current.t0 = performance.now()
+      d.cara = 'apretados'
+      try { ctrlRef.current?.forzar('Encogerse') } catch { }
     }
     // lo dejaron hablando solo (o se fueron sin despedirse, a veces): lo reclama ya sin las barras
     if (msg.reclamo === 'cortada' || (msg.reclamo === 'sinAdios' && Math.random() < 0.6)) {
@@ -1130,7 +1190,7 @@ export default function ZoidianNPC({
     // Ya saludó al entrar Skulley a su radio (y sigue adentro: la escena solo abre
     // ahí), así que el saludo del primer renglón no se repite (Oscar: "se ve raro");
     // ese renglón lo dice hablando.
-    const yaSaludo = msg.accion === 'Saludo' && !saludoRef.current.lejos
+    const yaSaludo = msg.accion === 'Saludo' && !saludoRef.current.lejos && d.on
     if (msg.accion && !yaSaludo) { try { ctrlRef.current?.forzar(msg.accion) } catch { } }
   }), [])
   const reaccionar = (nombre, delay = 0) => {
@@ -1158,10 +1218,11 @@ export default function ZoidianNPC({
       for (const id of mockTimersRef.current) { clearTimeout(id); clearInterval(id) }
       mockTimersRef.current = []
     }
-    const sayMock = (key, { delay = 700, dura = 5600, tecleo = 60 } = {}) => {
+    const sayMock = (key, { delay = 700, dura = 5600, tecleo = 60, texto = null } = {}) => {
       clearTimers()
-      // La key puede resolver a un string o a un POOL de frases (rayo.skulley).
-      const resolved = t(key)
+      // La key puede resolver a un string o a un POOL de frases (rayo.skulley); las
+      // escenas con M.A.D.R.E. mandan el `texto` ya escrito.
+      const resolved = texto ?? t(key)
       const full = Array.isArray(resolved) ? resolved[Math.floor(Math.random() * resolved.length)] : resolved
       if (!full) return
       mockTimersRef.current.push(setTimeout(() => {
@@ -1194,7 +1255,9 @@ export default function ZoidianNPC({
     const onRayoSkulley = () => {
       const ahora = performance.now()
       skulleyEn = ahora
-      burla(ahora - madreEn < RAYO_AMBOS_MS ? 'zoidian.rayo.ambos' : 'zoidian.rayo.skulley')
+      const ambos = ahora - madreEn < RAYO_AMBOS_MS
+      burla(ambos ? 'zoidian.rayo.ambos' : 'zoidian.rayo.skulley')
+      if (ambos) avisarDron({ burlaArgus: true })
     }
     const onMadreQuemada = (e) => {
       if (e?.detail?.fuente !== 'portal') return
@@ -1202,7 +1265,8 @@ export default function ZoidianNPC({
       clearTimeout(madreTimer)
       // A Skulley el mismo rayo lo despieza 230 ms después: se espera a ver si
       // también le tocó, para no cambiar la frase a media escritura.
-      madreTimer = setTimeout(() => { if (skulleyEn < madreEn) burla('zoidian.rayo.madre') }, 400)
+      // y ella se entera: en cuanto se recupera, va y se las cobra (DroneNPC)
+      madreTimer = setTimeout(() => { if (skulleyEn < madreEn) { burla('zoidian.rayo.madre'); avisarDron({ burlaArgus: true }) } }, 400)
     }
     const onPushShatter = () => burla('zoidian.mockPush')
     window.addEventListener('character-disassembled-by-bolt', onRayoSkulley)
@@ -1292,6 +1356,19 @@ export default function ZoidianNPC({
     const g = wrapRef.current
     if (!g) return
     if (groupRef && groupRef.current !== g) groupRef.current = g
+    // chamuscado: humea fuerte al principio y se va apagando
+    {
+      const q0 = quemaRef.current.t0
+      const H = humoRef.current
+      if (q0 >= 0) {
+        const tq = (performance.now() - q0) / 1000
+        H.nivel = tq < QUEMA_ARGUS.dura ? 1 - 0.55 * (tq / QUEMA_ARGUS.dura) : Math.max(0, 0.45 * (1 - (tq - QUEMA_ARGUS.dura) / QUEMA_ARGUS.sale))
+        if (tq > QUEMA_ARGUS.dura + QUEMA_ARGUS.sale) { quemaRef.current.t0 = -1; H.nivel = 0 }
+        // la cara apretada del golpe pasa a la sorpresa (si la escena no pidió otra)
+        const d = dialogoRef.current
+        if (tq > 1 && d.cara === 'apretados' && !d.on) d.cara = d.escena ? 'sorpresa' : null
+      } else if (H.nivel !== 0) H.nivel = 0
+    }
 
     const push = pushTimelineRef.current
     // Momento del impacto: el thrust del brazo conecta a t≈0.13 → recién ahí se
@@ -1312,7 +1389,7 @@ export default function ZoidianNPC({
       if (push.t < 0) {
         if (!push.armed) {
           if (dist > REARM_R) push.armed = true
-        } else if (dist < PUSH_TRIGGER_R && now - push.lastAt > 3 && !dialogoRef.current.on) {
+        } else if (dist < PUSH_TRIGGER_R && now - push.lastAt > 3 && !dialogoRef.current.on && !dialogoRef.current.escena) {
           push.t = 0
           push.hit = false
           push.armed = false
@@ -1329,7 +1406,7 @@ export default function ZoidianNPC({
         try { gl.domElement.style.cursor = '' } catch { }
       }
       if (dist > SALUDO_SALE) sal.lejos = true
-      else if (sal.lejos && cerca && now - sal.ultimo > SALUDO_PAUSA_S && !dialogoRef.current.on && !argusEnojado()) {
+      else if (sal.lejos && cerca && now - sal.ultimo > SALUDO_PAUSA_S && !dialogoRef.current.on && !dialogoRef.current.escena && !argusEnojado()) {
         sal.lejos = false
         sal.ultimo = now
         reaccionar('Saludo')
@@ -1397,10 +1474,12 @@ export default function ZoidianNPC({
         </mesh>
         {/* Hover = outline blanco (nada de escalar al NPC, se veía raro) */}
         <ZoidianModel targetHeight={targetHeight} lookAtRef={lookAtRef} outlineColor={hovered ? '#ffffff' : '#000000'} pushRef={pushTimelineRef}
-          ctrlRef={ctrlRef} hablaRef={hablaRef} dialogoRef={dialogoRef} variedad />
+          ctrlRef={ctrlRef} hablaRef={hablaRef} dialogoRef={dialogoRef} quemaRef={quemaRef} variedad />
         {/* Ancla de la viñeta a la altura del pecho */}
         <object3D ref={mockAnchorRef} position={[0, targetHeight * 0.55, 0]} />
       </group>
+      {/* el humo de cuando lo chamusca el rayo de M.A.D.R.E. (en el mundo) */}
+      <HumoDron fuenteRef={humoRef} />
       {/* La viñeta va FUERA del group rotado π: SpeechBubble3D arma su base
           mirando a cámara asumiendo padre sin rotación. */}
       <SpeechBubble3D

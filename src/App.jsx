@@ -1195,7 +1195,8 @@ function SiteApp() {
   // Thunder: cuando el orb rojo cae en un portal equivocado, HomeOrbs dispara
   // el evento `antimatter-orb-strike`. Acá reproducimos el trueno.
   useEffect(() => {
-    const onStrike = () => { try { playSfx('thunder.mp3', { volume: 1.0 }) } catch {} }
+    // (los destellos de más del rayo que le cae a Argus, `repite`, no vuelven a tronar)
+    const onStrike = (e) => { if (e?.detail?.repite) return; try { playSfx('thunder.mp3', { volume: 1.0 }) } catch {} }
     window.addEventListener('antimatter-orb-strike', onStrike)
     window.addEventListener('madre-castigo-strike', onStrike)
     return () => {

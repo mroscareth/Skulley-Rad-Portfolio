@@ -502,7 +502,8 @@ export default function HomeScene({
   // Default válido (no null): el bolt se monta PERSISTENTE (idle, opacity 0) tras
   // el warmup, así su shader + la luz compartida se compilan una vez durante el
   // load (tapado por el preloader) y el primer strike no recompila la escena.
-  const [strikePos, setStrikePos] = useState({ x: 0, z: 0 })
+  // `y`: dónde termina (0, el piso; el que le cae a Argus termina en su cabeza)
+  const [strikePos, setStrikePos] = useState({ x: 0, z: 0, y: 0 })
   const [strikeSeed, setStrikeSeed] = useState(0)
   const [strikePlaying, setStrikePlaying] = useState(false)
   // Group raíz del zoidian — lo llena ZoidianNPC; SilhouetteShadow lo lee.
@@ -558,7 +559,7 @@ export default function HomeScene({
         const d = e?.detail || {}
         const x = Number.isFinite(d.x) ? d.x : 0
         const z = Number.isFinite(d.z) ? d.z : 0
-        setStrikePos({ x, z })
+        setStrikePos({ x, z, y: Number.isFinite(d.y0) ? d.y0 : 0 })
         setStrikeSeed((k) => k + 1)
         setStrikePlaying(true)
       } catch {}
@@ -742,7 +743,7 @@ export default function HomeScene({
               seed={strikeSeed}
               playing={strikePlaying}
               top={[strikePos.x, 22, strikePos.z]}
-              bottom={[strikePos.x, 0, strikePos.z]}
+              bottom={[strikePos.x, strikePos.y, strikePos.z]}
               coreRadius={0.09}
               haloRadius={0.32}
               onDone={() => setStrikePlaying(false)}

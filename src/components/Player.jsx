@@ -4273,6 +4273,8 @@ export default function Player({
     // mismo rayo, con su propio aviso para no desbloquear la skin de lava.
     const onMadreCastigo = (e) => {
       const d = e?.detail || {}
+      // el que le cae a Argus en sus escenas con ella no es para Skulley
+      if (d.blanco === 'argus') return
       const sx = Number.isFinite(d.x) ? d.x : 0
       const sz = Number.isFinite(d.z) ? d.z : 0
       shatterFrom(sx, sz, 'character-disassembled-by-madre', BOLT_STRIKE_DELAY_MS)

@@ -11,6 +11,8 @@ import { dialogoMadre, escoger } from '../../lib/dialogoMadre.js'
 import { escuchar as escucharJuego } from '../../lib/juegoEsferas.js'
 import scoreStore from '../../lib/scoreStore.js'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
+import { argus, avisarArgus } from '../../lib/argusNpc.js'
+import { escenasArgusMadre } from '../../lib/escenasArgusMadre.js'
 
 // El drone de M.A.D.R.E. como NPC de la home (Oscar, 2026-11-19). Anda por ahí
 // feliz y despacio entre los portales; al picarlo se abre su diálogo
@@ -42,6 +44,13 @@ import { useLanguage } from '../../i18n/LanguageContext.jsx'
 // (`RECOMIENDA`) va hacia Skulley y le cuenta de un proyecto de Trabajo al azar
 // (`T.proyectos`, la lista del CMS en lib/droneNpc.js); si la pica en ese rato, la
 // charla le ofrece llevarlo (DialogoMadre, `onVerProyecto` en App).
+//
+// Argus es un agente que ella hizo (Oscar, 2026-11-23: "alta comedia"): de vez en
+// cuando (`CHARLA`) vuela con él y tienen una escena en sus globos
+// (lib/escenasArgusMadre.js, modo 'conArgus'); si él se pasa de la raya, ella le
+// recuerda su lugar y a veces le cae su rayo (se chamusca, ZoidianNPC). Si Argus
+// se burla de ella porque le cayó el rayo de la esfera corrupta, en cuanto se
+// recupera va y se las cobra (`venganza`).
 //
 // Monta desde el warm-up con Argus (comoHome), así sus programas se compilan
 // detrás del preloader. Todo lo que anima va por refs; el estado de React solo
@@ -98,6 +107,16 @@ const SALUDA = { cada: [60, 120], trasCharla: 40, recibe: 3.5, reclamo: 0.9 }
 // dice ya viéndolo; si no, lo vuelve a intentar en `espera`. Nunca jugando ni enojada.
 const RECOMIENDA = { primera: [45, 75], cada: [110, 190], lejos: 16, espera: 10, trasCharla: 40 }
 const OFENDIDA = { seVaEn: 3, lejos: 9 }
+// Las escenas con Argus (lib/escenasArgusMadre.js): la primera (segundos desde que
+// Skulley cae a la home) y cada cuánto; solo si Skulley anda a menos de `lejos` de
+// Argus y Argus sale en cámara (si no, lo intenta en `espera`). Ella se pone
+// enfrente y a la izquierda de él (`frente`, `lado`; `alto`: arriba de su cabeza),
+// abierta a la cámara `aCamara`; espera `antes` al llegar, `entre` renglones y
+// `trasRayo` después de que le cae el rayo.
+// El rayo que le cae a Argus: a qué altura de él termina, cuándo caen los destellos
+// de más (ms), cuándo se chamusca y qué tanto tiembla la cámara.
+const RAYO_ARGUS = { cabeza: 0.95, destellos: [140, 330], quema: 60, temblor: 1.1 }
+const CHARLA = { primera: [60, 100], cada: [140, 230], espera: 12, lejos: 18, frente: 2.7, lado: 2.1, alto: 3.4, aCamara: 0.35, antes: 0.5, entre: 0.25, trasRayo: 1.6 }
 // Al regresar del proyecto que te enseñó, cuánto espera para comentarlo (segundos
 // después de que se abrió el iris o se fueron las barras).
 const COMENTA_S = 0.8
@@ -201,6 +220,11 @@ export default function DroneNPC({
       recomiendaEn: Infinity,   // cuándo recomienda un proyecto (lo pone la primera llegada)
       bolsaProyectos: [],       // slugs revueltos: no repite hasta acabarlos
       diceCola: [],             // las viñetas que siguen al acabar la que dice (una recomendación larga va en trozos)
+      escena: null,             // la escena con Argus: { pasos, i, t, hasta, rayoEn, tipo }
+      charlaEn: Infinity,       // cuándo toca la siguiente (lo pone la primera llegada)
+      bolsaEscenas: [],         // no repite escena hasta acabarlas
+      burlaArgusEn: 0,          // cuándo se burló Argus de ella (la quemó el rayo de la esfera)
+      quemadaDesde: 0,
     }
   }
   const pedir = (nombre) => setAccion((a) => ({ nombre, n: a.n + 1 }))
@@ -228,6 +252,7 @@ export default function DroneNPC({
       estuvoRef.current = true
       cargarProyectos()
       est.current.recomiendaEn = performance.now() / 1000 + azar(RECOMIENDA.primera[0], RECOMIENDA.primera[1])
+      est.current.charlaEn = performance.now() / 1000 + azar(CHARLA.primera[0], CHARLA.primera[1])
       return
     }
     const fuera = volvioAHome()
@@ -345,6 +370,7 @@ export default function DroneNPC({
         e2.recomiendaEn = Math.max(e2.recomiendaEn, ahora + RECOMIENDA.trasCharla)
       }, COMENTA_S * 1000)
     }
+    if (msg.burlaArgus) e.burlaArgusEn = performance.now() / 1000
     if (msg.alJuego === true && e.modo !== 'castigo' && e.modo !== 'quemada' && e.modo !== 'dialogo') {
       e.juegoPedido = performance.now() / 1000
       if (e.modo !== 'juego') entrarAJuego()
@@ -427,6 +453,13 @@ export default function DroneNPC({
     }
     // window.__dronRecomendar() hace que recomiende un proyecto ya (va hacia Skulley si está a medio camino)
     window.__dronRecomendar = () => { est.current.recomiendaEn = 0; est.current.dice = null }
+    // window.__dronEscena() la manda a una escena con Argus (un número: esa; 'venganza': una de esas)
+    window.__dronEscena = (cual = null) => {
+      const E = escenasArgusMadre(langRef.current)
+      const venganza = cual === 'venganza'
+      const pasos = venganza ? sacarVenganza() : Number.isInteger(cual) ? E.ambiente[cual] : sacarEscena()
+      empezarEscena(pasos, venganza ? 'venganza' : 'ambiente')
+    }
     // window.__dronQuemar() hace como si le cayera el rayo de la esfera corrupta
     window.__dronQuemar = (fuente = 'portal') => quemar(fuente)
     // y window.__dronEscudo(fuerza) enciende el escudo del lado de Skulley, sin contar
@@ -439,7 +472,7 @@ export default function DroneNPC({
       const L = Math.hypot(dx, dz) || 1
       escudoRef.current?.hit({ x: e.pos.x + (dx / L) * ESCUDO.radio, y: e.pos.y - 0.25, z: e.pos.z + (dz / L) * ESCUDO.radio }, 0.6 + 0.4 * fuerza)
     }
-    return () => { delete window.__dronCuriosa; delete window.__dronEscudo; delete window.__dronQuemar; delete window.__dronRecomendar }
+    return () => { delete window.__dronCuriosa; delete window.__dronEscudo; delete window.__dronQuemar; delete window.__dronRecomendar; delete window.__dronEscena }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- metas
@@ -541,6 +574,7 @@ export default function DroneNPC({
     if (e.modo === 'curiosa') terminarCuriosa(false)
     // el rayo le gana a todo, hasta a su castigo (el de las trampas lo remata App a su tiempo)
     e.modo = 'quemada'
+    e.quemadaDesde = performance.now() / 1000
     e.tQuemada = 0
     e.sacudida = 0
     e.golpe = null
@@ -636,6 +670,114 @@ export default function DroneNPC({
     _enCuadro.set(e.pos.x, e.pos.y, e.pos.z).project(camera)
     return _enCuadro.z < 1 && Math.abs(_enCuadro.x) < 0.85 && Math.abs(_enCuadro.y) < 0.85
   }
+  // ---- las escenas con Argus (lib/escenasArgusMadre.js)
+  const _cuadroArgus = useMemo(() => new THREE.Vector3(), [])
+  const argusEnCuadro = () => {
+    _cuadroArgus.set(argus.pos.x, argus.alto * 0.6, argus.pos.z).project(camera)
+    return _cuadroArgus.z < 1 && Math.abs(_cuadroArgus.x) < 0.8 && Math.abs(_cuadroArgus.y) < 0.8
+  }
+  // enfrente y a la izquierda de él, arriba de su cabeza
+  const puntoConArgus = () => {
+    const fx = Math.sin(argus.rotY)
+    const fz = Math.cos(argus.rotY)
+    return new THREE.Vector3(argus.pos.x + fx * CHARLA.frente + fz * CHARLA.lado, CHARLA.alto, argus.pos.z + fz * CHARLA.frente - fx * CHARLA.lado)
+  }
+  const durLinea = (t) => Math.max(1.6, t.length / LETRAS + 0.9 + t.length / 45)
+  const sacarEscena = () => {
+    const e = est.current
+    const lista = escenasArgusMadre(langRef.current).ambiente
+    if (!e.bolsaEscenas.length) e.bolsaEscenas = lista.map((_, i) => i).sort(() => Math.random() - 0.5)
+    return lista[e.bolsaEscenas.pop()] || lista[0]
+  }
+  const sacarVenganza = () => {
+    const lista = escenasArgusMadre(langRef.current).venganza
+    return lista[Math.floor(Math.random() * lista.length)]
+  }
+  // su rayo, encima de Argus: el mismo del castigo, que a Skulley no lo toca
+  // (Player). Termina en su cabeza (si baja al piso pasa por dentro de él y casi
+  // no se ve) y cae en `RAYO_ARGUS.destellos` (un solo trueno: los demás van con
+  // `repite`), con el estallido del juego a sus pies y un temblor de cámara.
+  const rayoAArgus = () => {
+    const golpe = (repite) => {
+      try {
+        window.dispatchEvent(new CustomEvent('madre-castigo-strike', { detail: { x: argus.pos.x, y: 0, z: argus.pos.z, y0: argus.alto * RAYO_ARGUS.cabeza, blanco: 'argus', repite } }))
+      } catch { }
+    }
+    golpe(false)
+    try {
+      window.dispatchEvent(new CustomEvent('bolt-strike', { detail: { at: performance.now() } }))
+      window.dispatchEvent(new CustomEvent('bolt-ground-impact', { detail: { x: argus.pos.x, z: argus.pos.z } }))
+      window.dispatchEvent(new CustomEvent('camera-temblor', { detail: { fuerza: RAYO_ARGUS.temblor } }))
+    } catch { }
+    for (const ms of RAYO_ARGUS.destellos) setTimeout(() => golpe(true), ms)
+    // se chamusca en el destello
+    setTimeout(() => avisarArgus({ quemar: true }), RAYO_ARGUS.quema)
+  }
+  function empezarEscena(pasos, tipo) {
+    const e = est.current
+    if (!pasos?.length) return
+    if (e.modo === 'curiosa') terminarCuriosa(false)
+    e.modo = 'conArgus'
+    e.escena = { pasos, i: -1, t: 0, hasta: CHARLA.antes, rayoEn: -1, tipo }
+    e.ofertaTexto = ''
+    e.dice = null
+    e.diceCola = []
+    e.viendo = false
+    caraRef.current?.poner(tipo === 'venganza' ? 'enojada' : 'normal')
+    caraRef.current?.mirar(0, 0)
+    avisarArgus({ escena: true, mirar: 'dron' })
+    const meta = puntoConArgus()
+    viajar(meta, VEL.prisa, 'argus')
+    e.fase = 'viaje'
+    pedir(e.pos.distanceTo(meta) > 6 ? 'Arrancar' : 'Avanzar')
+  }
+  function terminarEscena() {
+    const e = est.current
+    e.escena = null
+    e.modo = 'deambular'
+    avisarArgus({ escena: false })
+    caraRef.current?.poner('normal')
+    const ahora = performance.now() / 1000
+    e.charlaEn = ahora + azar(CHARLA.cada[0], CHARLA.cada[1])
+    e.saludaEn = Math.max(e.saludaEn, ahora + 20)
+    e.recomiendaEn = Math.max(e.recomiendaEn, ahora + 30)
+    quieto(azar(1.5, 3), 'IdleTranquilo')
+  }
+  // un renglón tras otro, ya llegada con él
+  const correrEscena = (dt) => {
+    const e = est.current
+    const sc = e.escena
+    if (!sc) return
+    sc.t += dt
+    if (sc.rayoEn >= 0 && sc.t >= sc.rayoEn) { sc.rayoEn = -1; rayoAArgus() }
+    if (sc.t < sc.hasta) return
+    sc.i += 1
+    const paso = sc.pasos[sc.i]
+    if (!paso) { terminarEscena(); return }
+    const cara = caraRef.current
+    if (paso.pausa) { sc.hasta = sc.t + paso.pausa; return }
+    if (paso.rayo) {
+      // se enoja e invoca: el rayo cae cuando azota
+      cara?.poner('enojada')
+      pedir('Invocar')
+      sc.rayoEn = sc.t + INVOCAR_GOLPE_S
+      sc.hasta = sc.t + INVOCAR_GOLPE_S + CHARLA.trasRayo
+      return
+    }
+    const texto = paso.t || ''
+    const dura = durLinea(texto)
+    if (paso.quien === 'madre') {
+      decir(texto, dura)
+      cara?.poner(paso.cara || 'normal')
+      if (paso.accion) pedir(paso.accion)
+      if (paso.oye !== undefined) avisarArgus({ cara: paso.oye })
+    } else {
+      avisarArgus({ dice: texto, dura, tecleo: 1000 / LETRAS, cara: paso.cara ?? null, accion: paso.accion, mirar: paso.mirar || 'dron' })
+      if (paso.oye) cara?.poner(paso.oye)
+    }
+    sc.hasta = sc.t + dura + CHARLA.entre
+  }
+
   // junto a Argus, de prisa; se queda ahí viendo a Skulley
   function entrarAJuego() {
     const e = est.current
@@ -710,6 +852,8 @@ export default function DroneNPC({
     const cara = caraRef.current
     e.t += dt
 
+    // si algo le ganó a la escena (castigo, quemada, su diálogo), Argus queda libre
+    if (e.escena && e.modo !== 'conArgus') { e.escena = null; avisarArgus({ escena: false }) }
     // el castigo manda sobre todo, menos quemada: ahí no puede (el de las trampas lo remata App)
     if (dron.castigo && e.modo === 'quemada') dron.castigo = null
     if (dron.castigo && e.modo !== 'castigo' && s) {
@@ -744,6 +888,13 @@ export default function DroneNPC({
         e.hasta = e.t + azar(0.8, 1.6)
         cara?.mirar(0, 0)
       }
+    }
+    // de vez en cuando va con Argus y tienen una escena (si Skulley anda cerca de él y se ve)
+    if (e.modo === 'deambular' && e.fase === 'quieto' && s && !juegoActivo && !dialogo && !e.dice && ahora > e.charlaEn
+      && ahora > e.huyeHasta && !madreEnojada() && !argus.dialogo) {
+      const dA = Math.hypot(s.x - argus.pos.x, s.z - argus.pos.z)
+      if (dA < CHARLA.lejos && argusEnCuadro()) empezarEscena(sacarEscena(), 'ambiente')
+      else e.charlaEn = ahora + CHARLA.espera
     }
     // de vez en cuando le recomienda un proyecto: viéndolo lo dice; a medio camino va hacia él
     if (e.modo === 'deambular' && s && !juegoActivo && !e.dice && ahora > e.recomiendaEn && ahora > e.huyeHasta && !madreEnojada()) {
@@ -802,6 +953,10 @@ export default function DroneNPC({
         if (r < 0.3) cara.poner('feliz')
         else if (r < 0.5) cara.voltear()
       }
+    } else if (e.modo === 'conArgus') {
+      // el trato con Argus, su charla, la partida o salir de la home la cortan
+      if (juegoActivo || dialogo || argus.dialogo || !activo) terminarEscena()
+      else if (e.fase === 'quieto') correrEscena(dt)
     } else if (e.modo === 'oferta') {
       // se queda mientras Skulley siga en el portal; lo pregona en ciclos
       const sigue = cercaPortalRef.current === PORTAL_OFERTA || performance.now() < e.probandoHasta
@@ -862,8 +1017,14 @@ export default function DroneNPC({
           e.ladeo.vz += (Math.floor(e.sacudida / paso) % 2 ? 1 : -1) * 5
         }
         if (e.sacudida > QUEMADA.sacude) {
-          e.modo = 'deambular'
-          quieto(azar(1.5, 2.5), 'IdleTranquilo')
+          // Argus se burló de ella mientras humeaba: va y se las cobra
+          if (e.burlaArgusEn > e.quemadaDesde && !juegoActivo && activo && !argus.dialogo) {
+            e.burlaArgusEn = 0
+            empezarEscena(sacarVenganza(), 'venganza')
+          } else {
+            e.modo = 'deambular'
+            quieto(azar(1.5, 2.5), 'IdleTranquilo')
+          }
         }
       }
     } else if (e.modo === 'castigo') {
@@ -957,6 +1118,13 @@ export default function DroneNPC({
       const mz = s.z + (camera.position.z - s.z) * k
       yawMeta = Math.atan2(mx - e.pos.x, mz - e.pos.z)
     }
+    // con Argus: hacia él, abierta a la cámara como en el teatro
+    if (e.mirar === 'argus' && quietoEnSitio) {
+      const k = CHARLA.aCamara
+      const mx = argus.pos.x + (camera.position.x - argus.pos.x) * k
+      const mz = argus.pos.z + (camera.position.z - argus.pos.z) * k
+      yawMeta = Math.atan2(mx - e.pos.x, mz - e.pos.z)
+    }
     // detenida por Skulley (o pregonando): lo sigue con el cuerpo, y los ojos se adelantan al giro
     const loSigue = (e.modo === 'deambular' && e.viendo) || ((e.modo === 'oferta' || e.modo === 'juego') && e.fase === 'quieto')
     if (loSigue && s && cara) {
@@ -1035,7 +1203,7 @@ export default function DroneNPC({
   const clic = (ev) => {
     ev.stopPropagation()
     const e = est.current
-    if (!puedeHablar || e.modo === 'castigo' || e.modo === 'quemada' || dialogo) return
+    if (!puedeHablar || e.modo === 'castigo' || e.modo === 'quemada' || e.modo === 'conArgus' || dialogo) return
     const r = picarMadre()
     if (r.tipo === 'charla') {
       try { onHablar?.() } catch { }
