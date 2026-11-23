@@ -160,6 +160,7 @@ Ver `README.md` para tech stack completo, `AGENTS.md` para arquitectura 3-layer 
 
 - El music player tiene un solo layout: el mismo deck se abre en escritorio (`App.jsx`) y en teléfono (`MobileApp`, barra de abajo); el plato se encoge con el alto de la ventana.
 - Controles touch: `MobileJoystick.jsx` para movimiento; `touch-action: none` en el disco para scratch.
+- **Modo ligero de escritorio** (`isMobilePerf`, decidido en el arranque de `index.html` como `window.__isMobilePerf` y reusado por App; el retrato tiene su copia): teléfono o pantalla táctil, ahorro de datos o 2g, DPR > 2, GPU de teléfono o software, GPU integrada con equipo flojo, o memoria o núcleos de 2 o menos. Hasta el 2026-11-23 bastaban 4 GB o 4 núcleos, pero Brave los altera por privacidad y distinto en cada sitio: en skulleyrad.com le reportaba 4 GB a la laptop de Oscar (RTX 4060) y le montaba el modo ligero (sin profundidad de campo, pasto fino de 8,000 hojas, menos efectos). Si una tarjeta no alcanza, la resolución adaptable baja la calidad sola.
 - Probar en **mobile real** (viewport ~360-390px) además de DevTools — los gestos touch no siempre se comportan igual.
 
 ## Shell / OS

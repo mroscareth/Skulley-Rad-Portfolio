@@ -595,8 +595,9 @@ export default function CharacterPortrait({
     const isMobileUA = /Mobi|Android|iPhone|iPad|iPod/i.test(ua)
     const coarse = typeof window.matchMedia === 'function' && window.matchMedia('(pointer:coarse)').matches
     const saveData = navigator.connection && (navigator.connection.saveData || (navigator.connection.effectiveType && /2g/.test(navigator.connection.effectiveType)))
-    const lowMemory = navigator.deviceMemory && navigator.deviceMemory <= 4
-    const lowThreads = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4
+    // Solo si son de verdad mínimos: Brave altera memoria y núcleos (ver index.html).
+    const lowMemory = navigator.deviceMemory && navigator.deviceMemory <= 2
+    const lowThreads = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2
     const highDPR = window.devicePixelRatio && window.devicePixelRatio > 2
     return Boolean(isMobileUA || coarse || saveData || lowMemory || lowThreads || highDPR)
   }, [])

@@ -547,8 +547,12 @@
         var coarse = typeof window.matchMedia === 'function' && window.matchMedia('(pointer:coarse)').matches;
         var conn = navigator.connection;
         var saveData = conn && (conn.saveData || (conn.effectiveType && /2g/.test(conn.effectiveType)));
-        var lowMemory = navigator.deviceMemory && navigator.deviceMemory <= 4;
-        var lowThreads = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4;
+        // Memoria y núcleos solo si son de verdad mínimos (2026-11-23): Brave los
+        // altera por privacidad, distinto en cada sitio (en skulleyrad.com le daba 4 GB
+        // a una laptop con RTX 4060 y le montaba el modo ligero), y Chrome topa la
+        // memoria en 8. Si la tarjeta no alcanza, la resolución adaptable baja sola.
+        var lowMemory = navigator.deviceMemory && navigator.deviceMemory <= 2;
+        var lowThreads = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2;
         var highDPR = window.devicePixelRatio && window.devicePixelRatio > 2;
         // Con cualquiera de estas ya es modo ligero: el contexto WebGL de prueba
         // de abajo (~150 ms bloqueando el parseo en primera visita) sobra. En un
