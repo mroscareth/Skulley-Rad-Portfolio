@@ -52,6 +52,7 @@ import EstelaEsfera from './fx/EstelaEsfera.jsx'
 import { rayoTocaDron, bolaAlEscudo, golpeEscudo } from '../lib/droneNpc.js'
 import { pasoCaminata } from '../lib/caminataAuto.js'
 import { sacarDeObstaculos, sacarAlClaro } from '../lib/obstaculosHome.js'
+import { avisarExplosion } from '../lib/explosionesHome.js'
 
 // Identidad fija para un componente definido dentro de otro: `render` cambia en cada
 // render del padre, pero React ve siempre el mismo tipo y no lo vuelve a montar.
@@ -5375,6 +5376,8 @@ export default function Player({
         onPulse(explodePos.clone(), strength, pulseRadius(k))
       }
     } catch { }
+    // Lo del piso que reacciona (los pétalos del camino vuelan y se queman).
+    avisarExplosion({ x: explodePos.x, y: explodePos.y, z: explodePos.z, radio: pulseRadius(k), fuerza: k })
   }, [onPulse, playerRef])
 
   // Pose del láser: capa encima de la animación, igual que la patada, con las
