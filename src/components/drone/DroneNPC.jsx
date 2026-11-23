@@ -208,13 +208,14 @@ export default function DroneNPC({
     if (!fuera || juegoActivoRef.current || madreEnojada()) return
     e.regreso = fuera
     e.saludaEn = 0
+    // lo vuelve a "ver": si ya estaba cerca, lo saluda en el siguiente cuadro
+    e.viendo = false
     const s = playerRef?.current?.position
     if (e.modo !== 'deambular' || !s) return
     const dx = e.pos.x - s.x
     const dz = e.pos.z - s.z
     const L = Math.hypot(dx, dz) || 1
     if (L < VER_CERCA) return
-    e.viendo = false
     const meta = new THREE.Vector3(s.x + (dx / L) * SALUDA.recibe, ALTO, s.z + (dz / L) * SALUDA.recibe)
     viajar(meta, VEL.prisa, 'skulley')
     e.fase = 'viaje'

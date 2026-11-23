@@ -2713,24 +2713,18 @@ function SiteApp() {
       setShopProductSlug(extractShopSlug(window.location.pathname))
 
       if (target === 'home') {
-        // Versión rápida: sin escena no hay ripple (necesita su captura); se
-        // regresa como con la X.
-        if (VERSION_RAPIDA) {
-          if (!transitionState.active && section !== 'home') exitToHomeLikeExitButton('section')
-          return
-        }
-        // Immediately restore HOME states
-        setShowSectionUi(false)
-        setSectionUiAnimatingOut(false)
-        if (!transitionState.active && section !== 'home') {
-          beginRippleTransition('home')
-        }
+        // Se regresa como con la X (Cerrar sección), en las dos versiones: el iris
+        // y la caída de Skulley, que es lo que marca `homeLanded` y trae la UI de
+        // la home. Con el ripple (la mezcla de ruido) Skulley se quedaba parado en
+        // el portal sin aterrizar: la home sin UI y los NPC apagados (2026-11-23).
+        if (!transitionState.active && section !== 'home') exitToHomeLikeExitButton('section')
         return
       }
-      if (target !== section && !transitionState.active) {
-        if (VERSION_RAPIDA) beginSectionTransition(target)
-        else beginRippleTransition(target)
-      }
+      // Como con la barra de secciones: los puntos en el color de destino (desde la
+      // home, la entrada por la trama). El ripple mezclaba una captura del canvas,
+      // pero la sección de antes es HTML y no salía en ella: se asomaban manchas del
+      // mundo 3D sobre negro (2026-11-23).
+      if (target !== section && !transitionState.active) beginSectionTransition(target)
     }
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)

@@ -276,10 +276,8 @@ export default function PostFX({
     })
     const effect = useMemo(() => {
       const frag = `
-        uniform sampler2D inputBuffer;
         uniform float uTime, uStrength, uScale, uSpeed;
         uniform vec3 uTint;
-        varying vec2 vUv;
         float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
         float noise(vec2 p){
           vec2 i = floor(p); vec2 f = fract(p);
@@ -313,6 +311,7 @@ export default function PostFX({
       `
       const e = new Effect('TransitionWarp', frag, {
         blendFunction: BlendFunction.NORMAL,
+        attributes: EffectAttribute.CONVOLUTION,
         uniforms: new Map(Object.entries(uniformsRef.current)),
       })
       effectRef.current = e
@@ -363,11 +362,9 @@ export default function PostFX({
     })
     const effect = useMemo(() => {
       const frag = `
-        uniform sampler2D inputBuffer;
         uniform float uTime, uStrength, uScale, uSpeed, uLift, uMaskRadius, uMaskFeather, uEdgeBoost;
         uniform vec2 uMaskCenter;
         uniform vec3 uTint;
-        varying vec2 vUv;
 
         float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
         float noise(vec2 p){
@@ -416,6 +413,7 @@ export default function PostFX({
       // @ts-ignore
       const e = new Effect('Liquid', frag, {
         blendFunction: BlendFunction.NORMAL,
+        attributes: EffectAttribute.CONVOLUTION,
         uniforms: new Map(Object.entries(uniformsRef.current)),
       })
       effectRef.current = e
@@ -425,7 +423,11 @@ export default function PostFX({
     return <primitive object={effectRef.current} />
   }
 
-  // Noise-mask A/B mix (prevTexture -> inputBuffer) using shadertoy-like noise
+  // Noise-mask A/B mix (prevTexture -> la escena nueva) using shadertoy-like noise.
+  // Ojo con los efectos propios: postprocessing ya declara `inputBuffer` y `vUv` en
+  // el shader del pase; redeclararlos no compila y tumba el pase entero (así se
+  // rompían el ripple del atrás, el modo psicodélico y TransitionWarp, 2026-11-23).
+  // Lo que lea `inputBuffer` desplazado lleva EffectAttribute.CONVOLUTION.
   function NoiseMaskMix({
     enabled,
     prevTex = null,
@@ -457,12 +459,10 @@ export default function PostFX({
     })
     const effect = useMemo(() => {
       const frag = `
-        uniform sampler2D inputBuffer; // next scene (composer input)
         uniform sampler2D uPrev;       // captured previous frame (A)
         uniform sampler2D uNoise;      // noise texture (iChannel0)
         uniform float uProgress, uEdge, uTime, uSpeed;
         uniform vec2 uResolution;
-        varying vec2 vUv;
         // ---- Noise mask from shadertoy sketch ----
         mat2 R(float a){ float c = cos(a), s = sin(a); return mat2(c, s, -s, c); }
         float B(vec2 u){ return 1.0 - abs( 2.0 * texture2D(uNoise, u/1000.0).r - 1.0 ); }
@@ -484,7 +484,7 @@ export default function PostFX({
           vec2 R = uResolution;
           vec2 U = (vec2(uv.x * R.x, uv.y * R.y) - 0.5 * R) / R.y;
           float T = 1.5 * uTime * uSpeed;
-          vec3 nextCol = texture2D(inputBuffer, uv).rgb;
+          vec3 nextCol = inputColor.rgb;
           vec3 prevCol = texture2D(uPrev, uv).rgb;
           float e = clamp(0.03 + uEdge * uProgress, 0.0, 0.5); // add base width to avoid hard pop at t=0
           float mask = sqrt( smoothstep(0.7 - e, 0.7 + e, N(U, T)) );
@@ -533,11 +533,9 @@ export default function PostFX({
     })
     const effect = useMemo(() => {
       const frag = `
-        uniform sampler2D inputBuffer; // next scene (composer input)
         uniform sampler2D uNoise;      // noise texture (iChannel0)
         uniform float uProgress, uEdge, uTime, uSpeed;
         uniform vec2 uResolution;
-        varying vec2 vUv;
         mat2 R(float a){ float c = cos(a), s = sin(a); return mat2(c, s, -s, c); }
         float B(vec2 u){ return 1.0 - abs( 2.0 * texture2D(uNoise, u/1000.0).r - 1.0 ); }
         float N(in vec2 u, float T){
@@ -558,7 +556,7 @@ export default function PostFX({
           vec2 R = uResolution;
           vec2 U = (vec2(uv.x * R.x, uv.y * R.y) - 0.5 * R) / R.y;
           float T = 1.5 * uTime * uSpeed;
-          vec4 nextC = texture2D(inputBuffer, uv);
+          vec4 nextC = inputColor;
           float e = clamp(0.03 + uEdge * uProgress, 0.0, 0.5); // base width for initial visibility
           float mask = sqrt( smoothstep(0.7 - e, 0.7 + e, N(U, T)) );
           outTEX = vec4(nextC.rgb, mask);
@@ -657,9 +655,9 @@ export default function PostFX({
         {edgeInkEnabled && (
           <EdgeInkEffect bufferRef={characterNormalTexture} protegerDelBloom thickness={1.3} strength={0.9} threshold={0.3} soft={0.16} color={skinLineColor} />
         )}
-        {/* TransitionWarp disabled — shader's Effect registration caused black
-            screen issues across the pipeline. Keeping the component definition
-            (above) for a future retry with a different strategy. */}
+        {/* TransitionWarp apagado. La pantalla negra que daba era su shader:
+            redeclaraba inputBuffer y vUv, que el pase ya trae, y no compilaba
+            (corregido el 2026-11-23; no se ha vuelto a probar montado). */}
         {/* Liquid distortion before color pipeline */}
         {psychoEnabled && (
           <LiquidDistortion
