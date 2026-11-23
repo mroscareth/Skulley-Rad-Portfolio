@@ -51,6 +51,7 @@ import LlamaMano from './fx/LlamaMano.jsx'
 import EstelaEsfera from './fx/EstelaEsfera.jsx'
 import { rayoTocaDron, bolaAlEscudo, golpeEscudo } from '../lib/droneNpc.js'
 import { pasoCaminata } from '../lib/caminataAuto.js'
+import { sacarDeObstaculos, sacarAlClaro } from '../lib/obstaculosHome.js'
 
 // Identidad fija para un componente definido dentro de otro: `render` cambia en cada
 // render del padre, pero React ve siempre el mismo tipo y no lo vuelve a montar.
@@ -69,6 +70,8 @@ const CLIC_VENTANA_MS = 1200
 const VINETA_EVITA = { abajo: 1.85, arriba: 1.05, radio: 0.75 }
 // Para el grosor del contorno: de los pies a la punta de la cresta.
 const ALTO_SKULLEY = 2.85
+// Radio de sus pies contra lo sólido del bosque (obstaculosHome).
+const SKULLEY_RADIO_PISO = 0.45
 
 // Expose a module-level global helper so it runs even if the component never mounts.
 // This avoids the case where a render/Canvas error prevents useEffect from running.
@@ -6630,6 +6633,10 @@ export default function Player({
             simPosRef.current.z = argusCol.z + (dzc / dc) * argusCol.r
           }
         }
+        // Copas, menhires y peñascos del bosque (BosquePintado): resbala por su orilla,
+        // y el bosque es la orilla: se camina el claro, el camino y la plaza del glifo.
+        sacarDeObstaculos(simPosRef.current, SKULLEY_RADIO_PISO)
+        sacarAlClaro(simPosRef.current, SKULLEY_RADIO_PISO)
       }
 
       // Blend animation with substeps (stable) using damp() frame-rate independent

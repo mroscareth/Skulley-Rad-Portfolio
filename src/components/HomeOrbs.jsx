@@ -20,7 +20,8 @@ import DomeShield from './fx/DomeShield.jsx'
 import PortalBurst from './fx/PortalBurst.jsx'
 import { playSfx } from '../lib/sfx.js'
 import { playOrbBounce, playOrbDrop, playOrbGrab, playOrbHit, playOrbPortal, ubicarSonido } from '../lib/homeSounds.js'
-import { ORB_PHYS, kickContact, simulateOrbPath, resolveOrbHit, sweptContactT, orbsApartInHeight, domeBounce } from '../lib/orbPhysics.js'
+import { claroBounce } from '../lib/obstaculosHome.js'
+import { ORB_PHYS, kickContact, simulateOrbPath, resolveOrbHit, sweptContactT, orbsApartInHeight, domeBounce, obstaculoBounce } from '../lib/orbPhysics.js'
 
 // Qué tan rápido tiene que pegar una esfera en el domo para que se vea el escudo:
 // recargada en la pared (Skulley empujándola) no lo enciende a cada cuadro.
@@ -1273,6 +1274,8 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
           ds.pos.y = Math.max(_dragTarget.y, GROUND_Y + ds.radius)
           ds.vel.set(0, 0, 0)
           // Arrastrada tampoco sale del domo: se queda en la pared y el escudo avisa.
+          obstaculoBounce(ds.pos, ds.vel, ds.radius)
+          claroBounce(ds.pos, ds.vel, ds.radius)
           if (!ds._isCursed && domeBounce(ds.pos, ds.vel, ds.radius) > 0) {
             const t = state.clock.elapsedTime
             if (t - (ds._domeHitAt || -9) > DOME_HIT_GAP * 2) {
@@ -1378,6 +1381,14 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
         const inside = s.pos.x * s.pos.x + dy * dy + s.pos.z * s.pos.z < ORB_PHYS.DOME_RADIUS * ORB_PHYS.DOME_RADIUS
         if (s._domeInside !== undefined && s._domeInside !== inside) shieldRef.current?.hit(s.pos, 0.55)
         s._domeInside = inside
+      }
+      // Los menhires del bosque (obstaculosHome): rebotan como en una banda de
+      // billar, con su golpe de choque.
+      // La orilla del bosque detiene también a la corrupta: al glifo solo llega
+      // por el camino del norte.
+      {
+        const pego = Math.max(obstaculoBounce(s.pos, s.vel, s.radius), claroBounce(s.pos, s.vel, s.radius))
+        if (pego > SUENA_CHOQUE) playOrbHit(Math.min(1, (pego - SUENA_CHOQUE) / 12), s.radius, dondeSuena(s))
       }
 
       // ── ORB CURSED (antimatter O purified) ────────────────────────────

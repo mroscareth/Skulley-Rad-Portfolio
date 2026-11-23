@@ -4,6 +4,8 @@
  * que también se puede probar con números en Node.
  */
 
+import { cercanos, claroBounce } from './obstaculosHome.js'
+
 const GROUND_Y = 0.0
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
 
@@ -68,6 +70,32 @@ export function domeBounce(p, v, r) {
 }
 const _domeP = { x: 0, y: 0, z: 0 }
 const _domeV = { x: 0, y: 0, z: 0 }
+
+// Contra lo sólido del bosque que está dentro del domo (los menhires: círculos de
+// obstaculosHome con `esfera`). Paredes verticales: la esfera sale por la normal
+// y rebota lo que iba hacia adentro. Devuelve la velocidad con la que pegó (0 si no).
+export const OBSTACULO_RESTITUTION = 0.6
+export function obstaculoBounce(p, v, r) {
+  let pego = 0
+  cercanos(p.x, p.z, r, (c) => {
+    if (!c.esfera) return
+    const lim = c.r + r
+    const dx = p.x - c.x, dz = p.z - c.z
+    const d2 = dx * dx + dz * dz
+    if (d2 >= lim * lim) return
+    const d = Math.sqrt(d2) || 1e-4
+    const nx = dx / d, nz = dz / d
+    p.x = c.x + nx * lim
+    p.z = c.z + nz * lim
+    const vn = v.x * nx + v.z * nz
+    if (vn >= 0) { pego = Math.max(pego, 1e-3); return }
+    const k = (1 + OBSTACULO_RESTITUTION) * vn
+    v.x -= nx * k
+    v.z -= nz * k
+    pego = Math.max(pego, -vn)
+  })
+  return pego
+}
 
 // Choque entre dos esferas `a` y `b` ({vel:{x,z}, radius}) con normal de
 // contacto (nx, nz) que va de b hacia a. Impulso en el plano, como el billar.
@@ -245,6 +273,13 @@ export function simulateOrbPath(pos, vel, r, all, self, maxT, collide, ignore) {
         px = _domeP.x; py = _domeP.y; pz = _domeP.z
         vx = _domeV.x; vy = _domeV.y; vz = _domeV.z
       }
+    }
+    // Los menhires y la orilla del bosque, igual que en el juego.
+    _domeP.x = px; _domeP.y = py; _domeP.z = pz
+    _domeV.x = vx; _domeV.y = vy; _domeV.z = vz
+    if (obstaculoBounce(_domeP, _domeV, r) > 0 || claroBounce(_domeP, _domeV, r) > 0) {
+      px = _domeP.x; pz = _domeP.z
+      vx = _domeV.x; vz = _domeV.z
     }
     if (px * px + pz * pz > max2) { out = true; break }
     if (collide) {

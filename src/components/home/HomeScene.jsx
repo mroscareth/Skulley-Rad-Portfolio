@@ -244,6 +244,7 @@ import FrustumCulledGroup from '../FrustumCulledGroup.jsx'
 import Environment from '../Environment.jsx'
 import FakeGrass from '../FakeGrass.jsx'
 import PastoPintado from './PastoPintado.jsx'
+import BosquePintado from './BosquePintado.jsx'
 import FloatingExclamation from '../FloatingExclamation.jsx'
 import ZoidianNPC from '../ZoidianNPC.jsx'
 import DroneNPC from '../drone/DroneNPC.jsx'
@@ -647,6 +648,9 @@ export default function HomeScene({
         {/* Matas pintadas a mano (home/PastoPintado.jsx): del color del piso, se
             doblan y se aplastan al pasar Skulley. Montadas siempre: no compilan al jugar. */}
         <PastoPintado playerRef={playerRef} portales={portals} colorPiso={psychoSceneColor || '#204580'} />
+        {/* El bosque del claro (home/BosquePintado.jsx): pinos, peñascos y los menhires
+            rúnicos de cada portal. Montado siempre; se compila antes de entrar a la escena. */}
+        <BosquePintado playerRef={playerRef} portales={portals} colorPiso={psychoSceneColor || '#204580'} portalMixMap={portalMixMap} visible={comoHome} />
         {/* God Rays anchor (hidden when inactive and no depth write) */}
         {fx.godEnabled && (
           <mesh ref={sunRef} position={[0, 8, 0]}>
