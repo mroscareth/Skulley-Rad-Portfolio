@@ -14,7 +14,8 @@ import { wallpaperEstado } from '../lib/wallpaperEscritorio.js'
 import { hardenContextAttributes } from '../lib/canvasSetup.js'
 
 // La burbuja nítida de la profundidad de campo (ver PostFX): el círculo de confusión
-// por la distancia en 3D al foco, con una zona sin desenfoque. Una sola vez por material.
+// por la distancia en 3D al foco, con una zona sin desenfoque. Lo que trae profundidad 0
+// (las viñetas: SpeechBubble3D, profundidadCero) nunca se desenfoca. Una sola vez por material.
 function parcharBurbuja(m) {
   if (!m || m.userData.burbuja) return
   m.userData.burbuja = true
@@ -23,7 +24,7 @@ function parcharBurbuja(m) {
   m.uniforms.zonaNitida = new THREE.Uniform(18)
   m.fragmentShader = antes
     .replace('uniform float focusRange;', 'uniform float focusRange;uniform vec3 focoVista;uniform float zonaNitida;')
-    .replace('float magnitude=smoothstep(0.0,focusRange,abs(signedDistance));', 'float magnitude=smoothstep(zonaNitida,zonaNitida+focusRange,length(viewPosition-focoVista));')
+    .replace('float magnitude=smoothstep(0.0,focusRange,abs(signedDistance));', 'float magnitude=smoothstep(zonaNitida,zonaNitida+focusRange,length(viewPosition-focoVista));if(depth<1e-6)magnitude=0.0;')
   if (import.meta.env.DEV && !m.fragmentShader.includes('zonaNitida+focusRange')) console.warn('[PostFX] la burbuja de la profundidad de campo no se aplicó: cambió el shader de postprocessing')
   m.needsUpdate = true
 }

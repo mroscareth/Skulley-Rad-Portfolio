@@ -562,7 +562,48 @@ function avanzarAnim(e, dt) {
 // para que se compilen con la escena. Antes se compilaban 2 programas con la primera
 // frase de Skulley, Argus o el drone (un congelón en una visita sin caché).
 // Mismas props que lo que pinta el globo: lo que cambie allá cambia aquí.
+// Siempre encima de todo (al final de lo transparente, sin que la profundidad lo tape) y
+// sus piezas sólidas (relleno, borde, sombra, colita) escriben profundidad 0, pegada a
+// la cámara: la profundidad de campo (PostFX, parcharBurbuja) no desenfoca esa marca
+// (2026-11-23, Oscar: cerca del borde de arriba les tocaba el desenfoque del bosque y no
+// se leían). El texto y la trama no escriben: heredan la marca del relleno de abajo.
+function materialesDeGlobo(g) {
+  if (!g) return
+  try {
+    g.traverse((o) => {
+      o.renderOrder = 9999
+      if (!o.material) return
+      const mats = Array.isArray(o.material) ? o.material : [o.material]
+      for (const m of mats) {
+        if (!m) continue
+        m.transparent = true
+        const solido = !m.isTroikaTextMaterial && !m.map
+        // Con la prueba de profundidad apagada WebGL tampoco escribe profundidad: las
+        // sólidas la llevan prendida con "pasa siempre" (igual de encima de todo).
+        m.depthTest = solido
+        m.depthFunc = THREE.AlwaysDepth
+        m.depthWrite = solido
+        if (solido) profundidadCero(m)
+      }
+    })
+  } catch {}
+}
+
+function profundidadCero(m) {
+  if (m.userData.profundidadCero) return
+  m.userData.profundidadCero = true
+  const previo = m.onBeforeCompile
+  m.onBeforeCompile = function (shader, renderer) {
+    previo?.call(this, shader, renderer)
+    shader.fragmentShader = shader.fragmentShader.replace(/}\s*$/, '\tgl_FragDepth = 0.0;\n}\n')
+  }
+  m.customProgramCacheKey = () => 'globo-profundidad-cero'
+  m.needsUpdate = true
+}
+
 export function PrecalentarGlobo() {
+  const grupo = useRef(null)
+  useLayoutEffect(() => { materialesDeGlobo(grupo.current) })
   const tex = useMemo(() => {
     const t = new THREE.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1)
     t.needsUpdate = true
@@ -570,7 +611,11 @@ export function PrecalentarGlobo() {
   }, [])
   useEffect(() => () => tex.dispose(), [tex])
   return (
-    <group position={[0, -6, 0]} scale={0.01}>
+    <group ref={grupo} position={[0, -6, 0]} scale={0.01}>
+      <mesh frustumCulled={false}>
+        <planeGeometry args={[1, 1]} />
+        <meshBasicMaterial color={'#fbfbfb'} opacity={0.98} />
+      </mesh>
       <mesh frustumCulled={false}>
         <planeGeometry args={[1, 1]} />
         <meshBasicMaterial map={tex} transparent opacity={0.30} />
@@ -756,23 +801,7 @@ export default function SpeechBubble3D({
   // montar: al montar el componente regresa null (el grupo nace con la primera
   // frase) y nunca se aplicaba; así también alcanza al halftone que regresa al
   // salir del tema egg. Layout effect para que corra antes del primer cuadro.
-  useLayoutEffect(() => {
-    const g = groupRef.current
-    if (!g) return
-    try {
-      g.traverse((o) => {
-        o.renderOrder = 9999
-        if (!o.material) return
-        const mats = Array.isArray(o.material) ? o.material : [o.material]
-        for (const m of mats) {
-          if (!m || (m.depthTest === false && m.transparent)) continue
-          m.depthTest = false
-          m.depthWrite = false
-          m.transparent = true
-        }
-      })
-    } catch {}
-  })
+  useLayoutEffect(() => { materialesDeGlobo(groupRef.current) })
 
   useFrame((state, delta) => {
     const a = anchorRef?.current
