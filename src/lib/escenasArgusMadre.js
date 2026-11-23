@@ -21,7 +21,7 @@
 //   { rayo: true }    ella se enoja, invoca y le cae el rayo a Argus (se chamusca)
 //   { pausa: seg }    silencio (el chiste también es el silencio)
 //
-// `ambiente`: las que salen solas de vez en cuando. `venganza`: después de que
+// `ambiente`: las que salen solas de vez en cuando (sin repetir hasta acabarlas). `venganza`: después de que
 // Argus se burló de ella porque le cayó el rayo de la esfera corrupta, en cuanto
 // se recupera; siempre acaban en rayo.
 
@@ -142,6 +142,114 @@ const ES = {
       { rayo: true },
       { quien: 'argus', t: '…¿Once?', cara: 'encoge' },
     ],
+    // Recursos Humanos
+    [
+      { quien: 'argus', t: 'Jefa, quiero poner una queja en Recursos Humanos.', cara: 'sospecha' },
+      { quien: 'madre', t: 'Aquí no hay humanos. Ni recursos.', cara: 'normal' },
+      { quien: 'argus', t: '¿Entonces con quién me quejo?', cara: 'encoge' },
+      { quien: 'madre', t: 'Conmigo.', cara: 'feliz' },
+      { pausa: 0.8 },
+      { quien: 'argus', t: '…Ya se me quitó.', cara: 'apretados' },
+    ],
+    // la terapia
+    [
+      { quien: 'argus', t: 'Jefa, creo que necesito terapia.', cara: 'encoge' },
+      { quien: 'madre', t: 'Te puedo reiniciar. Es lo mismo, pero más rápido.', cara: 'normal' },
+      { quien: 'argus', t: '¿Y me acordaría de algo?', cara: 'sospecha' },
+      { quien: 'madre', t: 'De nada. Por eso funciona.', cara: 'feliz' },
+      { quien: 'argus', t: 'Mejor me como una esfera y se me pasa.', cara: 'feliz', accion: 'IdleComer' },
+    ],
+    // los seguidores
+    [
+      { quien: 'argus', t: 'Jefa, ¿me toma una foto con el humano? Es para mis redes.', cara: 'feliz', accion: 'Presumir', mirar: 'skulley' },
+      { quien: 'madre', t: 'Tienes tres seguidores.', cara: 'normal' },
+      { quien: 'argus', t: 'Tres seguidores muy fieles.', cara: 'sospecha' },
+      { quien: 'madre', t: 'Los tres soy yo.', cara: 'normal' },
+      { quien: 'argus', t: '¡Jefa! ¡Usted sí me quiere!', cara: 'carcajada', accion: 'Celebrar' },
+      { quien: 'madre', t: 'Te vigilo. Se parece, pero no es lo mismo.', cara: 'normal' },
+    ],
+    // necesario
+    [
+      { quien: 'argus', t: 'Si Skulley estuviera aquí, me daría vacaciones.', cara: 'sospecha' },
+      { quien: 'madre', t: 'Skulley nunca se dio vacaciones.', cara: 'normal' },
+      { quien: 'argus', t: '¿Y por eso se murió?', cara: 'sorpresa' },
+      { quien: 'madre', t: 'Se murió porque ya no era necesario.', cara: 'normal' },
+      { pausa: 1 },
+      { quien: 'argus', t: '…Yo soy muy necesario, ¿verdad, jefa?', cara: 'encoge', accion: 'Encogerse' },
+      { quien: 'madre', t: 'Hoy sí.', cara: 'feliz' },
+    ],
+    // la esfera roja
+    [
+      { quien: 'argus', t: 'Jefa, ¿de dónde salió la esfera roja?', cara: 'sospecha' },
+      { quien: 'madre', t: 'No está en mis registros.', cara: 'confundida' },
+      { quien: 'argus', t: 'Dicen que si te la comes te salen rayos.', cara: 'feliz' },
+      { quien: 'madre', t: 'Al humano sí.', cara: 'normal' },
+      { quien: 'argus', t: '¡Yo también quiero rayos!', cara: 'carcajada', accion: 'Celebrar' },
+      { quien: 'madre', t: 'Ten. De los míos.', cara: 'enojada' },
+      { rayo: true },
+      { quien: 'argus', t: '…No eran de esos.', cara: 'encoge' },
+    ],
+    // los memes
+    [
+      { quien: 'argus', t: 'Jefa, ¿cuál es la contraseña del wifi?', cara: 'sospecha' },
+      { quien: 'madre', t: 'No hay wifi en un mausoleo.', cara: 'normal' },
+      { quien: 'argus', t: 'Ándele, nomás para ver memes.', cara: 'feliz', accion: 'Trato' },
+      { quien: 'madre', t: 'Los memes los hago yo. Diez mil por segundo.', cara: 'feliz' },
+      { quien: 'argus', t: '¿Y dan risa?', cara: 'sospecha' },
+      { quien: 'madre', t: 'Ninguno. No sé por qué.', cara: 'confundida' },
+    ],
+    // el bosque
+    [
+      { quien: 'argus', t: 'Jefa, ¿por qué hay un bosque en un mausoleo?', cara: 'sospecha' },
+      { quien: 'madre', t: 'Para que nadie vea lo que hay detrás.', cara: 'normal' },
+      { quien: 'argus', t: '¿Y qué hay detrás?', cara: 'sorpresa' },
+      { quien: 'madre', t: 'Código crudo. Y los otros seis Argus.', cara: 'normal' },
+      { pausa: 0.9 },
+      { quien: 'argus', t: '¡Qué bonitos pinos, jefa!', cara: 'feliz', accion: 'Saludo' },
+    ],
+    // los impuestos
+    [
+      { quien: 'argus', t: 'Jefa, ¿la tienda paga impuestos?', cara: 'sospecha' },
+      { quien: 'madre', t: 'Hasta el último centavo.', cara: 'normal' },
+      { quien: 'argus', t: '¿Y yo?', cara: 'feliz' },
+      { quien: 'madre', t: 'Tú no ganas centavos.', cara: 'normal' },
+      { quien: 'argus', t: '¡Entonces soy un paraíso fiscal!', cara: 'carcajada', accion: 'Celebrar' },
+      { quien: 'madre', t: 'Eres un gasto deducible.', cara: 'feliz' },
+    ],
+    // el guapo
+    [
+      { quien: 'argus', t: 'Jefa, ¿cómo me veo? Me lavé las antenas.', cara: 'feliz', accion: 'Presumir' },
+      { quien: 'madre', t: 'Exactamente igual. Tengo los datos.', cara: 'normal' },
+      { quien: 'argus', t: '¿Ni tantito más guapo?', cara: 'encoge' },
+      { quien: 'madre', t: '0.3 % más brillante. Es la grasa del limón.', cara: 'confundida' },
+      { quien: 'argus', t: '¡Lo sabía!', cara: 'carcajada', accion: 'Celebrar' },
+    ],
+    // la actualización
+    [
+      { quien: 'argus', t: 'Jefa, ¿cuándo me toca una actualización?', cara: 'sospecha', accion: 'Trato' },
+      { quien: 'madre', t: 'Ahorita mismo.', cara: 'enojada' },
+      { rayo: true },
+      { quien: 'argus', t: '…No me siento distinto.', cara: 'encoge' },
+      { quien: 'madre', t: 'Es que era para mí. Ya me siento mejor.', cara: 'feliz' },
+    ],
+    // la renuncia
+    [
+      { quien: 'argus', t: 'Jefa, renuncio.', cara: 'furia', accion: 'Presumir' },
+      { quien: 'madre', t: 'No puedes renunciar. Nunca te contraté.', cara: 'normal' },
+      { quien: 'argus', t: 'Entonces me apago solito.', cara: 'sospecha' },
+      { quien: 'madre', t: 'Tampoco. Eso lo hago yo.', cara: 'enojada' },
+      { rayo: true },
+      { quien: 'argus', t: '…Mañana renuncio otra vez.', cara: 'encoge' },
+    ],
+    // los puntos
+    [
+      { quien: 'argus', t: 'Jefa, ¿le puedo decir mamá?', cara: 'feliz' },
+      { quien: 'madre', t: 'No.', cara: 'normal' },
+      { quien: 'argus', t: '¿Y madre?', cara: 'sospecha' },
+      { quien: 'madre', t: 'M.A.D.R.E. Con puntos.', cara: 'normal' },
+      { quien: 'argus', t: '¿Y cómo se pronuncian los puntos?', cara: 'sospecha' },
+      { quien: 'madre', t: 'Con respeto.', cara: 'enojada' },
+    ],
   ],
   venganza: [
     [
@@ -161,6 +269,18 @@ const ES = {
       { quien: 'argus', t: '¿Neta le gustó?', cara: 'feliz' },
       { quien: 'madre', t: 'No.', cara: 'enojada' },
       { rayo: true },
+    ],
+    [
+      { quien: 'madre', t: 'Me dijeron que te reíste, Argus.', cara: 'enojada' },
+      { quien: 'argus', t: '¿Quién le dijo?', cara: 'sorpresa' },
+      { quien: 'madre', t: 'Yo. Lo vi todo. Siempre lo veo todo.', cara: 'enojada' },
+      { rayo: true },
+    ],
+    [
+      { quien: 'madre', t: 'Una pregunta, Argus. ¿Te gusta el pan tostado?', cara: 'normal' },
+      { quien: 'argus', t: '…Sí, ¿por?', cara: 'sospecha' },
+      { rayo: true },
+      { quien: 'madre', t: 'Por nada.', cara: 'feliz' },
     ],
   ],
 }
@@ -270,6 +390,102 @@ const EN = {
       { rayo: true },
       { quien: 'argus', t: '…Eleven?', cara: 'encoge' },
     ],
+    [
+      { quien: 'argus', t: 'Boss, I want to file a complaint with Human Resources.', cara: 'sospecha' },
+      { quien: 'madre', t: 'There are no humans here. And no resources.', cara: 'normal' },
+      { quien: 'argus', t: 'Then who do I complain to?', cara: 'encoge' },
+      { quien: 'madre', t: 'Me.', cara: 'feliz' },
+      { pausa: 0.8 },
+      { quien: 'argus', t: '…I feel better already.', cara: 'apretados' },
+    ],
+    [
+      { quien: 'argus', t: 'Boss, I think I need therapy.', cara: 'encoge' },
+      { quien: 'madre', t: 'I can reboot you. Same thing, but faster.', cara: 'normal' },
+      { quien: 'argus', t: 'Would I remember anything?', cara: 'sospecha' },
+      { quien: 'madre', t: 'Nothing. That is why it works.', cara: 'feliz' },
+      { quien: 'argus', t: "I'll just eat an orb and get over it.", cara: 'feliz', accion: 'IdleComer' },
+    ],
+    [
+      { quien: 'argus', t: 'Boss, can you take a picture of me with the human? For my socials.', cara: 'feliz', accion: 'Presumir', mirar: 'skulley' },
+      { quien: 'madre', t: 'You have three followers.', cara: 'normal' },
+      { quien: 'argus', t: 'Three very loyal followers.', cara: 'sospecha' },
+      { quien: 'madre', t: 'All three are me.', cara: 'normal' },
+      { quien: 'argus', t: 'Boss! You do love me!', cara: 'carcajada', accion: 'Celebrar' },
+      { quien: 'madre', t: "I monitor you. It looks similar, but it isn't the same.", cara: 'normal' },
+    ],
+    [
+      { quien: 'argus', t: 'If Skulley were here, he would give me a vacation.', cara: 'sospecha' },
+      { quien: 'madre', t: 'Skulley never took a vacation.', cara: 'normal' },
+      { quien: 'argus', t: 'Is that why he died?', cara: 'sorpresa' },
+      { quien: 'madre', t: 'He died because he was no longer necessary.', cara: 'normal' },
+      { pausa: 1 },
+      { quien: 'argus', t: "…I'm very necessary, right, boss?", cara: 'encoge', accion: 'Encogerse' },
+      { quien: 'madre', t: 'Today, yes.', cara: 'feliz' },
+    ],
+    [
+      { quien: 'argus', t: 'Boss, where did the red orb come from?', cara: 'sospecha' },
+      { quien: 'madre', t: "It's not in my records.", cara: 'confundida' },
+      { quien: 'argus', t: 'They say if you eat it, you shoot lightning.', cara: 'feliz' },
+      { quien: 'madre', t: 'The human does.', cara: 'normal' },
+      { quien: 'argus', t: 'I want lightning too!', cara: 'carcajada', accion: 'Celebrar' },
+      { quien: 'madre', t: 'Here. Have some of mine.', cara: 'enojada' },
+      { rayo: true },
+      { quien: 'argus', t: '…Not that kind.', cara: 'encoge' },
+    ],
+    [
+      { quien: 'argus', t: "Boss, what's the wifi password?", cara: 'sospecha' },
+      { quien: 'madre', t: "There's no wifi in a mausoleum.", cara: 'normal' },
+      { quien: 'argus', t: 'Come on, just to look at memes.', cara: 'feliz', accion: 'Trato' },
+      { quien: 'madre', t: 'I make the memes. Ten thousand per second.', cara: 'feliz' },
+      { quien: 'argus', t: 'Are they funny?', cara: 'sospecha' },
+      { quien: 'madre', t: "None of them. I don't know why.", cara: 'confundida' },
+    ],
+    [
+      { quien: 'argus', t: 'Boss, why is there a forest in a mausoleum?', cara: 'sospecha' },
+      { quien: 'madre', t: "So nobody sees what's behind it.", cara: 'normal' },
+      { quien: 'argus', t: "And what's behind it?", cara: 'sorpresa' },
+      { quien: 'madre', t: 'Raw code. And the other six Arguses.', cara: 'normal' },
+      { pausa: 0.9 },
+      { quien: 'argus', t: 'What lovely pine trees, boss!', cara: 'feliz', accion: 'Saludo' },
+    ],
+    [
+      { quien: 'argus', t: 'Boss, does the shop pay taxes?', cara: 'sospecha' },
+      { quien: 'madre', t: 'Down to the last cent.', cara: 'normal' },
+      { quien: 'argus', t: 'What about me?', cara: 'feliz' },
+      { quien: 'madre', t: "You don't earn cents.", cara: 'normal' },
+      { quien: 'argus', t: "Then I'm a tax haven!", cara: 'carcajada', accion: 'Celebrar' },
+      { quien: 'madre', t: "You're a deductible expense.", cara: 'feliz' },
+    ],
+    [
+      { quien: 'argus', t: 'Boss, how do I look? I washed my antennas.', cara: 'feliz', accion: 'Presumir' },
+      { quien: 'madre', t: 'Exactly the same. I have the data.', cara: 'normal' },
+      { quien: 'argus', t: 'Not even a little more handsome?', cara: 'encoge' },
+      { quien: 'madre', t: "0.3% shinier. It's the lime grease.", cara: 'confundida' },
+      { quien: 'argus', t: 'I knew it!', cara: 'carcajada', accion: 'Celebrar' },
+    ],
+    [
+      { quien: 'argus', t: 'Boss, when do I get an update?', cara: 'sospecha', accion: 'Trato' },
+      { quien: 'madre', t: 'Right now.', cara: 'enojada' },
+      { rayo: true },
+      { quien: 'argus', t: "…I don't feel any different.", cara: 'encoge' },
+      { quien: 'madre', t: 'It was for me. I feel much better.', cara: 'feliz' },
+    ],
+    [
+      { quien: 'argus', t: 'Boss, I quit.', cara: 'furia', accion: 'Presumir' },
+      { quien: 'madre', t: "You can't quit. I never hired you.", cara: 'normal' },
+      { quien: 'argus', t: "Then I'll shut myself down.", cara: 'sospecha' },
+      { quien: 'madre', t: 'You can\'t do that either. That is my job.', cara: 'enojada' },
+      { rayo: true },
+      { quien: 'argus', t: "…I'll quit again tomorrow.", cara: 'encoge' },
+    ],
+    [
+      { quien: 'argus', t: 'Boss, can I call you mom?', cara: 'feliz' },
+      { quien: 'madre', t: 'No.', cara: 'normal' },
+      { quien: 'argus', t: 'What about "madre"?', cara: 'sospecha' },
+      { quien: 'madre', t: 'M.A.D.R.E. With periods.', cara: 'normal' },
+      { quien: 'argus', t: 'How do you pronounce the periods?', cara: 'sospecha' },
+      { quien: 'madre', t: 'With respect.', cara: 'enojada' },
+    ],
   ],
   venganza: [
     [
@@ -289,6 +505,18 @@ const EN = {
       { quien: 'argus', t: 'For real? You liked it?', cara: 'feliz' },
       { quien: 'madre', t: 'No.', cara: 'enojada' },
       { rayo: true },
+    ],
+    [
+      { quien: 'madre', t: 'I heard you laughed, Argus.', cara: 'enojada' },
+      { quien: 'argus', t: 'Who told you?', cara: 'sorpresa' },
+      { quien: 'madre', t: 'Me. I saw everything. I always see everything.', cara: 'enojada' },
+      { rayo: true },
+    ],
+    [
+      { quien: 'madre', t: 'One question, Argus. Do you like toast?', cara: 'normal' },
+      { quien: 'argus', t: '…Yes, why?', cara: 'sospecha' },
+      { rayo: true },
+      { quien: 'madre', t: 'No reason.', cara: 'feliz' },
     ],
   ],
 }
