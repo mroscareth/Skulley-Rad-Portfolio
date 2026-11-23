@@ -20,7 +20,10 @@ import RenglonRunas from './RenglonRunas.jsx'
 // (lib/droneNpc.js: normal, seguido, de regreso de una sección, regaño, perdón),
 // cada tema tiene dos versiones y la despedida cambia. Si la cortas a media frase
 // o te vas del menú sin despedirte, lo cuenta (`cerrarConMadre`) y te lo reclama
-// en su viñeta.
+// en su viñeta. Si la picas justo después de que te recomendó un proyecto en su
+// viñeta (saludo 'proyecto'), te ofrece llevarte: "Llévame a ver…" va primero en el
+// menú y, al cerrar, App manda a Skulley al portal de Trabajo con ese proyecto
+// abierto (`onVerProyecto`).
 
 const ENTRADA_MS = 750
 const SALIDA_MS = 650
@@ -33,7 +36,7 @@ const quietoPreferido = () => {
 
 // `modo`: 'charla' (al picarla: saludo y menú) o 'bienvenida' (la primera vez en
 // la experiencia: su bienvenida y se cierra; App abre después los controles).
-export default function DialogoMadre({ onClose, modo = 'charla' }) {
+export default function DialogoMadre({ onClose, onVerProyecto, modo = 'charla' }) {
   const { lang } = useLanguage()
   const D = dialogoMadre(lang)
   const [fase, setFase] = useState('entra')      // entra | texto | menu | sale
@@ -42,12 +45,18 @@ export default function DialogoMadre({ onClose, modo = 'charla' }) {
   const [sel, setSel] = useState(0)
   const [vistos, setVistos] = useState(() => new Set())
   const [pregunta, setPregunta] = useState('')
+  const [proyecto, setProyecto] = useState(null)   // el que acaba de recomendar { slug, titulo }
+  const verRef = useRef(null)                       // el que pediste ver: al cerrar, App te lleva
   const nombreRef = useRef(null)
   const firma = useGlitchSolo(nombreRef, FIRMA_GLITCH)
   const renglonesRef = useRef(0)
 
   const linea = cola ? cola.lineas[cola.i] : null
-  const opciones = [...D.temas, { id: 'adios', label: D.adios.label }]
+  const opciones = [
+    ...(proyecto ? [{ id: 'verProyecto', label: D.verProyecto.replace('{titulo}', proyecto.titulo) }] : []),
+    ...D.temas,
+    { id: 'adios', label: D.adios.label },
+  ]
   const colaRef = useRef(null)
   colaRef.current = cola
 
@@ -71,9 +80,12 @@ export default function DialogoMadre({ onClose, modo = 'charla' }) {
     if (modo === 'bienvenida') c = null
     cerrarConMadre(c)
     avisarDron({ fin: true, como: c })
-    setTimeout(() => onClose?.(), SALIDA_MS)
+    setTimeout(() => {
+      onClose?.()
+      if (verRef.current) onVerProyecto?.(verRef.current)
+    }, SALIDA_MS)
     setFase('sale')
-  }, [onClose, modo])
+  }, [onClose, onVerProyecto, modo])
 
   // entrada: las barras y el globo; luego el saludo
   useEffect(() => {
@@ -82,6 +94,11 @@ export default function DialogoMadre({ onClose, modo = 'charla' }) {
     const s = modo === 'bienvenida' ? null : tomarSaludo()
     const id = setTimeout(() => {
       if (modo === 'bienvenida') { empezar(D.bienvenida, 'salir'); return }
+      if (s.tipo === 'proyecto' && s.proyecto) {
+        setProyecto(s.proyecto)
+        empezar([{ t: escoger(D.llevar, 'llevar', { lang }).replace('{titulo}', s.proyecto.titulo), cara: 'feliz', accion: 'IdleJugueton' }], 'menu')
+        return
+      }
       if (primera && s.tipo !== 'regano' && s.tipo !== 'perdon') { empezar(D.saludo, 'menu'); return }
       const lista = { seguido: D.seguido, vuelta: D.vuelta, regano: D.regano, perdon: D.perdon }[s.tipo] || D.otraVez
       empezar(escoger(lista, `saludo-${s.tipo}`, { seg: s.seg, lang }), 'menu')
@@ -116,10 +133,15 @@ export default function DialogoMadre({ onClose, modo = 'charla' }) {
     if (!o) return
     try { blipMadre(1.4) } catch { }
     if (o.id === 'adios') { empezar([escoger(D.adios.lineas, 'adios', { lang })], 'salir'); return }
+    if (o.id === 'verProyecto' && proyecto) {
+      verRef.current = proyecto.slug
+      empezar([{ t: escoger(D.vamos, 'vamos', { lang }), cara: 'feliz', accion: 'IdleJugueton' }], 'salir')
+      return
+    }
     setVistos((v) => new Set(v).add(o.id))
     setSel(i)
     empezar(escoger(o.variantes, `tema-${o.id}`, { lang }), 'menu')
-  }, [opciones, empezar, D, lang])
+  }, [opciones, empezar, D, lang, proyecto])
 
   // teclado: va en captura y no deja pasar nada al juego mientras dura
   useEffect(() => {

@@ -12,10 +12,10 @@ import { sectionColors } from '../lib/appHelpers.js'
 import SpeechBubble3D from './SpeechBubble3D.jsx'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import { playSfx } from '../lib/sfx.js'
-import { escuchar as escucharJuego } from '../lib/juegoEsferas.js'
+import { escuchar as escucharJuego, juego } from '../lib/juegoEsferas.js'
 import { crearMaterialMochila, crearCaraMochila } from './argus/pantallaMochila.js'
 import { crearRelojHolograma } from './argus/relojHolograma.js'
-import { argus, escucharArgus } from '../lib/argusNpc.js'
+import { argus, escucharArgus, picarArgus, picarArgusLejos, argusEnojado, animoArgus } from '../lib/argusNpc.js'
 
 // Zoidian (Argus) — NPC dueño del juego de las esferas. Vive donde antes flotaba
 // solo el "!" amarillo (entre los portales de Store y Contact); ahora el signo
@@ -776,6 +776,13 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
     const tl = e.uno ? CARA_CLIP[e.uno] : null
     if (tl) for (const [t0, n] of tl) if (tClip >= t0) exprNombre = n
     if (dlg?.cara && EXPR[dlg.cara]) exprNombre = dlg.cara
+    else if (dlg && !dlg.on) {
+      // enojado porque lo picaron de más (o lo dejaron hablando solo): furia un
+      // momento y luego de malas mientras no habla (ZoidianNPC, lib/humorNpc.js)
+      const ahoraS = performance.now() / 1000
+      if (ahoraS < (dlg.furiaHasta || 0)) exprNombre = dlg.furiaCara || 'furia'
+      else if (ahoraS < (dlg.enfadoHasta || 0)) exprNombre = 'aburrido'
+    }
     if (enEmpujon) exprNombre = 'furia'
     const ex = e.expr
     const kx = 1 - Math.exp(-dt * (exprNombre === 'apretados' ? 30 : 9))
@@ -1096,13 +1103,27 @@ export default function ZoidianNPC({
   // La escena del trato (ZoidianDialog, lib/argusNpc.js): con `dialogo` no hay
   // idles de variedad, empujón ni saludo automático; cara y mirada pedidas mandan
   // hasta el siguiente renglón y la acción de cada renglón se fuerza.
-  const dialogoRef = useRef({ on: false, cara: null, mirar: null })
+  const dialogoRef = useRef({ on: false, cara: null, mirar: null, furiaHasta: 0, furiaCara: 'furia', enfadoHasta: 0 })
+  // lo que dice en su globo (sayMock, del efecto de las burlas): lo usan el enojo y el reclamo
+  const decirRef = useRef(null)
+  const reclamoRef = useRef(0)
+  useEffect(() => () => clearTimeout(reclamoRef.current), [])
   useEffect(() => escucharArgus((msg) => {
     if (!msg) return
     const d = dialogoRef.current
     if (msg.dialogo !== undefined) {
       d.on = Boolean(msg.dialogo)
       if (!d.on) { d.cara = null; d.mirar = null }
+    }
+    // lo dejaron hablando solo (o se fueron sin despedirse, a veces): lo reclama ya sin las barras
+    if (msg.reclamo === 'cortada' || (msg.reclamo === 'sinAdios' && Math.random() < 0.6)) {
+      const como = msg.reclamo
+      clearTimeout(reclamoRef.current)
+      reclamoRef.current = setTimeout(() => {
+        decirRef.current?.(`zoidian.harto.${como}`, { delay: 0, dura: 3600, tecleo: 40 })
+        d.furiaHasta = performance.now() / 1000 + 3.5
+        d.furiaCara = como === 'cortada' ? 'furia' : 'sospecha'
+      }, 900)
     }
     if (msg.cara !== undefined) d.cara = msg.cara
     if (msg.mirar !== undefined) d.mirar = msg.mirar
@@ -1160,6 +1181,7 @@ export default function ZoidianNPC({
       }, delay))
     }
     const burla = (key) => { sayMock(key); reaccionar('Risa', 450) }
+    decirRef.current = sayMock
     // desarrollo: window.__argusDice('texto') le pone una frase (probar los globos)
     if (import.meta.env.DEV) window.__argusDice = (texto, dura = 6000) => sayMock(texto, { delay: 0, dura })
     // Los rayos (Oscar, 2026-11-19): solo comenta si le pegan a alguien. A
@@ -1222,6 +1244,7 @@ export default function ZoidianNPC({
       clearTimeout(madreTimer)
       quitarJuego()
       clearTimers()
+      decirRef.current = null
     }
   }, [t])
 
@@ -1306,7 +1329,7 @@ export default function ZoidianNPC({
         try { gl.domElement.style.cursor = '' } catch { }
       }
       if (dist > SALUDO_SALE) sal.lejos = true
-      else if (sal.lejos && cerca && now - sal.ultimo > SALUDO_PAUSA_S && !dialogoRef.current.on) {
+      else if (sal.lejos && cerca && now - sal.ultimo > SALUDO_PAUSA_S && !dialogoRef.current.on && !argusEnojado()) {
         sal.lejos = false
         sal.ultimo = now
         reaccionar('Saludo')
@@ -1317,10 +1340,34 @@ export default function ZoidianNPC({
   if (!visible) return null
 
   // solo se le puede picar con Skulley dentro de su radio (argus.cerca)
+  // Si lo picas de más (o lo cortas seguido) no habla un rato: lo dice en su globo,
+  // con furia y de malas, y cada piquete lo alarga (lib/humorNpc.js, Oscar 2026-11-23).
+  // De lejos no habla: te pide que te acerques (no muy seguido) y también cuenta.
+  const lejosRef = useRef(0)
   const handleClick = (e) => {
     e.stopPropagation()
-    if (!argus.cerca) return
-    try { onClick?.() } catch { }
+    // en la partida no se platica (App no abre la escena) y no cuenta
+    if (dialogoRef.current.on || juego.activo) return
+    const r = argus.cerca ? picarArgus() : picarArgusLejos()
+    if (r.tipo === 'charla') {
+      try { onClick?.() } catch { }
+      return
+    }
+    if (r.tipo === 'lejos') {
+      const ahora = performance.now()
+      if (ahora - lejosRef.current < 2500) return
+      lejosRef.current = ahora
+      decirRef.current?.('zoidian.harto.lejos', { delay: 0, dura: 2800, tecleo: 40 })
+      reaccionar('Saludo')
+      return
+    }
+    const clave = r.tipo === 'rechazo' ? (r.por === 'clics' ? 'clics' : 'cortes') : 'insiste'
+    decirRef.current?.(`zoidian.harto.${clave}`, { delay: 0, dura: 3600, tecleo: 40 })
+    const d = dialogoRef.current
+    d.furiaHasta = performance.now() / 1000 + 4
+    d.furiaCara = 'furia'
+    d.enfadoHasta = animoArgus.enojadoHasta
+    reaccionar('IdleImpaciente')
   }
   const handlePointerOver = (e) => {
     e.stopPropagation()

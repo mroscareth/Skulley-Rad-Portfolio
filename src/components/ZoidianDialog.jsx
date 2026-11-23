@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import { useShopData } from '../lib/shopDataContext.jsx'
 import { dialogoArgus } from '../lib/dialogoArgus.js'
-import { argus, avisarArgus } from '../lib/argusNpc.js'
+import { argus, avisarArgus, tomarSaludoArgus, cerrarConArgus } from '../lib/argusNpc.js'
 import { caminarA, caminata, soltarCaminata } from '../lib/caminataAuto.js'
 import { blipArgus } from '../lib/blipArgus.js'
 import { blipMadre } from '../lib/blipMadre.js'
@@ -172,7 +172,9 @@ export default function ZoidianDialog({ onClose, onPlay, playerRef, portals, tac
   // lo que recuerda de la última vez y la semilla de las variantes: fijos mientras dura la escena
   const [memoria] = useState(() => ({ ...(argus.memoria || {}) }))
   const [semilla] = useState(() => Math.random())
-  const D = useMemo(() => dialogoArgus(lang, { gold: tickets.gold, silver: tickets.silver, resetsAt: tickets.resetsAt, tactil, memoria, semilla }), [lang, tickets.gold, tickets.silver, tickets.resetsAt, tactil, memoria, semilla])
+  // su humor al abrir (lib/humorNpc.js): 'regano' si lo dejaste hablando solo hace poco, 'perdon' tras no hablarte
+  const [humor] = useState(() => tomarSaludoArgus().tipo)
+  const D = useMemo(() => dialogoArgus(lang, { gold: tickets.gold, silver: tickets.silver, resetsAt: tickets.resetsAt, tactil, memoria, semilla, humor }), [lang, tickets.gold, tickets.silver, tickets.resetsAt, tactil, memoria, semilla, humor])
   const [fase, setFase] = useState('entra') // entra | texto | menu | sale
   const [cola, setCola] = useState(null)   // { clave, i, despues: 'menu' | 'salir' | 'jugar', n }
   const [completo, setCompleto] = useState(false)
@@ -208,9 +210,21 @@ export default function ZoidianDialog({ onClose, onPlay, playerRef, portals, tac
     setFase('texto')
   }, [])
 
+  const faseRef = useRef(fase)
+  faseRef.current = fase
+  const colaRef = useRef(cola)
+  colaRef.current = cola
   const cerrar = useCallback((despues = null) => {
     if (salidaRef.current) return
-    avisarArgus({ dialogo: false })
+    // cómo se fue, para su humor: con Esc o Saltar a media frase lo dejaste hablando
+    // solo; en el menú, sin despedirte. ZoidianNPC lo reclama en su globo.
+    let como = 'adios'
+    if (!despues) {
+      const f = faseRef.current
+      como = f !== 'texto' ? 'sinAdios' : colaRef.current?.despues === 'menu' ? 'cortada' : 'adios'
+    }
+    cerrarConArgus(como)
+    avisarArgus({ dialogo: false, reclamo: como })
     // sin partida, el drone regresa a lo suyo
     if (despues !== 'jugar') avisarDron({ alJuego: false })
     soltarCaminata()

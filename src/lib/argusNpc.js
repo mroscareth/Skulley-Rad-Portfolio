@@ -16,6 +16,7 @@
 // (mueve la quijada con el clip Hablar).
 import { escuchar as escucharJuego } from './juegoEsferas.js'
 import scoreStore from './scoreStore.js'
+import { crearHumor } from './humorNpc.js'
 
 export const argus = {
   hablaUltimo: 0,
@@ -50,3 +51,17 @@ escucharJuego((tipo) => {
   argus.memoria.ultimo = 'jugo'
   argus.memoria.puntos = scoreStore.get()
 })
+
+// Su humor (Oscar, 2026-11-23: "haz que Argus también se enoje si lo picas
+// mucho"): el mismo de M.A.D.R.E. (lib/humorNpc.js), con su propia cuenta.
+// ZoidianNPC pregunta al picarlo (si no habla, lo dice en su viñeta, con cara de
+// furia) y ZoidianDialog toma el saludo y avisa cómo se cerró.
+const humor = crearHumor()
+export const animoArgus = humor.estado
+export const argusEnojado = humor.enojado
+export const picarArgus = humor.picar
+export const picarArgusLejos = humor.picarLejos
+export const tomarSaludoArgus = humor.tomarSaludo
+export const cerrarConArgus = humor.cerrar
+// desarrollo: window.__humorArgus da sus cuentas (molestia, cortes, enojadoHasta…)
+if (import.meta.env?.DEV && typeof window !== 'undefined') window.__humorArgus = animoArgus

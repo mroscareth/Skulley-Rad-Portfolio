@@ -6,7 +6,7 @@ import SpeechBubble3D from '../SpeechBubble3D.jsx'
 import SilhouetteShadow from '../SilhouetteShadow.jsx'
 import DomeShield from '../fx/DomeShield.jsx'
 import HumoDron from './HumoDron.jsx'
-import { dron, escucharDron, juntoArgus, picarMadre, madreEnojada, salioDeHome, volvioAHome } from '../../lib/droneNpc.js'
+import { dron, escucharDron, juntoArgus, picarMadre, madreEnojada, salioDeHome, volvioAHome, cargarProyectos, listaProyectos, recomendo } from '../../lib/droneNpc.js'
 import { dialogoMadre, escoger } from '../../lib/dialogoMadre.js'
 import { escuchar as escucharJuego } from '../../lib/juegoEsferas.js'
 import scoreStore from '../../lib/scoreStore.js'
@@ -38,7 +38,10 @@ import { useLanguage } from '../../i18n/LanguageContext.jsx'
 // saluda en su viñeta (`SALUDA`, no muy seguido), y al regresar de una sección va
 // volando hacia él y le dice cuánto tardó. Tiene humor (lib/droneNpc.js): si la
 // cortas a media frase te lo reclama; si la picas mucho o la cortas seguido, no te
-// habla un rato, te da la espalda y, si sigues picándola, se va.
+// habla un rato, te da la espalda y, si sigues picándola, se va. De vez en cuando
+// (`RECOMIENDA`) va hacia Skulley y le cuenta de un proyecto de Trabajo al azar
+// (`T.proyectos`, la lista del CMS en lib/droneNpc.js); si la pica en ese rato, la
+// charla le ofrece llevarlo (DialogoMadre, `onVerProyecto` en App).
 //
 // Monta desde el warm-up con Argus (comoHome), así sus programas se compilan
 // detrás del preloader. Todo lo que anima va por refs; el estado de React solo
@@ -90,9 +93,22 @@ const JUEGO = { primera: [9, 13], cada: [14, 22], tapaArgus: 1.4, esperaMax: 10,
 // y cuándo reclama al cortarla (segundos después de cerrar: ya se fueron las barras).
 const SALUDA = { cada: [60, 120], trasCharla: 40, recibe: 3.5, reclamo: 0.9 }
 // Ofendida: a la tercera insistencia se va lejos (a más de `lejos` de Skulley).
+// Los proyectos que recomienda: la primera vez (segundos desde que Skulley cae a la
+// home) y cada cuánto después; si Skulley está a menos de `lejos`, va hacia él y lo
+// dice ya viéndolo; si no, lo vuelve a intentar en `espera`. Nunca jugando ni enojada.
+const RECOMIENDA = { primera: [45, 75], cada: [110, 190], lejos: 16, espera: 10, trasCharla: 40 }
 const OFENDIDA = { seVaEn: 3, lejos: 9 }
 
 const azar = (a, b) => a + Math.random() * (b - a)
+// Parte un texto por frases en trozos de hasta `max` letras (una frase más larga va sola).
+const trozos = (texto, max = 100) => {
+  const out = []
+  for (const f of texto.split(/(?<=[.!?…])\s+/)) {
+    if (out.length && (out[out.length - 1] + ' ' + f).length <= max) out[out.length - 1] += ' ' + f
+    else out.push(f)
+  }
+  return out
+}
 const angulo = (a) => Math.atan2(Math.sin(a), Math.cos(a))
 
 export default function DroneNPC({
@@ -179,6 +195,9 @@ export default function DroneNPC({
       regreso: 0,               // regresó de una sección: cuánto estuvo fuera (lo dice al verlo)
       huyeHasta: 0,             // ofendida, se va: hasta entonces no se detiene a verlo
       reclamoHasta: 0,          // reclamando: la cara no cambia sola
+      recomiendaEn: Infinity,   // cuándo recomienda un proyecto (lo pone la primera llegada)
+      bolsaProyectos: [],       // slugs revueltos: no repite hasta acabarlos
+      diceCola: [],             // las viñetas que siguen al acabar la que dice (una recomendación larga va en trozos)
     }
   }
   const pedir = (nombre) => setAccion((a) => ({ nombre, n: a.n + 1 }))
@@ -202,7 +221,12 @@ export default function DroneNPC({
       if (estuvoRef.current) salioDeHome()
       return
     }
-    if (!estuvoRef.current) { estuvoRef.current = true; return }
+    if (!estuvoRef.current) {
+      estuvoRef.current = true
+      cargarProyectos()
+      est.current.recomiendaEn = performance.now() / 1000 + azar(RECOMIENDA.primera[0], RECOMIENDA.primera[1])
+      return
+    }
     const fuera = volvioAHome()
     const e = est.current
     if (!fuera || juegoActivoRef.current || madreEnojada()) return
@@ -224,7 +248,7 @@ export default function DroneNPC({
   }, [activo]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // dice algo en su viñeta (se escribe letra por letra)
-  const decir = (texto, dura) => { est.current.dice = { texto, t: 0, dura } }
+  const decir = (texto, dura) => { est.current.dice = { texto, t: 0, dura }; est.current.diceCola = [] }
   const reclamoRef = useRef(0)
   useEffect(() => () => clearTimeout(reclamoRef.current), [])
   // lo ve llegar cerca: se emociona y lo saluda (no muy seguido); ofendida, se voltea
@@ -274,6 +298,7 @@ export default function DroneNPC({
       cara?.poner('normal')
       pedir('IdleTranquilo')
       e.saludaEn = Math.max(e.saludaEn, performance.now() / 1000 + SALUDA.trasCharla)
+      e.recomiendaEn = Math.max(e.recomiendaEn, performance.now() / 1000 + RECOMIENDA.trasCharla)
       // la dejaste hablando sola (o sin adiós, a veces): te lo reclama ya sin las barras
       const como = msg.como
       if (como === 'cortada' || (como === 'sinAdios' && Math.random() < 0.6)) {
@@ -370,6 +395,8 @@ export default function DroneNPC({
         else quieto(0, 'IdleTranquilo')
       }
     }
+    // window.__dronRecomendar() hace que recomiende un proyecto ya (va hacia Skulley si está a medio camino)
+    window.__dronRecomendar = () => { est.current.recomiendaEn = 0; est.current.dice = null }
     // window.__dronQuemar() hace como si le cayera el rayo de la esfera corrupta
     window.__dronQuemar = (fuente = 'portal') => quemar(fuente)
     // y window.__dronEscudo(fuerza) enciende el escudo del lado de Skulley, sin contar
@@ -382,7 +409,7 @@ export default function DroneNPC({
       const L = Math.hypot(dx, dz) || 1
       escudoRef.current?.hit({ x: e.pos.x + (dx / L) * ESCUDO.radio, y: e.pos.y - 0.25, z: e.pos.z + (dz / L) * ESCUDO.radio }, 0.6 + 0.4 * fuerza)
     }
-    return () => { delete window.__dronCuriosa; delete window.__dronEscudo; delete window.__dronQuemar }
+    return () => { delete window.__dronCuriosa; delete window.__dronEscudo; delete window.__dronQuemar; delete window.__dronRecomendar }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- metas
@@ -407,6 +434,36 @@ export default function DroneNPC({
       return new THREE.Vector3(x, ALTO + azar(-0.25, 0.35), z)
     }
     return new THREE.Vector3(e.pos.x * 0.5, ALTO, e.pos.z * 0.5)
+  }
+
+  // le cuenta de un proyecto al azar, sin repetir hasta acabarlos; luego la pista de
+  // que si la pica lo lleva (lib/droneNpc.js `recomendo`)
+  const recomendar = (ahora) => {
+    const e = est.current
+    const T = textosRef.current
+    const lista = listaProyectos(T.proyectos)
+    if (!lista.length) { e.recomiendaEn = ahora + 60; return }
+    let p = null
+    for (let i = 0; i < 2 && !p; i++) {
+      if (!e.bolsaProyectos.length) e.bolsaProyectos = lista.map((x) => x.slug).sort(() => Math.random() - 0.5)
+      while (e.bolsaProyectos.length && !p) {
+        const slug = e.bolsaProyectos.pop()
+        p = lista.find((x) => x.slug === slug) || null
+      }
+    }
+    if (!p) { e.recomiendaEn = ahora + 60; return }
+    const propio = T.proyectos?.[p.slug]
+    const titulo = propio?.titulo || p.titulo
+    const texto = propio?.t || T.proyectoGenerico.replace('{titulo}', titulo)
+    // en trozos por frase: un globo de 8 renglones no se lee
+    const [primero, ...resto] = trozos(texto)
+    decir(primero, 2.4 + primero.length / LETRAS)
+    e.diceCola = [...resto, escoger(T.pistaProyecto, 'pistaProyecto', { lang: langRef.current })]
+    caraRef.current?.poner('feliz')
+    if (e.fase === 'quieto') pedir('IdleJugueton')
+    recomendo({ slug: p.slug, titulo })
+    e.recomiendaEn = ahora + azar(RECOMIENDA.cada[0], RECOMIENDA.cada[1])
+    e.saludaEn = Math.max(e.saludaEn, ahora + 30)
   }
 
   // un lugar de la plaza lejos de Skulley (ofendida, se va)
@@ -459,6 +516,7 @@ export default function DroneNPC({
     e.mirar = null
     e.ofertaTexto = ''
     e.dice = null
+    e.diceCola = []
     e.v.set(0, 0, 0)
     e.pos.y -= 0.35
     e.ladeo.vx += (Math.random() - 0.5) * 9
@@ -598,6 +656,7 @@ export default function DroneNPC({
       e.modo = 'dialogo'
       e.ofertaTexto = ''
       e.dice = null
+      e.diceCola = []
       const p = playerRef?.current
       if (!p) return
       const fy = p.rotation.y
@@ -653,6 +712,18 @@ export default function DroneNPC({
         e.hasta = e.t + azar(0.8, 1.6)
         cara?.mirar(0, 0)
       }
+    }
+    // de vez en cuando le recomienda un proyecto: viéndolo lo dice; a medio camino va hacia él
+    if (e.modo === 'deambular' && s && !juegoActivo && !e.dice && ahora > e.recomiendaEn && ahora > e.huyeHasta && !madreEnojada()) {
+      const dS = Math.hypot(s.x - e.pos.x, s.z - e.pos.z)
+      if (e.viendo && dS < VER_CERCA + VER_SUELTA) recomendar(ahora)
+      else if (dS < RECOMIENDA.lejos && e.fase === 'quieto') {
+        const L = dS || 1
+        e.viendo = false
+        e.saludaEn = Math.max(e.saludaEn, ahora + 20)
+        viajar(new THREE.Vector3(s.x + ((e.pos.x - s.x) / L) * SALUDA.recibe, ALTO, s.z + ((e.pos.z - s.z) / L) * SALUDA.recibe), VEL.prisa * 0.6, 'skulley')
+        e.recomiendaEn = ahora + 3
+      } else e.recomiendaEn = ahora + (e.fase === 'quieto' ? RECOMIENDA.espera : 3)
     }
     // la partida: desde pasear (o al acabar un castigo o la quemada) se va junto a Argus
     if (juegoActivo && e.modo === 'deambular') entrarAJuego()
@@ -908,7 +979,13 @@ export default function DroneNPC({
       if (e.dice.t < e.dice.dura) {
         texto = e.dice.texto.slice(0, Math.min(e.dice.texto.length, Math.floor(e.dice.t * LETRAS)))
         layout = e.dice.texto
-      } else e.dice = null
+      } else if (e.diceCola.length && e.modo === 'deambular') {
+        const sigue = e.diceCola.shift()
+        e.dice = { texto: sigue, t: 0, dura: 2.4 + sigue.length / LETRAS }
+      } else {
+        e.dice = null
+        e.diceCola = []
+      }
     }
     if (!e.dice && e.modo === 'oferta' && e.ofertaTexto) {
       texto = e.ofertaTexto

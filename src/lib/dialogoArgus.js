@@ -30,10 +30,14 @@ function fecha(iso, lang) {
   return new Date(y, m - 1, 1).toLocaleDateString(lang === 'es' ? 'es-MX' : 'en-US', { day: 'numeric', month: 'long' })
 }
 
-// `datos`: { gold, silver, resetsAt, tactil, memoria, semilla }. gold y silver
+// `humor` (lib/humorNpc.js, lo toma ZoidianDialog al abrir): 'regano' si lo
+// dejaste hablando solo hace poco y 'perdon' la primera vez después de no hablarte;
+// mandan sobre el saludo de la memoria.
+//
+// `datos`: { gold, silver, resetsAt, tactil, memoria, semilla, humor }. gold y silver
 // traen score y pct; gold además left_this_month y monthly_cap (sin conteo, undefined).
 export function dialogoArgus(lang, datos) {
-  const { gold = {}, silver = {}, resetsAt = null, tactil = false, memoria = null, semilla = 0 } = datos || {}
+  const { gold = {}, silver = {}, resetsAt = null, tactil = false, memoria = null, semilla = 0, humor = null } = datos || {}
   const es = lang === 'es'
   const g = num(gold.score, lang)
   const s = num(silver.score, lang)
@@ -60,7 +64,16 @@ export function dialogoArgus(lang, datos) {
       : agotados
         ? { t: `Este mes ya se acabaron los dorados; el ${fecha(resetsAt, lang) || '1'} llegan más. Mientras, con ${g} te llevas el plateado.`, cara: 'encoge', muestra: 'dorado' }
         : { t: `Quedan ${quedan} de ${cap} este mes. Aguas, que vuelan.`, cara: 'sospecha', muestra: 'stock' }
-    const otraVez = nivel === 'oro' ? saludo({ t: `¡El campeón! La otra vez hiciste ${pTxt} puntos. ¿Vienes por más?`, cara: 'carcajada' })
+    const otraVez = humor === 'regano' ? saludo(una([
+      { t: '¿Ahora sí me vas a escuchar, compa? La otra vez me dejaste hablando solo.', cara: 'sospecha' },
+      { t: 'Ey, la otra vez me cortaste a media frase. Aquí se escucha completo, ¿eh?', cara: 'furia' },
+      { t: 'Mira, yo te explico con gusto, pero no me dejes hablando solo.', cara: 'aburrido' },
+    ], 2))
+      : humor === 'perdon' ? saludo(una([
+        { t: 'Ya se me pasó, compa. ¿Qué onda, le entramos?' },
+        { t: 'Bueno, ya. Borrón y cuenta nueva. ¿Trato?' },
+      ], 2))
+      : nivel === 'oro' ? saludo({ t: `¡El campeón! La otra vez hiciste ${pTxt} puntos. ¿Vienes por más?`, cara: 'carcajada' })
       : nivel === 'plata' ? saludo({ t: `¡Quiúbole! ${pTxt} puntos la otra vez, nada mal. ¿Le subimos?` })
         : nivel === 'negativo' ? saludo({ t: 'La otra vez terminaste en negativo, compa. Eso no lo había visto nunca. ¿La revancha?', cara: 'sorpresa' })
           : nivel === 'poco' ? saludo(una([
@@ -147,7 +160,16 @@ export function dialogoArgus(lang, datos) {
     : agotados
       ? { t: `The golden ones are gone this month; more arrive on ${fecha(resetsAt, lang) || 'the 1st'}. Until then, ${g} gets you the silver one.`, cara: 'encoge', muestra: 'dorado' }
       : { t: `${quedan} of ${cap} left this month. They go fast.`, cara: 'sospecha', muestra: 'stock' }
-  const otraVez = nivel === 'oro' ? saludo({ t: `The champ! You scored ${pTxt} last time. Back for more?`, cara: 'carcajada' })
+  const otraVez = humor === 'regano' ? saludo(una([
+    { t: "So now you'll listen, buddy? Last time you left me talking to myself.", cara: 'sospecha' },
+    { t: 'Hey, last time you cut me off mid-sentence. Around here we listen to the end, okay?', cara: 'furia' },
+    { t: "Look, I'm happy to explain, but don't leave me hanging.", cara: 'aburrido' },
+  ], 2))
+    : humor === 'perdon' ? saludo(una([
+      { t: "I'm over it, buddy. So, are we doing this?" },
+      { t: 'Okay, clean slate. Deal?' },
+    ], 2))
+    : nivel === 'oro' ? saludo({ t: `The champ! You scored ${pTxt} last time. Back for more?`, cara: 'carcajada' })
     : nivel === 'plata' ? saludo({ t: `Hey! ${pTxt} points last time, not bad. Shall we go higher?` })
       : nivel === 'negativo' ? saludo({ t: 'Last time you ended up in the negatives, buddy. Never seen that before. Rematch?', cara: 'sorpresa' })
         : nivel === 'poco' ? saludo(una([

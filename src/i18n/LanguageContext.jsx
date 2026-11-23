@@ -357,6 +357,17 @@ const resources = {
       rule4: 'Play logged in, or log in when the game ends to claim it.',
       rule5: 'It applies itself in your cart, on one order. You can save it for later.',
       rule6: 'Golden tickets restock on the 1st of every month.',
+      // Picarlo de más (ZoidianNPC, lib/humorNpc.js): no habla un rato por dejarlo
+      // hablando solo (cortes) o por picarlo mucho (clics); cada piquete de más
+      // (insiste). Al cortarlo en su escena lo reclama (cortada, sinAdios).
+      harto: {
+        cortes: ['Nope, buddy. You left me talking to myself, now you wait.', 'Not now. Next time, listen to the end.', 'Nah. First learn to listen.'],
+        clics: ['Hey, buddy! You’re gonna poke my eye out.', 'What am I, a button?', 'That’s enough, let me eat in peace.', 'I’m not a doorbell, buddy.'],
+        insiste: ['I said no.', 'Keep poking and I won’t talk to you all day.', 'I’m counting, okay? That’s a lot already.', 'Which part of “no” didn’t you get?', 'You’re making me mad, buddy.'],
+        cortada: ['Hey! I was talking to you.', 'Seriously, you’re leaving me hanging?', 'Fine, go. I didn’t want to talk anyway.'],
+        sinAdios: ['Not even a goodbye? Rude, buddy.', 'And there you go, no goodbye…'],
+        lejos: ['Come closer, buddy! I can’t hear you from there.', 'Talking to me? Come over here.', 'Over here, buddy.'],
+      },
       // Empujón por invadirle el espacio (distinto del rayo: acá el tema es
       // la distancia personal, no la desgracia ajena).
       mockPush: [
@@ -844,6 +855,17 @@ const resources = {
       rule4: 'Juega con tu sesión iniciada, o inicia sesión al terminar para reclamarlo.',
       rule5: 'Se aplica solo en tu carrito, en una compra. Puedes guardarlo para después.',
       rule6: 'Los Golden se renuevan el día 1 de cada mes.',
+      // Picarlo de más (ZoidianNPC, lib/humorNpc.js): no habla un rato por dejarlo
+      // hablando solo (cortes) o por picarlo mucho (clics); cada piquete de más
+      // (insiste). Al cortarlo en su escena lo reclama (cortada, sinAdios).
+      harto: {
+        cortes: ['No, compa. Me dejaste hablando solo, ahora te aguantas.', 'Ahorita no. La próxima vez escúchame hasta el final.', 'Nel. Primero aprende a escuchar.'],
+        clics: ['¡Ya, compa! Me vas a sacar un ojo.', '¿Qué? ¿Soy botón o qué?', 'Ya estuvo, déjame comer tranquilo.', 'Ni que fuera timbre, compa.'],
+        insiste: ['Que no.', 'Sigue picando y no te vuelvo a hablar en todo el día.', 'Estoy contando, ¿eh? Ya van muchos.', '¿Qué parte de “no” no entendiste?', 'Me estás haciendo enojar, compa.'],
+        cortada: ['¡Ey! Te estaba hablando.', '¿Neta me vas a dejar hablando solo?', 'Ándale, vete. Al cabo ni quería.'],
+        sinAdios: ['¿Ni un adiós? Qué poca, compa.', 'Y se fue sin despedirse…'],
+        lejos: ['¡Acércate, compa! Desde allá no te oigo.', '¿Me hablas a mí? Vente para acá.', 'Aquí estoy, compa. Acércate.'],
+      },
       // Empujón por invadirle el espacio (distinto del rayo: acá el tema es
       // la distancia personal, no la desgracia ajena).
       mockPush: [

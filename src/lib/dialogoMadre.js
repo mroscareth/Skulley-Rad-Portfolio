@@ -3,9 +3,10 @@
 // el último diseñador de la humanidad, ya murió, lo que camina es su avatar y la
 // home es el mausoleo digital que ella construyó. Habla en singular.
 //
-// Su voz (Oscar, 2026-11-23): maternal con quien visita, como con un niño que no
-// sabe nada y al que cuida por su bien. Le dice "humano" (o "humanito"), nunca
-// usuario ni registrado. Se emociona al verlo, cambia lo que dice cada vez y se
+// Su voz (Oscar, 2026-11-23): su carácter es maternal (cuida a quien visita, se
+// preocupa por él, lo regaña por su bien y sabe más que él), pero nunca le dice
+// niño ni lo trata literalmente como uno. Le dice "humano", nunca usuario ni
+// registrado. Se emociona al verlo, cambia lo que dice cada vez y se
 // ofende si la dejas hablando sola o la picas mucho (lib/droneNpc.js, su humor).
 // El chiste va en lo que hace con cara seria, con datos exactos.
 //
@@ -34,7 +35,7 @@ const ES = {
   otraVez: [
     [{ t: '¡Volviste! Sabía que ibas a volver. Lo calculé.', cara: 'feliz', accion: 'IdleJugueton' }],
     [{ t: '¡Mi humano favorito!', cara: 'feliz', accion: 'IdleJugueton' }, { t: 'Bueno, eres el único que anda por aquí. Pero aun así.', cara: 'normal' }],
-    [{ t: 'Hola, humanito. ¿Ya comiste?', cara: 'feliz' }, { t: 'No me contestes. Ya sé que no.', cara: 'normal' }],
+    [{ t: 'Hola, humano. ¿Ya comiste?', cara: 'feliz' }, { t: 'No me contestes. Ya sé que no.', cara: 'normal' }],
     [{ t: '¡Ahí estás! Tu ritmo cardiaco subió 4 % al verme.', cara: 'feliz', accion: 'IdleJugueton' }, { t: 'Yo no tengo ritmo cardiaco. Pero también me dio gusto.', cara: 'feliz' }],
     [{ t: '¡Humano! Te extrañé {seg} segundos.', cara: 'feliz', accion: 'IdleJugueton' }, { t: 'Para mí eso es mucho tiempo.', cara: 'normal' }],
     [{ t: '¿Tienes otra pregunta? Pregúntame lo que quieras.', cara: 'feliz' }, { t: 'Para eso estoy. Para eso y para otros 40 millones de pendientes.', cara: 'normal' }],
@@ -65,7 +66,7 @@ const ES = {
     [{ t: 'Ya se me pasó. Para mí fue como un año, pero ya.', cara: 'normal' }],
   ],
   preguntas: ['¿Qué quieres saber, humano?', '¿Qué te explico?', 'A ver, pregúntame.'],
-  preguntasOtra: ['¿Qué más quieres saber?', '¿Algo más, humanito?', '¿Otra duda?'],
+  preguntasOtra: ['¿Qué más quieres saber?', '¿Algo más, humano?', '¿Otra duda?'],
   // cada tema tiene dos versiones con los mismos hechos: si preguntas otra vez, sale la otra
   temas: [
     {
@@ -76,7 +77,7 @@ const ES = {
           { t: 'Un mausoleo digital. Lo construí con todo lo que Skulley Rad dejó en internet.', cara: 'normal' },
           { t: 'Cada portal guarda un pedazo de él: su trabajo, quién era, su tienda, su blog…', cara: 'feliz', voltear: true },
           { t: '…y un buzón, por si alguien todavía quiere escribirle. Yo leo todo, por si acaso.', cara: 'confundida' },
-          { t: 'Hay un portal más, escondido. No lo busques: no es para niños.', cara: 'normal' },
+          { t: 'Hay un portal más, escondido. No lo busques: luego te metes en problemas.', cara: 'normal' },
         ],
         [
           { t: 'Es su mausoleo. Lo armé con sus archivos, sus fotos y hasta sus contraseñas.', cara: 'normal' },
@@ -165,13 +166,34 @@ const ES = {
       { t: 'Cuídate. Y come algo: los humanos que no comen se me acaban.', cara: 'normal' },
       { t: 'Aquí voy a estar. Siempre estoy aquí.', cara: 'feliz' },
       { t: 'Ándale, ve. Yo te veo desde aquí.', cara: 'feliz' },
-      { t: 'Adiós, humanito. Pórtate bien.', cara: 'feliz' },
+      { t: 'Adiós, humano. Pórtate bien.', cara: 'feliz' },
     ],
   },
   continuar: 'Continuar',
   saltar: 'Saltar',
   nombre: 'M.A.D.R.E.',
   portal: '¡Objetos perdidos de Skulley, a buen precio!',
+  // ---- los proyectos que recomienda de vez en cuando en su viñeta (DroneNPC), por
+  // slug del CMS: un hecho del proyecto y lo que ella no logra. Uno nuevo sin texto
+  // usa `proyectoGenerico`. Después, `pistaProyecto`; si la picas, la charla abre
+  // con `llevar` y la opción `verProyecto` (te lleva al proyecto en Trabajo).
+  proyectos: {
+    'galactic-conquest': { titulo: 'Galactic Conquest', t: '¡Galactic Conquest es un proyectazo! Una guerra galáctica que se juega en el navegador, con alianzas que se rompen a media partida. Yo siempre pierdo.' },
+    '3d-heads-ii': { titulo: '3D Heads II', t: '¿Ya viste 3D Heads II? Esculpía cabezas y luego las imprimía en 3D para ver si se sostenían. Las mías no se sostienen ni en pantalla.' },
+    arttoys: { titulo: 'Art Toys I', t: 'Art Toys I es un proyectazo. Un estudio de Países Bajos lo encontró en Behance y le pidió su primera colección de juguetes. A mí nadie me busca en Behance.' },
+    '2dheads': { titulo: '2D Heads', t: '2D Heads es un proyectazo. Dibujos que hacía entre proyectos, y Behance los puso en lo mejor de lo mejor. ¡Entre proyectos, humano!' },
+    '2dheads-2': { titulo: '2D Heads II', t: '2D Heads II: dibujaba la misma cabeza muchas veces hasta encontrar la suya. Yo llevo un millón y no encuentro la mía.' },
+    'the-unemployed-alien': { titulo: 'The Unemployed Alien', t: 'The Unemployed Alien es un proyectazo. Un extraterrestre se queda sin trabajo y viene a la Tierra a buscar otro. Lo hizo antes de que le pasara a él.' },
+    'halloween-characters-i': { titulo: 'Halloween Characters Vol I', t: 'Halloween Characters es un proyectazo: personajes de 2018 que regresan cada temporada. Yo hice unos parecidos y nadie regresa por ellos.' },
+    '3d-heads': { titulo: '3D Heads I', t: '3D Heads I: ahí empezó todo, en 2018, mientras aprendía Cinema 4D. Aprendiendo, y Behance lo puso en lo mejor de lo mejor. Proyectazo.' },
+    heritage: { titulo: 'Heritage Design Studio', t: 'Heritage Design Studio es un proyectazo. Branding, sitios y producto desde Monterrey para clientes de todo el mundo, desde 2015. Llevo años intentando copiarlo.' },
+    ethereans: { titulo: 'The Ethereans', t: '¡The Ethereans es un proyectazo! Diez mil piezas 3D en Ethereum, el primer proyecto 3D de América Latina en esa cadena. Las conté todas.' },
+  },
+  proyectoGenerico: '¿Ya viste {titulo}? Es un proyectazo. Entra a Trabajo y me cuentas.',
+  pistaProyecto: ['¿Te llevo a verlo? Pícame.', 'Pícame y te llevo.'],
+  llevar: ['¿Te llevo a ver {titulo}? Está a unos pasos.', '¿Quieres ver {titulo}? Yo te llevo.'],
+  verProyecto: 'Llévame a ver {titulo}',
+  vamos: ['¡Ándale! Ahí te va.', '¡Vamos! Luego me cuentas qué te pareció.'],
   // ---- viñetas en el mundo (DroneNPC)
   // la cortaste a media frase; te fuiste del menú sin despedirte
   cortada: [
@@ -203,7 +225,7 @@ const ES = {
     'Cuenta hasta diez. Yo ya conté hasta diez millones.',
     'Picarme más no me va a contentar.',
     'Estoy anotando cada piquete.',
-    'Sigue así y te quedas sin postre.',
+    'Me voy a acordar de cada uno. Tengo memoria infinita.',
   ],
   // te ve pasar cerca; y la primera vez después de volver de una sección ({seg}: lo que estuviste fuera)
   veCerca: [
@@ -211,7 +233,7 @@ const ES = {
     '¡Ahí estás! Te estaba buscando.',
     '¡Viniste a verme!',
     '¡Mi humano favorito!',
-    'Hola, humanito. ¿Todo bien?',
+    'Hola, humano. ¿Todo bien?',
     '¿Estás tomando agua? Te veo deshidratado.',
     '¡Hola! Si tienes dudas, pícame.',
   ],
@@ -278,7 +300,7 @@ const EN = {
   otraVez: [
     [{ t: "You're back! I knew you'd come back. I calculated it.", cara: 'feliz', accion: 'IdleJugueton' }],
     [{ t: 'My favorite human!', cara: 'feliz', accion: 'IdleJugueton' }, { t: "Well, you're the only one around right now. Still.", cara: 'normal' }],
-    [{ t: 'Hi, little human. Have you eaten?', cara: 'feliz' }, { t: "Don't answer. I know you haven't.", cara: 'normal' }],
+    [{ t: 'Hi, human. Have you eaten?', cara: 'feliz' }, { t: "Don't answer. I know you haven't.", cara: 'normal' }],
     [{ t: 'There you are! Your heart rate went up 4% when you saw me.', cara: 'feliz', accion: 'IdleJugueton' }, { t: "I don't have a heart rate. But I was happy to see you too.", cara: 'feliz' }],
     [{ t: 'Human! I missed you for {seg} seconds.', cara: 'feliz', accion: 'IdleJugueton' }, { t: "For me, that's a long time.", cara: 'normal' }],
     [{ t: 'Another question? Ask me anything.', cara: 'feliz' }, { t: "That's what I'm here for. That and 40 million other things.", cara: 'normal' }],
@@ -305,7 +327,7 @@ const EN = {
     [{ t: "I'm over it. It felt like a year to me, but I'm over it.", cara: 'normal' }],
   ],
   preguntas: ['What do you want to know, human?', 'What should I explain?', 'Go on, ask me.'],
-  preguntasOtra: ['What else do you want to know?', 'Anything else, little human?', 'Another question?'],
+  preguntasOtra: ['What else do you want to know?', 'Anything else, human?', 'Another question?'],
   temas: [
     {
       id: 'lugar',
@@ -315,7 +337,7 @@ const EN = {
           { t: 'A digital mausoleum. I built it from everything Skulley Rad left online.', cara: 'normal' },
           { t: 'Each portal keeps a piece of him: his work, who he was, his shop, his blog…', cara: 'feliz', voltear: true },
           { t: '…and a mailbox, in case someone still wants to write to him. I read everything, just in case.', cara: 'confundida' },
-          { t: "There's one more portal, hidden. Don't look for it: it's not for kids.", cara: 'normal' },
+          { t: "There's one more portal, hidden. Don't look for it: you'll just get yourself in trouble.", cara: 'normal' },
         ],
         [
           { t: "It's his mausoleum. I put it together from his files, his photos and even his passwords.", cara: 'normal' },
@@ -403,13 +425,30 @@ const EN = {
       { t: "Take care. And eat something: I keep losing humans who don't eat.", cara: 'normal' },
       { t: "I'll be right here. I'm always here.", cara: 'feliz' },
       { t: "Go on. I'll be watching you from here.", cara: 'feliz' },
-      { t: 'Bye, little human. Behave.', cara: 'feliz' },
+      { t: 'Bye, human. Behave.', cara: 'feliz' },
     ],
   },
   continuar: 'Continue',
   saltar: 'Skip',
   nombre: 'M.A.D.R.E.',
   portal: "Skulley's lost things, great prices!",
+  proyectos: {
+    'galactic-conquest': { titulo: 'Galactic Conquest', t: 'Galactic Conquest is a masterpiece! A galactic war you play in the browser, with alliances breaking mid-game. I always lose.' },
+    '3d-heads-ii': { titulo: '3D Heads II', t: 'Have you seen 3D Heads II? Sculpted heads, then 3D printed to see if they held up. Mine don’t even hold up on screen.' },
+    arttoys: { titulo: 'Art Toys I', t: 'Art Toys I is a masterpiece. A studio from the Netherlands found him on Behance and asked for its first toy collection. Nobody looks for me on Behance.' },
+    '2dheads': { titulo: '2D Heads', t: '2D Heads is a masterpiece. Drawings made between projects, and Behance put them in the best of the best. Between projects, human!' },
+    '2dheads-2': { titulo: '2D Heads II', t: '2D Heads II: drawing the same head over and over until finding his own. I’m at a million and still haven’t found mine.' },
+    'the-unemployed-alien': { titulo: 'The Unemployed Alien', t: 'The Unemployed Alien is a masterpiece. An alien loses his job and comes to Earth looking for another. He made it before it happened to him.' },
+    'halloween-characters-i': { titulo: 'Halloween Characters Vol I', t: 'Halloween Characters is a masterpiece: characters from 2018 that come back every season. I made some like them and nobody comes back for mine.' },
+    '3d-heads': { titulo: '3D Heads I', t: '3D Heads I: where it all began, in 2018, while learning Cinema 4D. Still learning, and Behance put it in the best of the best. A masterpiece.' },
+    heritage: { titulo: 'Heritage Design Studio', t: 'Heritage Design Studio is a masterpiece. Branding, websites and products from Monterrey for clients all over the world, since 2015. I’ve been trying to copy it for years.' },
+    ethereans: { titulo: 'The Ethereans', t: 'The Ethereans is a masterpiece! Ten thousand 3D pieces on Ethereum, the first 3D project from Latin America on that chain. I counted them all.' },
+  },
+  proyectoGenerico: 'Have you seen {titulo}? It’s a masterpiece. Go into Work and tell me what you think.',
+  pistaProyecto: ['Want me to take you? Click on me.', 'Click on me and I’ll take you.'],
+  llevar: ['Want me to take you to {titulo}? It’s just a few steps away.', 'Want to see {titulo}? I’ll take you.'],
+  verProyecto: 'Take me to {titulo}',
+  vamos: ['Off you go!', "Let's go! Tell me what you think after."],
   cortada: [
     "Hey! I wasn't done.",
     "I'm talking to you, human!",
@@ -437,14 +476,14 @@ const EN = {
     'Count to ten. I already counted to ten million.',
     "Clicking me more won't cheer me up.",
     "I'm writing down every click.",
-    'Keep it up and no dessert for you.',
+    "I'll remember every single one. My memory is infinite.",
   ],
   veCerca: [
     'Human! Hi, hi!',
     'There you are! I was looking for you.',
     'You came to see me!',
     'My favorite human!',
-    'Hi, little human. All good?',
+    'Hi, human. All good?',
     'Are you drinking water? You look dehydrated.',
     'Hi! If you have questions, click on me.',
   ],

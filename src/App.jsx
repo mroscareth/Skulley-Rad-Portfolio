@@ -2359,6 +2359,15 @@ function SiteApp() {
     return extractWorkSlug(window.location.pathname)
   })
 
+  // M.A.D.R.E. te recomendó un proyecto y le pediste "Llévame a verlo"
+  // (DialogoMadre): Skulley va al portal de Trabajo como con la barra y Section1
+  // abre ese proyecto al montar (initialSlug).
+  const verProyectoDeMadre = useCallback((slug) => {
+    if (!slug) return
+    setWorkProjectSlug(slug)
+    handleMenuSectionSelect('section1')
+  }, [handleMenuSectionSelect])
+
   // Callback for Section1 to update URL when a project detail is opened/closed
   const handleWorkSlugChange = useCallback((slug) => {
     setWorkProjectSlug(slug)
@@ -4089,6 +4098,7 @@ function SiteApp() {
         <Suspense fallback={null}>
           <DialogoMadre
             modo={dialogoModo}
+            onVerProyecto={verProyectoDeMadre}
             onClose={() => {
               setDialogoDron(false)
               if (dialogoModo === 'bienvenida') {
