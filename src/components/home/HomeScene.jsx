@@ -247,6 +247,7 @@ import FakeGrass from '../FakeGrass.jsx'
 import PastoPintado from './PastoPintado.jsx'
 import BosquePintado from './BosquePintado.jsx'
 import PetalosCamino from './PetalosCamino.jsx'
+import BordeDelMundo from './BordeDelMundo.jsx'
 import { PrecalentarGlobo } from '../SpeechBubble3D.jsx'
 import FloatingExclamation from '../FloatingExclamation.jsx'
 import ZoidianNPC from '../ZoidianNPC.jsx'
@@ -668,6 +669,9 @@ export default function HomeScene({
         {/* El bosque del claro (home/BosquePintado.jsx): pinos, peñascos y los menhires
             rúnicos de cada portal. Montado siempre; se compila antes de entrar a la escena. */}
         <BosquePintado playerRef={playerRef} portales={portals} colorPiso={psychoSceneColor || '#204580'} portalMixMap={portalMixMap} visible={comoHome} />
+        {/* Pasando el portal del glifo: barricadas de calle cerrada y, detrás, el código
+            crudo del mundo, que se revela al acercarse (home/BordeDelMundo.jsx). */}
+        <BordeDelMundo playerRef={playerRef} />
         {/* God Rays anchor (hidden when inactive and no depth write) */}
         {fx.godEnabled && (
           <mesh ref={sunRef} position={[0, 8, 0]}>

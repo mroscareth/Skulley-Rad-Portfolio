@@ -35,12 +35,14 @@ const URL_ATLAS = `${import.meta.env.BASE_URL}textures/bosque-atlas.webp?v=${VER
 
 export const BOSQUE = {
   semilla: 23,
-  anillo: [30, 54],        // el bosque alrededor del claro (radio)
+  // Más tupido y más ancho desde el 2026-11-23 (Oscar: en los huecos se veía el vacío);
+  // por fuera de todo, el código (BordeDelMundo).
+  anillo: [30, 62],        // el bosque alrededor del claro (radio)
   hueco: 9,                // medio ancho del paso al norte, hacia el glifo
-  corredor: [9, 26],       // |x| de los pinos a los lados del camino al glifo
-  corredorZ: [-50, -104],
-  glifo: [18, 32],         // anillo alrededor de la plaza del glifo
-  separa: 5.4,             // distancia mínima entre troncos de escala 1
+  corredor: [9, 36],       // |x| de los pinos a los lados del camino al glifo
+  corredorZ: [-46, -108],
+  glifo: [18, 40],         // anillo alrededor de la plaza del glifo
+  separa: 4.3,             // distancia mínima entre troncos de escala 1
   zona: 30,
   menhirR: 19.6,           // los menhires, detrás de cada portal
   menhirAng: 0.235,        // y a los lados (radianes)
@@ -115,21 +117,21 @@ function sembrar(portales) {
   }
   // El anillo del claro, el camino al glifo y el anillo del glifo.
   const [r0, r1] = BOSQUE.anillo
-  for (let i = 0; i < 9000; i++) {
+  for (let i = 0; i < 18000; i++) {
     const a = azar() * Math.PI * 2
     const r = Math.sqrt(r0 * r0 + azar() * (r1 * r1 - r0 * r0))
     ponerPino(Math.cos(a) * r, Math.sin(a) * r, (r - r0) / (r1 - r0))
   }
   const [c0, c1] = BOSQUE.corredor
   const [zc0, zc1] = BOSQUE.corredorZ
-  for (let i = 0; i < 2500; i++) {
+  for (let i = 0; i < 6000; i++) {
     const lado = azar() < 0.5 ? -1 : 1
     const ax = c0 + azar() * (c1 - c0)
     ponerPino(lado * ax, zc0 + azar() * (zc1 - zc0), (ax - c0) / (c1 - c0) * 0.9)
   }
   const { plazaGlifo } = zonasPiso
   const [g0, g1] = BOSQUE.glifo
-  for (let i = 0; i < 3000; i++) {
+  for (let i = 0; i < 7000; i++) {
     const a = azar() * Math.PI * 2
     const r = g0 + azar() * (g1 - g0)
     ponerPino(plazaGlifo[0] + Math.cos(a) * r, plazaGlifo[1] + Math.sin(a) * r, (r - g0) / (g1 - g0))
