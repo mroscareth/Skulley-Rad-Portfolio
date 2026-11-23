@@ -375,11 +375,8 @@ function SiteApp() {
     godClampMax: 0.56,
     godSamples: 28,
     dofEnabled: false,
-    dofProgressive: false,
-    dofFocusDistance: 0.375,
-    dofFocalLength: 0.005,
+    dofRango: 6,
     dofBokehScale: 2.1,
-    dofFocusSpeed: 0.12,
   }))
   const [portraitGlowV, setPortraitGlowV] = useState(0)
   const [navTarget, setNavTarget] = useState(null)

@@ -1114,11 +1114,8 @@ export default function HomeScene({
             godClampMax={fx.godClampMax}
             godSamples={fx.godSamples}
             dofEnabled={fx.dofEnabled}
-            dofProgressive={fx.dofProgressive}
-            dofFocusDistance={fx.dofFocusDistance}
-            dofFocalLength={fx.dofFocalLength}
+            dofRango={fx.dofRango}
             dofBokehScale={fx.dofBokehScale}
-            dofFocusSpeed={fx.dofFocusSpeed}
             dofTargetRef={dofTargetRef}
             // Yellow outline for the character
             outlineEnabled={comoHome && !bootLoading}

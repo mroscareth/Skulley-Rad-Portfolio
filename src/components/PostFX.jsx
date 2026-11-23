@@ -78,11 +78,8 @@ export default function PostFX({
   godClampMax = 1.0,
   godSamples = 60,
   dofEnabled = false,
-  dofProgressive = true,
-  dofFocusDistance = 0.2,
-  dofFocalLength = 0.02,
-  dofBokehScale = 3.0,
-  dofFocusSpeed = 0.08,
+  dofRango = 6,
+  dofBokehScale = 2.1,
   dofTargetRef = null,
   // Outline for character
   outlineEnabled = true,
@@ -576,20 +573,13 @@ export default function PostFX({
     tex.needsUpdate = true
     return tex
   }, [])
-  // Progressive DOF: compute normalized focusDistance from Z in camera space
-  const { camera } = useThree()
-  const focusDistRef = useRef(dofFocusDistance)
-  // Reuse temp vector to avoid per-frame allocations
-  const dofWorldVecRef = useRef(new THREE.Vector3())
+  // Profundidad de campo: el foco sigue a Skulley, a la altura del pecho (postprocessing
+  // 6.38 mide el foco y su rango en unidades del mundo; `target` lo enfoca solo).
+  const dofPunto = useMemo(() => new THREE.Vector3(), [])
   useFrame(() => {
-    if (!dofEnabled || !dofProgressive || !dofTargetRef?.current) return
-    const world = dofWorldVecRef.current
-    dofTargetRef.current.getWorldPosition(world)
-    // to camera space
-    world.applyMatrix4(camera.matrixWorldInverse)
-    const zView = -world.z // positive = in front of camera
-    const t = THREE.MathUtils.clamp((zView - camera.near) / (camera.far - camera.near), 0, 1)
-    focusDistRef.current = THREE.MathUtils.lerp(focusDistRef.current, t, dofFocusSpeed)
+    if (!dofEnabled || !dofTargetRef?.current) return
+    dofTargetRef.current.getWorldPosition(dofPunto)
+    dofPunto.y += 1.4
   })
 
   const godKey = useMemo(
@@ -646,8 +636,8 @@ export default function PostFX({
         {/* (En desarrollo, window.__dofIgnoraLowPerf la deja medir aunque la home vaya en lowPerf.) */}
         {(!lowPerf || (import.meta.env.DEV && typeof window !== 'undefined' && window.__dofIgnoraLowPerf)) && !isMobile && dofEnabled && (
           <DepthOfField
-            focusDistance={dofProgressive ? focusDistRef.current : dofFocusDistance}
-            focalLength={dofFocalLength}
+            target={dofPunto}
+            focusRange={dofRango}
             bokehScale={dofBokehScale}
           />
         )}
