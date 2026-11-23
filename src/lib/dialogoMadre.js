@@ -180,16 +180,16 @@ const ES = {
   // Los que en el CMS son un enlace a otro sitio (Heritage, The Ethereans) usan
   // `pistaFuera`, `llevarFuera`, `verFuera` y `vamosFuera`: se abren en otra pestaña.
   proyectos: {
-    'galactic-conquest': { titulo: 'Galactic Conquest', t: '¡Galactic Conquest es un proyectazo! Una guerra galáctica que se juega en el navegador, con alianzas que se rompen a media partida. Yo siempre pierdo.' },
-    '3d-heads-ii': { titulo: '3D Heads II', t: '¿Ya viste 3D Heads II? Esculpía cabezas y luego las imprimía en 3D para ver si se sostenían. Las mías no se sostienen ni en pantalla.' },
-    arttoys: { titulo: 'Art Toys I', t: 'Art Toys I es un proyectazo. Un estudio de Países Bajos lo encontró en Behance y le pidió su primera colección de juguetes. A mí nadie me busca en Behance.' },
-    '2dheads': { titulo: '2D Heads', t: '2D Heads es un proyectazo. Dibujos que hacía entre proyectos, y Behance los puso en lo mejor de lo mejor. ¡Entre proyectos, humano!' },
-    '2dheads-2': { titulo: '2D Heads II', t: '2D Heads II: dibujaba la misma cabeza muchas veces hasta encontrar la suya. Yo llevo un millón y no encuentro la mía.' },
-    'the-unemployed-alien': { titulo: 'The Unemployed Alien', t: 'The Unemployed Alien es un proyectazo. Un extraterrestre se queda sin trabajo y viene a la Tierra a buscar otro. Lo hizo antes de que le pasara a él.' },
-    'halloween-characters-i': { titulo: 'Halloween Characters Vol I', t: 'Halloween Characters es un proyectazo: personajes de 2018 que regresan cada temporada. Yo hice unos parecidos y nadie regresa por ellos.' },
-    '3d-heads': { titulo: '3D Heads I', t: '3D Heads I: ahí empezó todo, en 2018, mientras aprendía Cinema 4D. Aprendiendo, y Behance lo puso en lo mejor de lo mejor. Proyectazo.' },
-    heritage: { titulo: 'Heritage Design Studio', t: 'Heritage Design Studio es un proyectazo. Branding, sitios y producto desde Monterrey para clientes de todo el mundo, desde 2015. Llevo años intentando copiarlo.' },
-    ethereans: { titulo: 'The Ethereans', t: '¡The Ethereans es un proyectazo! Diez mil piezas 3D en Ethereum, el primer proyecto 3D de América Latina en esa cadena. Las conté todas.' },
+    'galactic-conquest': { titulo: 'Galactic Conquest', t: '¡Galactic Conquest es un proyectazo! Una guerra galáctica que se juega en el navegador, con alianzas que se rompen a media partida. Yo siempre pierdo.', tipo: 'juego' },
+    '3d-heads-ii': { titulo: '3D Heads II', t: '¿Ya viste 3D Heads II? Esculpía cabezas y luego las imprimía en 3D para ver si se sostenían. Las mías no se sostienen ni en pantalla.', tipo: 'personajes3d' },
+    arttoys: { titulo: 'Art Toys I', t: 'Art Toys I es un proyectazo. Un estudio de Países Bajos lo encontró en Behance y le pidió su primera colección de juguetes. A mí nadie me busca en Behance.', tipo: 'juguetes' },
+    '2dheads': { titulo: '2D Heads', t: '2D Heads es un proyectazo. Dibujos que hacía entre proyectos, y Behance los puso en lo mejor de lo mejor. ¡Entre proyectos, humano!', tipo: 'ilustracion' },
+    '2dheads-2': { titulo: '2D Heads II', t: '2D Heads II: dibujaba la misma cabeza muchas veces hasta encontrar la suya. Yo llevo un millón y no encuentro la mía.', tipo: 'ilustracion' },
+    'the-unemployed-alien': { titulo: 'The Unemployed Alien', t: 'The Unemployed Alien es un proyectazo. Un extraterrestre se queda sin trabajo y viene a la Tierra a buscar otro. Lo hizo antes de que le pasara a él.', tipo: 'personajes3d' },
+    'halloween-characters-i': { titulo: 'Halloween Characters Vol I', t: 'Halloween Characters es un proyectazo: personajes de 2018 que regresan cada temporada. Yo hice unos parecidos y nadie regresa por ellos.', tipo: 'personajes3d' },
+    '3d-heads': { titulo: '3D Heads I', t: '3D Heads I: ahí empezó todo, en 2018, mientras aprendía Cinema 4D. Aprendiendo, y Behance lo puso en lo mejor de lo mejor. Proyectazo.', tipo: 'personajes3d' },
+    heritage: { titulo: 'Heritage Design Studio', t: 'Heritage Design Studio es un proyectazo. Branding, sitios y producto desde Monterrey para clientes de todo el mundo, desde 2015. Llevo años intentando copiarlo.', tipo: 'estudio' },
+    ethereans: { titulo: 'The Ethereans', t: '¡The Ethereans es un proyectazo! Diez mil piezas 3D en Ethereum, el primer proyecto 3D de América Latina en esa cadena. Las conté todas.', tipo: 'coleccion3d' },
   },
   proyectoGenerico: '¿Ya viste {titulo}? Es un proyectazo. Entra a Trabajo y me cuentas.',
   pistaProyecto: ['¿Te lo enseño? Pícame.', 'Pícame y te lo enseño.'],
@@ -200,6 +200,54 @@ const ES = {
   llevarFuera: ['{titulo} tiene su propio sitio. ¿Te lo abro en otra pestaña?', '¿Quieres ver el sitio de {titulo}? Te lo abro en otra pestaña.'],
   verFuera: 'Abrir {titulo} en otra pestaña',
   vamosFuera: ['Listo, ya te lo abrí. Aquí te espero, ¿eh?', 'Ya está en otra pestaña. No te tardes.'],
+  // Al regresar del proyecto que te enseñó (al cerrar su ficha, o al cerrar la
+  // charla si lo abrió en otra pestaña) lo comenta en su viñeta: dónde lo usaría
+  // una marca (Oscar, 2026-11-23: "que la gente que vea mi trabajo pueda pensar
+  // en dónde lo usaría"). Sale de `usosProyecto[slug]`, si no de `usos[tipo]` (el
+  // `tipo` de cada proyecto arriba) y si no de `usos.generico`.
+  usos: {
+    personajes3d: [
+      '¿Increíble, verdad? Yo me imagino a estos personajes como inflables gigantes en un festival. O en una campaña, viéndote desde un espectacular.',
+      'Imagínalos como la mascota de una marca: en el empaque, en la tienda, en el comercial. Yo ya los imaginé ahí 3,000 veces.',
+      'Ponlos en un aparador, en una figura de colección o en la portada de algo. Donde los pongas, la gente voltea. Lo tengo medido.',
+    ],
+    ilustracion: [
+      'Esto lo dibujaba entre proyectos, ¿eh? Imagínalo en un mural, en el empaque de algo rico o en una colección de playeras.',
+      'Cada una de esas caras puede ser un sticker, la portada de un disco o la cara de una marca. Yo nada más las guardo.',
+      'Con un montón de personajes así, una campaña en redes casi se arma sola. Casi: él los dibujaba a mano.',
+    ],
+    juguetes: [
+      'Imagina una colaboración así con una marca: figuras de edición limitada para coleccionar, regalar o presumir en el escritorio.',
+      'La gente tira los volantes, pero los juguetes no. Una colección así puede contar la historia de una marca por años.',
+    ],
+    juego: [
+      'Este tipo estaba loco. Los juegos son excelentes activaciones para marcas: la gente juega, se queda y se acuerda de ti.',
+      'Imagínate un juego así para un lanzamiento o un evento. Nadie ve un anuncio completo, pero un juego lo juegan hasta las tres de la mañana.',
+      'Un juego así es publicidad que la gente comparte sola. Lo calculé: nadie comparte un banner.',
+    ],
+    coleccion3d: [
+      '¿Viste cuántos son? Diez mil personajes distintos. Imagínalos como skins de un videojuego, figuras impresas o tarjetas coleccionables.',
+      'Cada uno de esos personajes puede ser el avatar de alguien, un juguete o la mascota de una comunidad entera. Ahí cabe un universo.',
+    ],
+    estudio: [
+      'Branding, sitios, producto… Imagínate a tu marca ahí adentro. Yo imaginé la mía y todavía no sale igual.',
+      '¿Viste cuántas industrias caben en un solo portafolio? Si tu marca necesita verse así, ya sabes dónde buscar.',
+    ],
+    generico: [
+      '¿Te gustó? Piensa dónde lo pondrías: en una campaña, en una tienda, en tu casa. Yo pienso en eso todo el tiempo.',
+      'Imagínatelo en una marca. A mí no me sale igual, pero imaginar sí puedo.',
+    ],
+  },
+  usosProyecto: {
+    'halloween-characters-i': [
+      '¿A poco no se ven perfectos para una campaña de temporada? Aparadores, empaques, la fiesta de una marca… Cada octubre regresan solos.',
+      'Imagínalos impresos en gigante en un centro comercial en octubre. O en una botella de edición especial. Asustan bonito.',
+    ],
+    'the-unemployed-alien': [
+      'Un personaje con historia propia. Imagínalo como mascota de una marca, en una serie animada o en stickers para redes.',
+      'Con un personaje así, una marca tiene quién la cuente. Y este hasta anda buscando trabajo.',
+    ],
+  },
   // ---- viñetas en el mundo (DroneNPC)
   // la cortaste a media frase; te fuiste del menú sin despedirte
   cortada: [
@@ -439,16 +487,16 @@ const EN = {
   nombre: 'M.A.D.R.E.',
   portal: "Skulley's lost things, great prices!",
   proyectos: {
-    'galactic-conquest': { titulo: 'Galactic Conquest', t: 'Galactic Conquest is a masterpiece! A galactic war you play in the browser, with alliances breaking mid-game. I always lose.' },
-    '3d-heads-ii': { titulo: '3D Heads II', t: 'Have you seen 3D Heads II? Sculpted heads, then 3D printed to see if they held up. Mine don’t even hold up on screen.' },
-    arttoys: { titulo: 'Art Toys I', t: 'Art Toys I is a masterpiece. A studio from the Netherlands found him on Behance and asked for its first toy collection. Nobody looks for me on Behance.' },
-    '2dheads': { titulo: '2D Heads', t: '2D Heads is a masterpiece. Drawings made between projects, and Behance put them in the best of the best. Between projects, human!' },
-    '2dheads-2': { titulo: '2D Heads II', t: '2D Heads II: drawing the same head over and over until finding his own. I’m at a million and still haven’t found mine.' },
-    'the-unemployed-alien': { titulo: 'The Unemployed Alien', t: 'The Unemployed Alien is a masterpiece. An alien loses his job and comes to Earth looking for another. He made it before it happened to him.' },
-    'halloween-characters-i': { titulo: 'Halloween Characters Vol I', t: 'Halloween Characters is a masterpiece: characters from 2018 that come back every season. I made some like them and nobody comes back for mine.' },
-    '3d-heads': { titulo: '3D Heads I', t: '3D Heads I: where it all began, in 2018, while learning Cinema 4D. Still learning, and Behance put it in the best of the best. A masterpiece.' },
-    heritage: { titulo: 'Heritage Design Studio', t: 'Heritage Design Studio is a masterpiece. Branding, websites and products from Monterrey for clients all over the world, since 2015. I’ve been trying to copy it for years.' },
-    ethereans: { titulo: 'The Ethereans', t: 'The Ethereans is a masterpiece! Ten thousand 3D pieces on Ethereum, the first 3D project from Latin America on that chain. I counted them all.' },
+    'galactic-conquest': { titulo: 'Galactic Conquest', t: 'Galactic Conquest is a masterpiece! A galactic war you play in the browser, with alliances breaking mid-game. I always lose.', tipo: 'juego' },
+    '3d-heads-ii': { titulo: '3D Heads II', t: 'Have you seen 3D Heads II? Sculpted heads, then 3D printed to see if they held up. Mine don’t even hold up on screen.', tipo: 'personajes3d' },
+    arttoys: { titulo: 'Art Toys I', t: 'Art Toys I is a masterpiece. A studio from the Netherlands found him on Behance and asked for its first toy collection. Nobody looks for me on Behance.', tipo: 'juguetes' },
+    '2dheads': { titulo: '2D Heads', t: '2D Heads is a masterpiece. Drawings made between projects, and Behance put them in the best of the best. Between projects, human!', tipo: 'ilustracion' },
+    '2dheads-2': { titulo: '2D Heads II', t: '2D Heads II: drawing the same head over and over until finding his own. I’m at a million and still haven’t found mine.', tipo: 'ilustracion' },
+    'the-unemployed-alien': { titulo: 'The Unemployed Alien', t: 'The Unemployed Alien is a masterpiece. An alien loses his job and comes to Earth looking for another. He made it before it happened to him.', tipo: 'personajes3d' },
+    'halloween-characters-i': { titulo: 'Halloween Characters Vol I', t: 'Halloween Characters is a masterpiece: characters from 2018 that come back every season. I made some like them and nobody comes back for mine.', tipo: 'personajes3d' },
+    '3d-heads': { titulo: '3D Heads I', t: '3D Heads I: where it all began, in 2018, while learning Cinema 4D. Still learning, and Behance put it in the best of the best. A masterpiece.', tipo: 'personajes3d' },
+    heritage: { titulo: 'Heritage Design Studio', t: 'Heritage Design Studio is a masterpiece. Branding, websites and products from Monterrey for clients all over the world, since 2015. I’ve been trying to copy it for years.', tipo: 'estudio' },
+    ethereans: { titulo: 'The Ethereans', t: 'The Ethereans is a masterpiece! Ten thousand 3D pieces on Ethereum, the first 3D project from Latin America on that chain. I counted them all.', tipo: 'coleccion3d' },
   },
   proyectoGenerico: 'Have you seen {titulo}? It’s a masterpiece. Go into Work and tell me what you think.',
   pistaProyecto: ['Want me to show you? Click on me.', 'Click on me and I’ll show you.'],
@@ -459,6 +507,49 @@ const EN = {
   llevarFuera: ['{titulo} has its own site. Want me to open it in a new tab?', 'Want to see the {titulo} site? I’ll open it in a new tab.'],
   verFuera: 'Open {titulo} in a new tab',
   vamosFuera: ['Done, it’s open. I’ll wait right here, okay?', 'It’s in another tab. Don’t take too long.'],
+  usos: {
+    personajes3d: [
+      'Amazing, right? I can picture these characters as giant inflatables at a festival. Or in an ad campaign, looking down at you from a billboard.',
+      'Picture them as a brand mascot: on the packaging, in the store, in the commercial. I’ve pictured them there 3,000 times.',
+      'Put them in a shop window, on a collectible figure or on the cover of something. Wherever they go, people turn their heads. I measured it.',
+    ],
+    ilustracion: [
+      'He drew these between projects, you know. Picture them on a mural, on the packaging of something tasty or on a line of T-shirts.',
+      'Each of those faces could be a sticker, an album cover or the face of a brand. I just keep them.',
+      'With a crowd of characters like this, a social campaign almost builds itself. Almost: he drew them by hand.',
+    ],
+    juguetes: [
+      'Imagine a collab like this with a brand: limited-edition figures to collect, to gift or to show off on a desk.',
+      'People throw flyers away, but not toys. A collection like this can tell a brand’s story for years.',
+    ],
+    juego: [
+      'This guy was crazy. Games make excellent brand activations: people play, they stay and they remember you.',
+      'Imagine a game like this for a launch or an event. Nobody watches a whole ad, but they’ll play a game until 3 a.m.',
+      'A game like this is advertising people share on their own. I ran the numbers: nobody shares a banner.',
+    ],
+    coleccion3d: [
+      'Did you see how many there are? Ten thousand different characters. Picture them as video game skins, 3D printed figures or trading cards.',
+      'Each of those characters could be someone’s avatar, a toy or the mascot of a whole community. A universe fits in there.',
+    ],
+    estudio: [
+      'Branding, websites, products… Picture your brand in there. I pictured mine and it still doesn’t come out the same.',
+      'Did you see how many industries fit in one portfolio? If your brand needs to look like that, you know where to look.',
+    ],
+    generico: [
+      'Did you like it? Think about where you’d put it: a campaign, a store, your home. I think about that all the time.',
+      'Picture it on a brand. Mine never comes out the same, but I can still imagine.',
+    ],
+  },
+  usosProyecto: {
+    'halloween-characters-i': [
+      'Don’t they look perfect for a seasonal campaign? Shop windows, packaging, a brand’s party… They come back on their own every October.',
+      'Picture them printed huge in a mall in October. Or on a special-edition bottle. They scare you in a nice way.',
+    ],
+    'the-unemployed-alien': [
+      'A character with a story of his own. Picture him as a brand mascot, in an animated series or as stickers for social media.',
+      'With a character like this, a brand has someone to tell its story. And this one is even looking for a job.',
+    ],
+  },
   cortada: [
     "Hey! I wasn't done.",
     "I'm talking to you, human!",

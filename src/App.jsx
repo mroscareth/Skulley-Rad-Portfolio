@@ -191,7 +191,7 @@ import useTicketDiscount from './hooks/useTicketDiscount.js'
 import { useShopCartCtx } from './lib/shopCartContext.jsx'
 import { startGameSession, endGameSession } from './lib/gameSession.js'
 import { iniciarJuego, detenerJuego, escuchar as escucharJuego } from './lib/juegoEsferas.js'
-import { castigarConDron } from './lib/droneNpc.js'
+import { castigarConDron, avisarDron } from './lib/droneNpc.js'
 import { argus } from './lib/argusNpc.js'
 import JuegoHUD from './components/JuegoHUD.jsx'
 import useDwellTimeTracking from './hooks/useDwellTimeTracking.js'
@@ -2407,6 +2407,8 @@ function SiteApp() {
   // tarda (Oscar: nada de un "Cargando…" suelto), y entonces se abre.
   const [proyectoRapido, setProyectoRapido] = useState(null)
   const proyectoRapidoRef = useRef(null)
+  // El que abrió M.A.D.R.E. (verProyectoDeMadre): al cerrarlo, lo comenta.
+  const proyectoDeMadreRef = useRef(null)
   proyectoRapidoRef.current = proyectoRapido
   const viajeRapidoRef = useRef(false)
   const proyectoListoRef = useRef(null)
@@ -2453,6 +2455,7 @@ function SiteApp() {
   const cerrarProyectoRapido = useCallback(async ({ desdeHistorial = false } = {}) => {
     if (viajeRapidoRef.current || !proyectoRapidoRef.current) return
     viajeRapidoRef.current = true
+    const cerrado = proyectoRapidoRef.current
     try {
       await irisCubrir({ color: fondoDe(document.querySelector('.qp-raiz')) })
       setProyectoRapido(null)
@@ -2464,8 +2467,11 @@ function SiteApp() {
       // En la completa la escena estaba en pausa: que vuelva a dibujar antes de abrir.
       await new Promise((listo) => requestAnimationFrame(() => requestAnimationFrame(VERSION_RAPIDA ? listo : () => requestAnimationFrame(listo))))
       await irisOpen({ x: window.innerWidth / 2, y: window.innerHeight * 0.55 })
+      // si te lo enseñó M.A.D.R.E., lo comenta en su viñeta
+      if (proyectoDeMadreRef.current === cerrado) avisarDron({ comenta: cerrado })
     } finally {
       viajeRapidoRef.current = false
+      proyectoDeMadreRef.current = null
     }
   }, [baseUrl])
   const proyectoRapidoFnsRef = useRef(null)
@@ -2474,7 +2480,9 @@ function SiteApp() {
   // (DialogoMadre): su ficha se abre encima de la home, sin pasar por Trabajo. Los
   // de enlace ya los abrió ella en otra pestaña.
   const verProyectoDeMadre = useCallback((slug) => {
-    if (slug) abrirProyectoRapido(slug)
+    if (!slug) return
+    proyectoDeMadreRef.current = slug
+    abrirProyectoRapido(slug)
   }, [abrirProyectoRapido])
   // Desde QuickHome (tarjetas) y QuickMenu. En la home la navegación del sitio
   // manda a Skulley al portal (handleMenuSectionSelect); aquí no hay portal, así
@@ -2496,7 +2504,7 @@ function SiteApp() {
   }, [section, transitionState.active])
   // Una sección elegida con el proyecto abierto lo cierra ya tapada.
   useEffect(() => {
-    if (section !== 'home' && proyectoRapido) { setProyectoRapido(null); setProyectoTapa(false); setProyectoPausa(false) }
+    if (section !== 'home' && proyectoRapido) { setProyectoRapido(null); setProyectoTapa(false); setProyectoPausa(false); proyectoDeMadreRef.current = null }
   }, [section, proyectoRapido])
   // El menú de la versión rápida (NavOverlay a pantalla completa): las cinco
   // secciones, con el mismo nombre que en la nav del sitio.

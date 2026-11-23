@@ -25,7 +25,9 @@ import RenglonRunas from './RenglonRunas.jsx'
 // cerrar, App abre su ficha encima de la home, sin pasar por Trabajo
 // (`onVerProyecto`). Si el proyecto es un enlace a otro sitio (`url`), lo abre en
 // otra pestaña en el mismo clic o Enter que lo elige (el navegador solo deja abrir
-// pestañas en un gesto del usuario) y luego te dice que ahí te espera.
+// pestañas en un gesto del usuario) y luego te dice que ahí te espera. Al regresar
+// (al cerrar la ficha, o esta charla si fue en otra pestaña) lo comenta en su
+// viñeta: dónde lo usaría una marca (DroneNPC, `comenta`).
 
 const ENTRADA_MS = 750
 const SALIDA_MS = 650
@@ -49,6 +51,7 @@ export default function DialogoMadre({ onClose, onVerProyecto, modo = 'charla' }
   const [pregunta, setPregunta] = useState('')
   const [proyecto, setProyecto] = useState(null)   // el que acaba de recomendar { slug, titulo, url }
   const verRef = useRef(null)                       // el que pediste ver: al cerrar, App te lleva
+  const fueraRef = useRef(null)                     // el que te abrió en otra pestaña: al cerrar, lo comenta
   const nombreRef = useRef(null)
   const firma = useGlitchSolo(nombreRef, FIRMA_GLITCH)
   const renglonesRef = useRef(0)
@@ -85,6 +88,7 @@ export default function DialogoMadre({ onClose, onVerProyecto, modo = 'charla' }
     setTimeout(() => {
       onClose?.()
       if (verRef.current) onVerProyecto?.(verRef.current)
+      if (fueraRef.current) avisarDron({ comenta: fueraRef.current })
     }, SALIDA_MS)
     setFase('sale')
   }, [onClose, onVerProyecto, modo])
@@ -139,6 +143,7 @@ export default function DialogoMadre({ onClose, onVerProyecto, modo = 'charla' }
     if (o.id === 'verProyecto' && proyecto) {
       if (proyecto.url) {
         try { window.open(proyecto.url, '_blank', 'noopener,noreferrer') } catch { }
+        fueraRef.current = proyecto.slug
         empezar([{ t: escoger(D.vamosFuera, 'vamosFuera', { lang }), cara: 'feliz', accion: 'IdleJugueton' }], 'salir')
         return
       }

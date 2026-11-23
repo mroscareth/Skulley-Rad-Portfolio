@@ -98,6 +98,9 @@ const SALUDA = { cada: [60, 120], trasCharla: 40, recibe: 3.5, reclamo: 0.9 }
 // dice ya viéndolo; si no, lo vuelve a intentar en `espera`. Nunca jugando ni enojada.
 const RECOMIENDA = { primera: [45, 75], cada: [110, 190], lejos: 16, espera: 10, trasCharla: 40 }
 const OFENDIDA = { seVaEn: 3, lejos: 9 }
+// Al regresar del proyecto que te enseñó, cuánto espera para comentarlo (segundos
+// después de que se abrió el iris o se fueron las barras).
+const COMENTA_S = 0.8
 
 const azar = (a, b) => a + Math.random() * (b - a)
 // Parte un texto por frases en trozos de hasta `max` letras (una frase más larga va sola).
@@ -251,6 +254,8 @@ export default function DroneNPC({
   const decir = (texto, dura) => { est.current.dice = { texto, t: 0, dura }; est.current.diceCola = [] }
   const reclamoRef = useRef(0)
   useEffect(() => () => clearTimeout(reclamoRef.current), [])
+  const comentaRef = useRef(0)
+  useEffect(() => () => clearTimeout(comentaRef.current), [])
   // lo ve llegar cerca: se emociona y lo saluda (no muy seguido); ofendida, se voltea
   const saludar = (ahora, yaQuieta) => {
     const e = est.current
@@ -314,6 +319,31 @@ export default function DroneNPC({
           e2.reclamoHasta = ahora + 4
         }, SALUDA.reclamo * 1000)
       }
+    }
+    // regresaste del proyecto que te enseñó: dice dónde lo usaría una marca
+    // (dialogoMadre.js `usos`); lo largo, en trozos por frase
+    if (msg.comenta) {
+      clearTimeout(comentaRef.current)
+      const slug = msg.comenta
+      comentaRef.current = setTimeout(() => {
+        const e2 = est.current
+        if (e2.modo !== 'deambular' || madreEnojada() || juegoActivoRef.current) return
+        const T2 = textosRef.current
+        const tipo = T2.proyectos?.[slug]?.tipo
+        const propios = T2.usosProyecto?.[slug]
+        const lista = propios || T2.usos?.[tipo] || T2.usos?.generico
+        const texto = escoger(lista, `uso-${propios ? slug : tipo || 'generico'}`, { lang: langRef.current })
+        if (!texto) return
+        const [primero, ...resto] = trozos(texto)
+        decir(primero, 2.4 + primero.length / LETRAS)
+        e2.diceCola = resto
+        caraRef.current?.poner('feliz')
+        if (e2.fase === 'quieto') pedir('IdleJugueton')
+        const ahora = performance.now() / 1000
+        e2.reclamoHasta = ahora + 4
+        e2.saludaEn = Math.max(e2.saludaEn, ahora + SALUDA.trasCharla)
+        e2.recomiendaEn = Math.max(e2.recomiendaEn, ahora + RECOMIENDA.trasCharla)
+      }, COMENTA_S * 1000)
     }
     if (msg.alJuego === true && e.modo !== 'castigo' && e.modo !== 'quemada' && e.modo !== 'dialogo') {
       e.juegoPedido = performance.now() / 1000
