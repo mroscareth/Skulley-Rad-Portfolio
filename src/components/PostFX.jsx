@@ -643,7 +643,8 @@ export default function PostFX({
           />
         )}
         {/* DOF: disabled on mobile (expensive blur passes) */}
-        {!lowPerf && !isMobile && dofEnabled && (
+        {/* (En desarrollo, window.__dofIgnoraLowPerf la deja medir aunque la home vaya en lowPerf.) */}
+        {(!lowPerf || (import.meta.env.DEV && typeof window !== 'undefined' && window.__dofIgnoraLowPerf)) && !isMobile && dofEnabled && (
           <DepthOfField
             focusDistance={dofProgressive ? focusDistRef.current : dofFocusDistance}
             focalLength={dofFocalLength}

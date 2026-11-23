@@ -4,7 +4,7 @@ import * as THREE from 'three'
 import { caminoEnPiso, zonasPiso } from '../../lib/pisoPintado.js'
 import { escucharExplosiones } from '../../lib/explosionesHome.js'
 import { ubicarSonido } from '../../lib/homeSounds.js'
-import { sonarBrota, sonarFuego, sonarPrenden } from '../../lib/petalosSonidos.js'
+import { sonarBrota, sonarFuego, sonarPolvo, sonarPrenden } from '../../lib/petalosSonidos.js'
 
 // Pétalos de cempasúchil en el camino escondido de Work a SKULLEYGLYPH (2026-11-22):
 // donde la tierra tapa las lozas, los pétalos siguen el camino, como el de Día de
@@ -22,7 +22,8 @@ import { sonarBrota, sonarFuego, sonarPrenden } from '../../lib/petalosSonidos.j
 // como mecha hasta donde las lozas cortan la hilera. Después de `FUEGO.repone` (más
 // un rato al azar, para que no salgan todos juntos) caen pétalos nuevos del cielo,
 // meciéndose, sobre donde estaban (Oscar). Suenan (lib/petalosSonidos.js): el
-// fuego que agarra, el crepitar y unas campanitas al caer (pisarlos no suena).
+// fuego que agarra, las lenguas de llama, el polvo y unas campanitas al caer
+// (pisarlos no suena).
 // Un solo dibujo (InstancedBufferGeometry) con los pétalos y, después, las chispas
 // y la ceniza (mismo programa: quemarlos no compila nada). Posición, giro y quema
 // viven en la CPU y solo se suben mientras algo se mueve. Montado siempre.
@@ -586,7 +587,7 @@ export default function PetalosCamino({ playerRef }) {
     }
 
     // Para los sonidos: cuántos prendieron, ardieron y brotaron, y dónde.
-    let prendidos = 0, px = 0, pz = 0, ardiendo = 0, fx = 0, fz = 0, brotan = 0, bx = 0, bz = 0
+    let prendidos = 0, px = 0, pz = 0, ardiendo = 0, fx = 0, fz = 0, brotan = 0, bx = 0, bz = 0, polvos = 0, cx = 0, cz = 0
     for (let i = 0; i < s.n; i++) {
       // Fuego: prende a su hora, arde, contagia, suelta chispas y ceniza, y se va.
       if (s.prende[i] <= ahora) {
@@ -609,6 +610,7 @@ export default function PetalosCamino({ playerRef }) {
         }
         if (!s.ceniza[i] && qn >= 0.62) {
           s.ceniza[i] = 1
+          polvos++; cx += s.x[i]; cz += s.z[i]
           for (let k = 0; k < FUEGO.cenizas; k++) {
             soltar(CENIZA, s.x[i] + (azar() - 0.5) * s.tam[i] * 0.6, s.y[i] + 0.03, s.z[i] + (azar() - 0.5) * s.tam[i] * 0.6,
               (azar() - 0.5) * 0.35, 0.35 + azar() * 0.6, (azar() - 0.5) * 0.35, 1.3 + azar() * 1.0, 0.035 + azar() * 0.03)
@@ -720,13 +722,21 @@ export default function PetalosCamino({ playerRef }) {
     }
 
     // Los sonidos, desde Skulley y del lado de la pantalla donde pasa.
-    if (prendidos || ardiendo || brotan || pr.sonaba) {
+    if (prendidos || ardiendo || brotan || polvos || pr.sonaba) {
       const derecha = pr.derecha.setFromMatrixColumn(state.camera.matrixWorld, 0)
       const ox = p ? p.x : state.camera.position.x, oz = p ? p.z : state.camera.position.z
       const donde = (x, z) => ubicarSonido(x - ox, z - oz, derecha)
-      if (prendidos) sonarPrenden(prendidos, donde(px / prendidos, pz / prendidos))
+      // El fuego se ve en pantalla aunque esté lejos (la bola de fuego explota hasta a
+      // 40 unidades): cae mucho más suave con la distancia, nunca abajo de 0.6.
+      const dondeFuego = (x, z) => {
+        const u = donde(x, z)
+        u.vol = Math.max(0.6, Math.sqrt(u.vol))
+        return u
+      }
+      if (prendidos) sonarPrenden(prendidos, dondeFuego(px / prendidos, pz / prendidos))
       if (brotan) sonarBrota(donde(bx / brotan, bz / brotan))
-      sonarFuego(ardiendo, dt, ardiendo ? donde(fx / ardiendo, fz / ardiendo) : null)
+      if (polvos) sonarPolvo(dondeFuego(cx / polvos, cz / polvos))
+      sonarFuego(ardiendo, dt, ardiendo ? dondeFuego(fx / ardiendo, fz / ardiendo) : null)
       pr.sonaba = ardiendo > 0
     }
     if (!cambio) return

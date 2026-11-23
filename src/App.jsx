@@ -397,6 +397,10 @@ function SiteApp() {
   // catches up. The gold-skin metallic boost is applied directly on the character
   // materials (Player.jsx:203), so it survives lowPerf.
   const [degradedMode, setDegradedMode] = useState(true)
+  // En desarrollo, `window.__fx({ dofEnabled: true })` cambia los efectos en vivo (para medirlos).
+  useEffect(() => {
+    if (import.meta.env.DEV) window.__fx = (cambios) => setFx((v) => ({ ...v, ...cambios }))
+  }, [])
   // Post FX warm-up: start with lowPerf profile, scale to full after preloader
   // disappears (avoids Context Lost without losing FX).
   const [fxWarm, setFxWarm] = useState(false)

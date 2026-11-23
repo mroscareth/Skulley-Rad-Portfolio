@@ -1,17 +1,24 @@
 // Sonidos de los pétalos del camino escondido (home/PetalosCamino.jsx, 2026-11-22),
 // sintetizados en vivo por el bus de los SFX (getSfxBus: respeta su volumen, su mute
-// y la regla de la mezcla de lib/mezcla.js, los efectos por encima de la música):
-//   - prenden: un "fuuump" de llama que agarra, más fuerte entre más pétalos prenden
-//     de golpe (la bola de fuego prende decenas; la mecha, de uno en uno, ni suena).
-//   - fuego: mientras algo arde, un siseo de brasa y chasquidos sueltos, más seguidos
-//     entre más pétalos arden, del lado de la pantalla donde está el fuego.
+// y la regla de la mezcla de lib/mezcla.js, los efectos por encima de la música).
+// El fuego es de caricatura y todo con tonos (Oscar escogió esta entre tres muestras;
+// la primera versión, de ruido filtrado, "se escucha como ruido"):
+//   - prenden: un "fwoomp" (diente de sierra que sube con un golpe encima), más
+//     fuerte entre más pétalos prenden de golpe (la bola de fuego prende decenas; la
+//     mecha, de uno en uno, no lo dispara).
+//   - fuego: mientras algo arde, lenguas de llama que hacen "blub" (triángulos que
+//     caen de tono con un vibrato rápido) y algún pop, más seguidas entre más pétalos
+//     arden, del lado de la pantalla donde está el fuego.
+//   - polvo: un golpecito agudo que cae, cuando un pétalo se deshace.
 //   - brotan: los pétalos nuevos que caen, un tintineo de campanitas en pentatónica,
 //     una nota por pétalo con un respiro entre notas: con muchos, un arpegio que cae.
+// Pisarlos no suena (un roce de papel no le gustó a Oscar).
 // Nada por debajo de ~250 Hz (las bocinas de laptop y celular no dan graves).
 
-import { getSfxBus, getNoiseBuffer } from './sfx.js'
+import { getSfxBus } from './sfx.js'
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
+const R = Math.random
 
 function env(param, t, pico, ataque, fin) {
   param.setValueAtTime(0.0001, t)
@@ -19,38 +26,45 @@ function env(param, t, pico, ataque, fin) {
   param.exponentialRampToValueAtTime(0.0001, t + fin)
 }
 
-function ruido(ctx, out, t, { tipo = 'bandpass', de, a, q = 1, pico, ataque = 0.002, dur }) {
-  const src = ctx.createBufferSource()
-  src.buffer = getNoiseBuffer(ctx)
-  const f = ctx.createBiquadFilter()
-  f.type = tipo
-  f.Q.value = q
-  f.frequency.setValueAtTime(de, t)
-  f.frequency.exponentialRampToValueAtTime(a, t + dur)
+// Un oscilador con su envolvente; `vib` (Hz) a `vibF` le da el temblor de la llama y
+// `filtro` lo redondea con un pasa bajos.
+function tono(ctx, out, t, { tipo = 'sine', de, a, dur, pico, ataque = 0.005, vib = 0, vibF = 0, filtro = 0 }) {
+  const o = ctx.createOscillator()
+  o.type = tipo
+  o.frequency.setValueAtTime(de, t)
+  o.frequency.exponentialRampToValueAtTime(a, t + dur)
+  const nodos = [o]
+  if (vib) {
+    const l = ctx.createOscillator()
+    l.frequency.value = vibF
+    const lg = ctx.createGain()
+    lg.gain.value = vib
+    l.connect(lg)
+    lg.connect(o.frequency)
+    l.start(t)
+    l.stop(t + dur + 0.03)
+    nodos.push(l, lg)
+  }
   const g = ctx.createGain()
   env(g.gain, t, pico, ataque, dur)
-  src.connect(f)
-  f.connect(g)
+  if (filtro) {
+    const f = ctx.createBiquadFilter()
+    f.type = 'lowpass'
+    f.frequency.value = filtro
+    o.connect(f)
+    f.connect(g)
+    nodos.push(f)
+  } else o.connect(g)
   g.connect(out)
-  src.start(t, Math.random() * 0.5)
-  src.stop(t + dur + 0.02)
-  src.onended = () => { try { src.disconnect(); f.disconnect(); g.disconnect() } catch { } }
+  nodos.push(g)
+  o.start(t)
+  o.stop(t + dur + 0.03)
+  o.onended = () => { for (const n of nodos) { try { n.disconnect() } catch { } } }
 }
 
 function campana(ctx, out, t, { f, pico, dur }) {
   // Dos parciales (1 y 2.76, de campana chica) que se apagan a destiempo.
-  for (const [k, p, d] of [[1, 1, 1], [2.76, 0.35, 0.45]]) {
-    const o = ctx.createOscillator()
-    o.type = 'sine'
-    o.frequency.value = f * k
-    const g = ctx.createGain()
-    env(g.gain, t, pico * p, 0.004, dur * d)
-    o.connect(g)
-    g.connect(out)
-    o.start(t)
-    o.stop(t + dur * d + 0.02)
-    o.onended = () => { try { o.disconnect(); g.disconnect() } catch { } }
-  }
+  for (const [k, p, d] of [[1, 1, 1], [2.76, 0.35, 0.45]]) tono(ctx, out, t, { de: f * k, a: f * k, dur: dur * d, pico: pico * p, ataque: 0.004 })
 }
 
 function conEco(ctx, out, tiempo = 0.11, vuelta = 0.38, dura = 1400) {
@@ -73,17 +87,20 @@ function conEco(ctx, out, tiempo = 0.11, vuelta = 0.38, dura = 1400) {
 
 // `fuerza` 0 a 1.
 function prenden(ctx, out, t, { fuerza }) {
-  const k = 0.55 + 0.45 * fuerza
-  // La llama que agarra: un soplo que abre de lo opaco a lo brillante y se queda.
-  ruido(ctx, out, t, { de: 380, a: 2400, q: 0.9, pico: 0.55 * k, ataque: 0.05, dur: 0.55 + 0.35 * fuerza })
-  ruido(ctx, out, t + 0.02, { tipo: 'highpass', de: 2500, a: 5200, q: 0.5, pico: 0.16 * k, ataque: 0.08, dur: 0.7 + 0.4 * fuerza })
-  // Y unos chasquidos de arranque.
-  for (let i = 0; i < 3 + Math.round(4 * fuerza); i++) chasquido(ctx, out, t + 0.04 + Math.random() * 0.4, 0.25 + Math.random() * 0.35)
+  const k = 0.6 + 0.4 * fuerza
+  tono(ctx, out, t, { tipo: 'sawtooth', de: 260, a: 600, dur: 0.32 + 0.12 * fuerza, pico: 0.28 * k, ataque: 0.03, filtro: 1800 })
+  tono(ctx, out, t, { de: 400, a: 260, dur: 0.25, pico: 0.32 * k, ataque: 0.004 })
 }
 
-function chasquido(ctx, out, t, fuerza) {
-  const dur = 0.004 + Math.random() * 0.012
-  ruido(ctx, out, t, { de: 1800 + Math.random() * 3600, a: 1400 + Math.random() * 2000, q: 1.2 + Math.random() * 2, pico: 0.5 * fuerza, ataque: 0.0008, dur })
+// Una lengua de llama: "blub". `k` 0 a 1 la sube.
+function lengua(ctx, out, t, k) {
+  const f = 260 + R() * 170
+  tono(ctx, out, t, { tipo: 'triangle', de: f, a: f * (0.75 + R() * 0.2), dur: 0.1 + R() * 0.08, pico: 0.2 * k, ataque: 0.012, vib: f * 0.12, vibF: 22 + R() * 10, filtro: 1500 })
+  if (R() < 0.25) tono(ctx, out, t + 0.03, { de: 900 + R() * 300, a: 420, dur: 0.035, pico: 0.16 * k, ataque: 0.002 })
+}
+
+function polvo(ctx, out, t) {
+  tono(ctx, out, t, { de: 1200 + R() * 300, a: 560, dur: 0.07, pico: 0.1, ataque: 0.003 })
 }
 
 // Pentatónica mayor, arriba: suena a polvo mágico sin melodía.
@@ -94,12 +111,9 @@ function brota(ctx, out, t, { nota }) {
 }
 
 // Volumen de cada sonido, medido contra la música con ponderación K (la regla de
-// lib/mezcla.js; la patada de referencia en +5 dB): prenden +5 (+7.8 con la bola más
-// fuerte), brotan +3.8 como los bips de los diálogos, el fuego continuo al nivel de la
-// música (+0.2 con 20 pétalos ardiendo, −3.9 con 3, +1.5 con 80). Pisarlos no suena:
-// un roce de papel no le gustó a Oscar.
-const VOLUMEN = { prenden: 0.9, fuego: 0.56, brota: 0.43 }
-const ESPERA_MS = { prenden: 250, brota: 110 }
+// lib/mezcla.js; la patada de referencia en +5 dB). Ver los números en CLAUDE.md, Audio.
+const VOLUMEN = { prenden: 1, fuego: 1, polvo: 1, brota: 0.43 }
+const ESPERA_MS = { prenden: 250, polvo: 70, brota: 110 }
 const ultimo = {}
 
 function bus() {
@@ -114,13 +128,13 @@ function salida(b, nombre, donde) {
   const g = ctx.createGain()
   g.gain.value = (donde?.vol ?? 1) * (VOLUMEN[nombre] ?? 1)
   let p = null
-  if (donde?.pan && ctx.createStereoPanner) {
+  if (ctx.createStereoPanner) {
     p = ctx.createStereoPanner()
-    p.pan.value = donde.pan
+    p.pan.value = donde?.pan || 0
     g.connect(p)
     p.connect(out)
   } else g.connect(out)
-  return { g, soltar: (ms) => setTimeout(() => { try { g.disconnect(); p?.disconnect() } catch { } }, ms) }
+  return { g, p, soltar: (ms) => setTimeout(() => { try { g.disconnect(); p?.disconnect() } catch { } }, ms) }
 }
 
 function suena(voz, nombre, datos, donde, duraMs = 1500) {
@@ -142,86 +156,62 @@ function suena(voz, nombre, datos, donde, duraMs = 1500) {
 /** Prendieron `n` pétalos de golpe. `donde` = { vol, pan } (ubicarSonido). */
 export function sonarPrenden(n, donde) {
   if (n < 3) return
-  suena(prenden, 'prenden', { fuerza: clamp(Math.log2(n) / 6, 0, 1) }, donde, 1600)
+  suena(prenden, 'prenden', { fuerza: clamp(Math.log2(n) / 6, 0, 1) }, donde, 900)
+}
+
+/** Un pétalo se deshizo en polvo. */
+export function sonarPolvo(donde) {
+  suena(polvo, 'polvo', null, donde, 400)
 }
 
 let notaSig = 0
 /** Brotó un pétalo nuevo. */
 export function sonarBrota(donde) {
-  notaSig = (notaSig + 1 + Math.floor(Math.random() * 3)) % NOTAS.length
+  notaSig = (notaSig + 1 + Math.floor(R() * 3)) % NOTAS.length
   suena(brota, 'brota', { nota: notaSig }, donde, 1600)
 }
 
-// El fuego: un siseo de fondo que sube y baja con lo que arde, más chasquidos que se
-// programan cuadro por cuadro.
+// El fuego que sigue ardiendo: lenguas programadas en el reloj del contexto, más
+// seguidas entre más arde. `pasoFuego` lo usa igual el juego y la medición.
+function pasoFuego(ctx, f, n, dt, t) {
+  if (n <= 0) { f.sig = 0; return }
+  const fuerza = clamp(Math.sqrt(n) / 6, 0, 1)
+  const k = 0.55 + 0.45 * fuerza
+  if (!f.sig || f.sig < t) f.sig = t + 0.02
+  while (f.sig < t + dt) {
+    lengua(ctx, f.out, f.sig, k)
+    f.sig += 0.06 + R() * 0.1 / Math.max(0.3, fuerza)
+  }
+}
+
 let fuego = null
 let vigilante = 0
 function apagarFuego() {
   const f = fuego
   if (!f) return
   fuego = null
-  try {
-    const t = f.src.context.currentTime
-    f.s.g.gain.setTargetAtTime(0.0001, t, 0.12)
-    f.src.stop(t + 0.6)
-  } catch { }
-  setTimeout(() => {
-    try { f.src.disconnect(); f.hp.disconnect(); f.siseo.disconnect(); f.chasq.disconnect(); f.pan?.disconnect() } catch { }
-    f.s.soltar(0)
-  }, 700)
+  f.s.soltar(600)
 }
 /** Cada cuadro: `n` pétalos ardiendo, `dt` en segundos, `donde` del centro del fuego.
  * Si deja de llamarse (la escena se pausa al ir a una sección), se apaga solo. */
 export function sonarFuego(n, dt, donde) {
   clearTimeout(vigilante)
-  if (fuego) vigilante = setTimeout(apagarFuego, 400)
-  if (n <= 0 && !fuego) return
+  if (n <= 0) { apagarFuego(); return }
   const b = bus()
   if (!b) return
   const { ctx } = b
   const t = ctx.currentTime
   try {
-    if (!fuego && n > 0) {
-      const s = salida(b, 'fuego', null)
-      const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null
-      const src = ctx.createBufferSource()
-      src.buffer = getNoiseBuffer(ctx)
-      src.loop = true
-      const hp = ctx.createBiquadFilter()
-      hp.type = 'bandpass'
-      hp.frequency.value = 3800
-      hp.Q.value = 0.6
-      const siseo = ctx.createGain()
-      siseo.gain.value = 0.0001
-      src.connect(hp)
-      hp.connect(siseo)
-      const chasq = ctx.createGain()
-      if (pan) { siseo.connect(pan); chasq.connect(pan); pan.connect(s.g) } else { siseo.connect(s.g); chasq.connect(s.g) }
-      src.start(t)
-      fuego = { s, src, hp, siseo, chasq, pan, apagando: 0 }
-      vigilante = setTimeout(apagarFuego, 400)
+    if (!fuego) {
+      const s = salida(b, 'fuego', donde)
+      fuego = { s, out: s.g, sig: 0 }
     }
-    if (!fuego) return
     const f = fuego
-    const fuerza = clamp(Math.sqrt(n) / 6, 0, 1)
-    const vol = donde?.vol ?? 1
-    f.s.g.gain.setTargetAtTime(vol * VOLUMEN.fuego, t, 0.08)
-    if (f.pan && donde?.pan != null) f.pan.pan.setTargetAtTime(donde.pan, t, 0.1)
-    f.siseo.gain.setTargetAtTime(n > 0 ? 0.035 + 0.07 * fuerza : 0.0001, t, n > 0 ? 0.15 : 0.35)
-    if (n > 0) {
-      f.apagando = 0
-      // Chasquidos: de ~4 por segundo con uno ardiendo a ~40 con muchos.
-      const porS = 4 + 36 * fuerza
-      let k = porS * dt
-      while (k > 0) {
-        if (Math.random() < k) chasquido(ctx, f.chasq, t + Math.random() * dt, 0.35 + Math.random() * 0.65 * (0.5 + 0.5 * fuerza))
-        k -= 1
-      }
-    } else {
-      f.apagando += dt
-      if (f.apagando > 1.6) { clearTimeout(vigilante); apagarFuego() }
-    }
+    f.s.g.gain.setTargetAtTime((donde?.vol ?? 1) * VOLUMEN.fuego, t, 0.08)
+    if (f.s.p && donde?.pan != null) f.s.p.pan.setTargetAtTime(donde.pan, t, 0.1)
+    pasoFuego(ctx, f, n, dt, t)
+    vigilante = setTimeout(apagarFuego, 400)
   } catch { }
 }
 
-export const petalosVoces = { prenden, brota, chasquido, VOLUMEN }
+export const petalosVoces = { prenden, lengua, polvo, brota, pasoFuego, VOLUMEN }
