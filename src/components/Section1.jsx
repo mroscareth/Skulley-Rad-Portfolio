@@ -141,13 +141,14 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
           syncTouch: true,
         })
         detailLenisRef.current = lenis
-        let raf
+        // El id cambia en cada cuadro: guardarlo cada vez, o al cerrar solo se
+        // cancelaba el primero y el loop seguía para siempre (con el Lenis viejo
+        // escribiendo el scroll encima del nuevo si se reabría a media animación).
         const tick = (time) => {
           try { lenis.raf(time) } catch { }
-          raf = requestAnimationFrame(tick)
+          lenis.__raf = requestAnimationFrame(tick)
         }
-        raf = requestAnimationFrame(tick)
-        lenis.__raf = raf
+        lenis.__raf = requestAnimationFrame(tick)
       } catch { }
     }, 50)
     return () => {

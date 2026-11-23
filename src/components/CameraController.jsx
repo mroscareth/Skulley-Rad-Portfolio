@@ -58,6 +58,10 @@ export default function CameraController({
   // 2026-11-19). `dialogoCon`: 'dron' | 'argus'.
   dialogo = false,
   dialogoCon = 'dron',
+  // Ya tapado por la ficha de un proyecto (QuickProject en la completa): el
+  // barrido de regreso del diálogo llega de golpe, antes de que la escena se
+  // pause; si no, al cerrar la ficha se veía terminar de girar sin ver a Skulley.
+  cortaBarrido = false,
 }) {
   const { camera, gl } = useThree()
   const controlsRef = useRef()
@@ -65,6 +69,8 @@ export default function CameraController({
   // seguía sonando el swipe y la dejaba girada al salir (Oscar).
   const deFrenteRef = useRef(false)
   deFrenteRef.current = customizeActive || primerPlano || dialogo
+  const cortaBarridoRef = useRef(cortaBarrido)
+  cortaBarridoRef.current = cortaBarrido
   const followOffset = useMemo(() => new THREE.Vector3(0, 2.4, -5.2), [])
   const targetOffset = useMemo(() => new THREE.Vector3(0, 1.6, 0), [])
   
@@ -584,7 +590,7 @@ export default function CameraController({
     }
   }
   const barre = (sale, dt, base, destino, mira) => {
-    sale.t = Math.min(1, sale.t + dt / sale.dur)
+    sale.t = cortaBarridoRef.current ? 1 : Math.min(1, sale.t + dt / sale.dur)
     const e = sale.t < 0.5 ? 4 * sale.t ** 3 : 1 - ((-2 * sale.t + 2) ** 3) / 2
     const r1 = Math.hypot(destino.x - base.x, destino.z - base.z)
     const a1 = Math.atan2(destino.x - base.x, destino.z - base.z)

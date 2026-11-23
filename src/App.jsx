@@ -528,6 +528,9 @@ function SiteApp() {
   // La ficha de un proyecto encima de la home de la completa (QuickProject): desde
   // que se pide hasta que se cierra, la UI de la home se queda escondida.
   const [proyectoTapa, setProyectoTapa] = useState(false)
+  // La escena se pausa unos cuadros después de que la ficha la tapó: en esos
+  // cuadros la cámara termina de regresar del diálogo (cortaBarrido).
+  const [proyectoPausa, setProyectoPausa] = useState(false)
   const [dialogoModo, setDialogoModo] = useState('charla')
   const [sphereGameActive, setSphereGameActive] = useState(false)
   // Guarda de secciones durante la partida (se define junto a sectionLabel).
@@ -2395,8 +2398,8 @@ function SiteApp() {
   const rapidaEnHome = VERSION_RAPIDA && section === 'home'
   // Un proyecto se abre aparte, encima de la home (QuickProject): en la rápida
   // desde sus tarjetas y en la completa cuando M.A.D.R.E. te lo enseña (su escena
-  // se pausa debajo, `proyectoCubre`, y la UI de la home se esconde,
-  // `proyectoTapa`). Con los pasos de beginSectionTransition: hacia él, los puntos tapan en el color de
+  // se pausa debajo, `proyectoCubre`, y la UI de la home se esconde y la patada
+  // se apaga, `proyectoTapa`). Con los pasos de beginSectionTransition: hacia él, los puntos tapan en el color de
   // Work y se abre desde el centro; de regreso, se deshace en puntos de su color
   // y se abre a 55 % del alto, como una sección que regresa a la home.
   // Tapado, espera a que el proyecto se pueda ver (sus datos y la primera
@@ -2424,6 +2427,11 @@ function SiteApp() {
       const listo = new Promise((r) => { proyectoListoRef.current = { slug, listo: r } })
       mascota = setTimeout(() => { mascotaDesde = performance.now(); irisWaiting(true) }, 150)
       setProyectoRapido(slug)
+      if (!VERSION_RAPIDA) {
+        requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => {
+          if (proyectoRapidoRef.current === slug) setProyectoPausa(true)
+        })))
+      }
       if (!desdeHistorial) {
         try { window.history.pushState({ proyectoRapido: slug }, '', `${baseUrl}work/${slug}`) } catch { }
       }
@@ -2449,6 +2457,7 @@ function SiteApp() {
       await irisCubrir({ color: fondoDe(document.querySelector('.qp-raiz')) })
       setProyectoRapido(null)
       setProyectoTapa(false)
+      setProyectoPausa(false)
       if (!desdeHistorial) {
         try { window.history.pushState({ section: 'home' }, '', rutaHome()) } catch { }
       }
@@ -2487,7 +2496,7 @@ function SiteApp() {
   }, [section, transitionState.active])
   // Una sección elegida con el proyecto abierto lo cierra ya tapada.
   useEffect(() => {
-    if (section !== 'home' && proyectoRapido) { setProyectoRapido(null); setProyectoTapa(false) }
+    if (section !== 'home' && proyectoRapido) { setProyectoRapido(null); setProyectoTapa(false); setProyectoPausa(false) }
   }, [section, proyectoRapido])
   // El menú de la versión rápida (NavOverlay a pantalla completa): las cinco
   // secciones, con el mismo nombre que en la nav del sitio.
@@ -3167,7 +3176,9 @@ function SiteApp() {
           sectionUiAnimatingOut={sectionUiAnimatingOut}
           sectionCovered={showSectionPreloader || sectionPreloaderFading}
           historiaCubre={historiaAbierta}
-          proyectoCubre={Boolean(proyectoRapido)}
+          proyectoCubre={proyectoPausa}
+          proyectoAbierto={Boolean(proyectoRapido)}
+          proyectoTapa={proyectoTapa}
           primerPlano={historiaCara}
           dialogoDron={dialogoDron}
           puedeHablarDron={puedeHablarDron}

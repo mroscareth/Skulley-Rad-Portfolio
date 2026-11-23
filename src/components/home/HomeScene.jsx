@@ -429,7 +429,7 @@ function EstadoR3fDev() {
 
 export default function HomeScene({
   // state flags
-  pageHidden, showPreloaderOverlay, showSectionUi, sectionUiAnimatingOut, sectionCovered, historiaCubre, proyectoCubre = false, primerPlano,
+  pageHidden, showPreloaderOverlay, showSectionUi, sectionUiAnimatingOut, sectionCovered, historiaCubre, proyectoCubre = false, proyectoAbierto = false, proyectoTapa = false, primerPlano,
   dialogoDron = false, puedeHablarDron = false, onHablarDron, dialogoArgus = false, onHablarArgus,
   transitionState, tramaViaje, noiseMixEnabled, mainWarmStage, sectionHomeWarm, onHomeWarmDone, psychoSceneColor,
   effectiveSceneColor, isMobilePerf, degradedMode, fxWarm, prevSceneTex,
@@ -837,7 +837,7 @@ export default function HomeScene({
           goldSkinActive={goldSkinModelActive}
           goldSkinTransformActive={goldSkinTransformActive}
           customizeActive={customizeActive || tramaViaje || primerPlano || dialogoDron || dialogoArgus}
-          powerEnabled={section === 'home' && !saliendoDeHome && !dialogoDron && !dialogoArgus && !proyectoCubre}
+          powerEnabled={section === 'home' && !saliendoDeHome && !dialogoDron && !dialogoArgus && !proyectoTapa}
           homeLanded={homeLanded}
           onPortalEnter={bootLoading ? undefined : handlePortalEnter}
           onProximityChange={bootLoading ? undefined : ((f) => {
@@ -1077,6 +1077,7 @@ export default function HomeScene({
               primerPlano={primerPlano}
               dialogo={dialogoDron || dialogoArgus}
               dialogoCon={dialogoArgus ? 'argus' : 'dron'}
+              cortaBarrido={proyectoAbierto}
             />
           )
         })()}
