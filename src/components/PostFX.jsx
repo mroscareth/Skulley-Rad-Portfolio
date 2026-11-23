@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 // Glitch/ChromaticAberration NO se importan de acá a propósito: usamos las
 // clases crudas de `postprocessing` (abajo) porque los wrappers recrean el
 // efecto en cada render. Ver la nota dentro del componente.
@@ -12,6 +12,21 @@ import EdgeInkEffect from './fx/EdgeInkEffect.jsx'
 import { useTrama } from './fx/TramaEffect.jsx'
 import { wallpaperEstado } from '../lib/wallpaperEscritorio.js'
 import { hardenContextAttributes } from '../lib/canvasSetup.js'
+
+// La burbuja nítida de la profundidad de campo (ver PostFX): el círculo de confusión
+// por la distancia en 3D al foco, con una zona sin desenfoque. Una sola vez por material.
+function parcharBurbuja(m) {
+  if (!m || m.userData.burbuja) return
+  m.userData.burbuja = true
+  const antes = m.fragmentShader
+  m.uniforms.focoVista = new THREE.Uniform(new THREE.Vector3())
+  m.uniforms.zonaNitida = new THREE.Uniform(18)
+  m.fragmentShader = antes
+    .replace('uniform float focusRange;', 'uniform float focusRange;uniform vec3 focoVista;uniform float zonaNitida;')
+    .replace('float magnitude=smoothstep(0.0,focusRange,abs(signedDistance));', 'float magnitude=smoothstep(zonaNitida,zonaNitida+focusRange,length(viewPosition-focoVista));')
+  if (import.meta.env.DEV && !m.fragmentShader.includes('zonaNitida+focusRange')) console.warn('[PostFX] la burbuja de la profundidad de campo no se aplicó: cambió el shader de postprocessing')
+  m.needsUpdate = true
+}
 
 export default function PostFX({
   lowPerf = false,
@@ -78,8 +93,9 @@ export default function PostFX({
   godClampMax = 1.0,
   godSamples = 60,
   dofEnabled = false,
-  dofRango = 6,
-  dofBokehScale = 2.1,
+  dofNitida = 23,
+  dofRango = 30,
+  dofBokehScale = 6,
   dofTargetRef = null,
   // Outline for character
   outlineEnabled = true,
@@ -573,13 +589,39 @@ export default function PostFX({
     tex.needsUpdate = true
     return tex
   }, [])
-  // Profundidad de campo: el foco sigue a Skulley, a la altura del pecho (postprocessing
-  // 6.38 mide el foco y su rango en unidades del mundo; `target` lo enfoca solo).
+  // Profundidad de campo (el look de miniatura, Oscar 2026-11-23): una burbuja nítida
+  // alrededor de Skulley y desenfoque más allá. La de postprocessing 6.38 desenfoca
+  // según la distancia a la cámara y sube desde el punto de foco mismo: los portales
+  // del fondo y los pinos de los lados quedaban igual de lejos y no se podían separar
+  // (Oscar: parado en medio, todos los portales y los personajes nítidos y los pinos
+  // empezando a desenfocarse). `parcharBurbuja` cambia su círculo de confusión por la
+  // distancia en 3D al pecho de Skulley: nada hasta `dofNitida` y el desenfoque completo
+  // `dofRango` más allá. El lado (cerca o lejos de la cámara) sigue siendo el suyo.
+  // Todo va por uniforms: ajustarlo no rearma el efecto (montarlo o quitarlo compila
+  // de 7 a 10 programas). El efecto guarda su propio `target` (R3F copia el nuestro una
+  // sola vez), así que se le copia cada cuadro. En Customize la cámara se aplana a
+  // ortográfica y la profundidad se leería mal: ahí el desenfoque va en 0.
   const dofPunto = useMemo(() => new THREE.Vector3(), [])
-  useFrame(() => {
-    if (!dofEnabled || !dofTargetRef?.current) return
-    dofTargetRef.current.getWorldPosition(dofPunto)
-    dofPunto.y += 1.4
+  const dofRef = useRef(null)
+  useLayoutEffect(() => { if (dofRef.current) parcharBurbuja(dofRef.current.cocMaterial) })
+  useFrame((state) => {
+    const efecto = dofRef.current
+    if (!dofEnabled || !efecto) return
+    const m = efecto.cocMaterial
+    parcharBurbuja(m)
+    if (dofTargetRef?.current) {
+      dofTargetRef.current.getWorldPosition(dofPunto)
+      dofPunto.y += 1.4
+      efecto.target?.copy(dofPunto)
+    }
+    if (m?.uniforms?.focoVista) {
+      state.camera.updateMatrixWorld()
+      m.uniforms.focoVista.value.copy(dofPunto).applyMatrix4(state.camera.matrixWorldInverse)
+      m.uniforms.zonaNitida.value = dofNitida
+      if (m.focusRange !== dofRango) m.focusRange = dofRango
+    }
+    const escala = wallpaperEstado.fase === 'off' ? dofBokehScale : 0
+    if (efecto.bokehScale !== escala) efecto.bokehScale = escala
   })
 
   const godKey = useMemo(
@@ -632,13 +674,14 @@ export default function PostFX({
             edgeBoost={edgeBoost}
           />
         )}
-        {/* DOF: disabled on mobile (expensive blur passes) */}
-        {/* (En desarrollo, window.__dofIgnoraLowPerf la deja medir aunque la home vaya en lowPerf.) */}
-        {(!lowPerf || (import.meta.env.DEV && typeof window !== 'undefined' && window.__dofIgnoraLowPerf)) && !isMobile && dofEnabled && (
+        {/* DOF: no en teléfono ni con internet lenta (isMobile = isMobilePerf). No depende de
+            lowPerf: la home de escritorio va siempre en degradedMode. */}
+        {!isMobile && dofEnabled && (
           <DepthOfField
+            ref={dofRef}
             target={dofPunto}
-            focusRange={dofRango}
-            bokehScale={dofBokehScale}
+            focusRange={10}
+            bokehScale={2}
           />
         )}
         {/* Noise-mask transition (prev->next) with automatic fallback to alpha-mask when no prev texture */}

@@ -374,9 +374,10 @@ function SiteApp() {
     godExposure: 0.22,
     godClampMax: 0.56,
     godSamples: 28,
-    dofEnabled: false,
-    dofRango: 6,
-    dofBokehScale: 2.1,
+    dofEnabled: true,
+    dofNitida: 23,
+    dofRango: 30,
+    dofBokehScale: 6,
   }))
   const [portraitGlowV, setPortraitGlowV] = useState(0)
   const [navTarget, setNavTarget] = useState(null)

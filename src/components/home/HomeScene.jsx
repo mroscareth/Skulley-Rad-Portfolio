@@ -1114,6 +1114,7 @@ export default function HomeScene({
             godClampMax={fx.godClampMax}
             godSamples={fx.godSamples}
             dofEnabled={fx.dofEnabled}
+            dofNitida={fx.dofNitida}
             dofRango={fx.dofRango}
             dofBokehScale={fx.dofBokehScale}
             dofTargetRef={dofTargetRef}
