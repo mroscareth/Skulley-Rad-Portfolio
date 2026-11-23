@@ -55,6 +55,103 @@ export function castigarConDron(alGolpe) {
   return true
 }
 
+// ---- Su humor (Oscar, 2026-11-23: "que a veces se moleste si le haces mucho
+// click o hablas con ella y la cortas seguido"). Dos cuentas que se van solas con
+// el tiempo (vida media `vidaS`): `cortes` sube si la dejas hablando sola (Esc a
+// media frase) o te vas del menú sin despedirte; `molestia` sube con eso y además
+// cada vez que le hablas, más si le vuelves a hablar recién despedido. Al saludar:
+// con `cortes` pasado `regano` te regaña; con `molestia` pasado `enojo` no te
+// habla `enojadaS` segundos y picarla lo alarga. Después, la primera charla es de
+// perdón. Vive en memoria: una recarga la contenta.
+const ANIMO = {
+  abrir: 0.3, seguido: 0.3, cortada: 0.8, sinAdios: 0.4, adios: -0.1,
+  vidaS: 60, regano: 0.7, enojo: 3.2,
+  enojadaS: 12, insisteS: 3, enojadaMaxS: 25,
+  seguidoS: 25,
+}
+export const animoMadre = {
+  molestia: 0,
+  cortes: 0,
+  t: 0,
+  enojadaHasta: 0,
+  insiste: 0,
+  perdon: false,
+  cerro: 0,          // cuándo terminó la última charla
+  fueraDesde: 0,     // salió de la home a una sección
+  volvio: 0,         // regresó de una sección
+  fueraS: 0,         // cuánto estuvo fuera
+  saludo: null,      // lo que toca decir al abrir: { tipo, seg }
+}
+const ahoraS = () => performance.now() / 1000
+function decae(a, ahora) {
+  if (a.t) {
+    const k = 0.5 ** ((ahora - a.t) / ANIMO.vidaS)
+    a.molestia *= k
+    a.cortes *= k
+  }
+  a.t = ahora
+}
+export const madreEnojada = () => ahoraS() < animoMadre.enojadaHasta
+
+// Al picar al drone (DroneNPC). { tipo: 'charla' } abre el diálogo (y deja en
+// `saludo` qué saludo toca); 'rechazo' (con `por`: 'cortes' o 'clics') e 'insiste'
+// no lo abren: lo dice en su viñeta.
+export function picarMadre() {
+  const a = animoMadre
+  const ahora = ahoraS()
+  decae(a, ahora)
+  if (ahora < a.enojadaHasta) {
+    a.insiste += 1
+    a.enojadaHasta = Math.min(a.enojadaHasta + ANIMO.insisteS, ahora + ANIMO.enojadaMaxS)
+    return { tipo: 'insiste', n: a.insiste }
+  }
+  const desdeCerro = a.cerro ? ahora - a.cerro : 0
+  const seguido = a.cerro && desdeCerro < ANIMO.seguidoS
+  a.molestia += ANIMO.abrir + (seguido ? ANIMO.seguido : 0)
+  if (a.molestia >= ANIMO.enojo) {
+    const por = a.cortes >= ANIMO.regano ? 'cortes' : 'clics'
+    a.enojadaHasta = ahora + ANIMO.enojadaS
+    a.insiste = 0
+    a.perdon = true
+    a.molestia = ANIMO.enojo * 0.4
+    a.cortes = 0
+    return { tipo: 'rechazo', por }
+  }
+  let tipo = 'normal'
+  let seg = desdeCerro
+  if (a.perdon) { tipo = 'perdon'; a.perdon = false }
+  else if (a.cortes >= ANIMO.regano) tipo = 'regano'
+  else if (a.volvio > a.cerro && a.fueraS > 0) { tipo = 'vuelta'; seg = a.fueraS }
+  else if (seguido) tipo = 'seguido'
+  a.saludo = { tipo, seg }
+  return { tipo: 'charla' }
+}
+// El diálogo lo toma al empezar (una vez).
+export function tomarSaludo() {
+  const s = animoMadre.saludo || { tipo: 'normal', seg: animoMadre.cerro ? ahoraS() - animoMadre.cerro : 0 }
+  animoMadre.saludo = null
+  return s
+}
+// Al cerrar el diálogo: 'cortada' | 'sinAdios' | 'adios' (null: no cuenta, la bienvenida).
+export function cerrarConMadre(como) {
+  const a = animoMadre
+  const ahora = ahoraS()
+  decae(a, ahora)
+  if (como && ANIMO[como] !== undefined) a.molestia = Math.max(0, a.molestia + ANIMO[como])
+  if (como === 'cortada' || como === 'sinAdios') a.cortes += ANIMO[como]
+  a.cerro = ahora
+}
+// Skulley sale de la home y regresa (DroneNPC, con `activo`).
+export function salioDeHome() { animoMadre.fueraDesde = ahoraS() }
+export function volvioAHome() {
+  const a = animoMadre
+  if (!a.fueraDesde) return 0
+  a.volvio = ahoraS()
+  a.fueraS = a.volvio - a.fueraDesde
+  a.fueraDesde = 0
+  return a.fueraS
+}
+
 // ---- Skulley contra M.A.D.R.E. (Oscar, 2026-11-19): sus bolas de fuego nunca la
 // tocan, las para su escudo; tres y se enoja. Una patada la empuja y se castiga
 // en el acto. Player y HomeScene preguntan aquí; el NPC reacciona por `avisarDron`.

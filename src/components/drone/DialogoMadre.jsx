@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
-import { dialogoMadre } from '../../lib/dialogoMadre.js'
-import { avisarDron } from '../../lib/droneNpc.js'
+import { dialogoMadre, escoger } from '../../lib/dialogoMadre.js'
+import { avisarDron, tomarSaludo, cerrarConMadre } from '../../lib/droneNpc.js'
 import { blipMadre } from '../../lib/blipMadre.js'
 import { useGlitchSolo, textoGlitch } from '../../hooks/useGlitchRunas.js'
 import RenglonRunas from './RenglonRunas.jsx'
@@ -15,6 +15,12 @@ import RenglonRunas from './RenglonRunas.jsx'
 // completa). Luego un menú de preguntas (flechas + Enter, o el mouse). Escape
 // sale en cualquier momento. Cada renglón le pide al drone su cara y su acción
 // (avisarDron); la cámara sobre el hombro de Skulley la pone App/CameraController.
+//
+// No dice siempre lo mismo (Oscar, 2026-11-23): el saludo sale de su humor
+// (lib/droneNpc.js: normal, seguido, de regreso de una sección, regaño, perdón),
+// cada tema tiene dos versiones y la despedida cambia. Si la cortas a media frase
+// o te vas del menú sin despedirte, lo cuenta (`cerrarConMadre`) y te lo reclama
+// en su viñeta.
 
 const ENTRADA_MS = 750
 const SALIDA_MS = 650
@@ -35,12 +41,15 @@ export default function DialogoMadre({ onClose, modo = 'charla' }) {
   const [completo, setCompleto] = useState(false)
   const [sel, setSel] = useState(0)
   const [vistos, setVistos] = useState(() => new Set())
+  const [pregunta, setPregunta] = useState('')
   const nombreRef = useRef(null)
   const firma = useGlitchSolo(nombreRef, FIRMA_GLITCH)
   const renglonesRef = useRef(0)
 
   const linea = cola ? cola.lineas[cola.i] : null
-  const opciones = [...D.temas, { id: 'adios', ...D.adios }]
+  const opciones = [...D.temas, { id: 'adios', label: D.adios.label }]
+  const colaRef = useRef(null)
+  colaRef.current = cola
 
   const empezar = useCallback((lineas, despues) => {
     renglonesRef.current += 1
@@ -49,22 +58,33 @@ export default function DialogoMadre({ onClose, modo = 'charla' }) {
     setFase('texto')
   }, [])
 
-  const cerrar = useCallback(() => {
-    setFase((f) => {
-      if (f === 'sale') return f
-      avisarDron({ fin: true })
-      setTimeout(() => onClose?.(), SALIDA_MS)
-      return 'sale'
-    })
-  }, [onClose])
+  // `como`: 'adios' al despedirse; con Esc o Saltar, 'cortada' si estaba hablando
+  // y 'sinAdios' en el menú. La bienvenida no cuenta.
+  const faseRef = useRef(fase)
+  faseRef.current = fase
+  const cerrar = useCallback((como = null) => {
+    const f = faseRef.current
+    if (f === 'sale') return
+    faseRef.current = 'sale'
+    let c = como
+    if (!c) c = f !== 'texto' ? 'sinAdios' : colaRef.current?.despues === 'salir' ? 'adios' : 'cortada'
+    if (modo === 'bienvenida') c = null
+    cerrarConMadre(c)
+    avisarDron({ fin: true, como: c })
+    setTimeout(() => onClose?.(), SALIDA_MS)
+    setFase('sale')
+  }, [onClose, modo])
 
   // entrada: las barras y el globo; luego el saludo
   useEffect(() => {
     let primera = true
     try { primera = !sessionStorage.getItem(VISTO); sessionStorage.setItem(VISTO, '1') } catch { }
+    const s = modo === 'bienvenida' ? null : tomarSaludo()
     const id = setTimeout(() => {
-      if (modo === 'bienvenida') empezar(D.bienvenida, 'salir')
-      else empezar(primera ? D.saludo : D.otraVez, 'menu')
+      if (modo === 'bienvenida') { empezar(D.bienvenida, 'salir'); return }
+      if (primera && s.tipo !== 'regano' && s.tipo !== 'perdon') { empezar(D.saludo, 'menu'); return }
+      const lista = { seguido: D.seguido, vuelta: D.vuelta, regano: D.regano, perdon: D.perdon }[s.tipo] || D.otraVez
+      empezar(escoger(lista, `saludo-${s.tipo}`, { seg: s.seg, lang }), 'menu')
     }, ENTRADA_MS)
     return () => clearTimeout(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -85,20 +105,21 @@ export default function DialogoMadre({ onClose, modo = 'charla' }) {
       setCompleto(false)
       return
     }
-    if (cola.despues === 'salir') { cerrar(); return }
+    if (cola.despues === 'salir') { cerrar('adios'); return }
     avisarDron({ cara: 'normal' })
+    setPregunta(escoger(vistos.size ? D.preguntasOtra : D.preguntas, vistos.size ? 'preguntaOtra' : 'pregunta', { lang }))
     setFase('menu')
-  }, [fase, linea, completo, cola, cerrar])
+  }, [fase, linea, completo, cola, cerrar, vistos, D, lang])
 
   const elegir = useCallback((i) => {
     const o = opciones[i]
     if (!o) return
     try { blipMadre(1.4) } catch { }
-    if (o.id === 'adios') { empezar(o.lineas, 'salir'); return }
+    if (o.id === 'adios') { empezar([escoger(D.adios.lineas, 'adios', { lang })], 'salir'); return }
     setVistos((v) => new Set(v).add(o.id))
     setSel(i)
-    empezar(o.lineas, 'menu')
-  }, [opciones, empezar])
+    empezar(escoger(o.variantes, `tema-${o.id}`, { lang }), 'menu')
+  }, [opciones, empezar, D, lang])
 
   // teclado: va en captura y no deja pasar nada al juego mientras dura
   useEffect(() => {
@@ -134,8 +155,8 @@ export default function DialogoMadre({ onClose, modo = 'charla' }) {
         <span ref={nombreRef} className={`dlg-nombre${firma?.letras ? ' display-title--runas' : ''}${firma?.tiembla ? ' glitch-runas' : ''}`}>{textoGlitch(D.nombre, firma)}</span>
         {fase === 'menu' ? (
           <div className="dlg-menu">
-            <RenglonRunas key={`pregunta-${renglonesRef.current}`} texto={D.pregunta} completo={false} className="dlg-texto--pregunta" />
-            <ul role="listbox" aria-label={D.pregunta}>
+            <RenglonRunas key={`pregunta-${renglonesRef.current}`} texto={pregunta} completo={false} className="dlg-texto--pregunta" />
+            <ul role="listbox" aria-label={pregunta}>
               {opciones.map((o, i) => (
                 <li key={o.id}>
                   <button

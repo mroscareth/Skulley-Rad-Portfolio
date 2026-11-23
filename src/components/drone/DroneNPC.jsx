@@ -6,8 +6,8 @@ import SpeechBubble3D from '../SpeechBubble3D.jsx'
 import SilhouetteShadow from '../SilhouetteShadow.jsx'
 import DomeShield from '../fx/DomeShield.jsx'
 import HumoDron from './HumoDron.jsx'
-import { dron, escucharDron, juntoArgus } from '../../lib/droneNpc.js'
-import { dialogoMadre } from '../../lib/dialogoMadre.js'
+import { dron, escucharDron, juntoArgus, picarMadre, madreEnojada, salioDeHome, volvioAHome } from '../../lib/droneNpc.js'
+import { dialogoMadre, escoger } from '../../lib/dialogoMadre.js'
 import { escuchar as escucharJuego } from '../../lib/juegoEsferas.js'
 import scoreStore from '../../lib/scoreStore.js'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
@@ -33,6 +33,12 @@ import { useLanguage } from '../../i18n/LanguageContext.jsx'
 // Skulley y lo juzga en su viñeta cada tanto (`JUEGO`): bien si va bien, mal si
 // va mal (aciertos y fallas recientes, rato sin meter nada, puntaje negativo).
 // Habla solo si se ve en cámara; si no, espera. Al acabar regresa a pasear.
+//
+// Se siente viva (Oscar, 2026-11-23): se emociona al ver a Skulley de cerca y lo
+// saluda en su viñeta (`SALUDA`, no muy seguido), y al regresar de una sección va
+// volando hacia él y le dice cuánto tardó. Tiene humor (lib/droneNpc.js): si la
+// cortas a media frase te lo reclama; si la picas mucho o la cortas seguido, no te
+// habla un rato, te da la espalda y, si sigues picándola, se va.
 //
 // Monta desde el warm-up con Argus (comoHome), así sus programas se compilan
 // detrás del preloader. Todo lo que anima va por refs; el estado de React solo
@@ -79,6 +85,12 @@ const QUEMADA = { radio: 2.3, dura: 11, alto: 1.95, sacude: 0.7 }
 // segundos, y `sinAcierto` segundos sin meter nada cuenta como ir mal. Si la
 // mandaron y la partida no empieza en `sinPartida` segundos, regresa a pasear.
 const JUEGO = { primera: [9, 13], cada: [14, 22], tapaArgus: 1.4, esperaMax: 10, ventana: 15, sinAcierto: 15, sinPartida: 8 }
+// El saludo al verlo cerca: cada cuánto a lo más (segundos), cuánto espera después
+// de una charla, a qué distancia de él se detiene al ir a recibirlo de una sección
+// y cuándo reclama al cortarla (segundos después de cerrar: ya se fueron las barras).
+const SALUDA = { cada: [60, 120], trasCharla: 40, recibe: 3.5, reclamo: 0.9 }
+// Ofendida: a la tercera insistencia se va lejos (a más de `lejos` de Skulley).
+const OFENDIDA = { seVaEn: 3, lejos: 9 }
 
 const azar = (a, b) => a + Math.random() * (b - a)
 const angulo = (a) => Math.atan2(Math.sin(a), Math.cos(a))
@@ -99,6 +111,8 @@ export default function DroneNPC({
   const textos = dialogoMadre(lang)
   const textosRef = useRef(textos)
   textosRef.current = textos
+  const langRef = useRef(lang)
+  langRef.current = lang
   const grupoRef = useRef()
   const caraRef = useRef(null)
   const anclaRef = useRef()
@@ -161,6 +175,10 @@ export default function DroneNPC({
       comentaEn: 0,             // cuándo toca la siguiente viñeta de la partida
       esperaDesde: 0,           // desde cuándo espera para decirla
       bolsas: { bien: [], mal: [] },
+      saludaEn: 0,              // desde cuándo puede saludarlo otra vez
+      regreso: 0,               // regresó de una sección: cuánto estuvo fuera (lo dice al verlo)
+      huyeHasta: 0,             // ofendida, se va: hasta entonces no se detiene a verlo
+      reclamoHasta: 0,          // reclamando: la cara no cambia sola
     }
   }
   const pedir = (nombre) => setAccion((a) => ({ nombre, n: a.n + 1 }))
@@ -176,8 +194,53 @@ export default function DroneNPC({
     return () => { dron.montado = false; dron.castigo = null; dron.escudo = 0 }
   }, [activo])
 
+  // Skulley se va a una sección y regresa: al volver se emociona, va hacia él y lo
+  // saluda con lo que tardó (la primera llegada no cuenta)
+  const estuvoRef = useRef(false)
+  useEffect(() => {
+    if (!activo) {
+      if (estuvoRef.current) salioDeHome()
+      return
+    }
+    if (!estuvoRef.current) { estuvoRef.current = true; return }
+    const fuera = volvioAHome()
+    const e = est.current
+    if (!fuera || juegoActivoRef.current || madreEnojada()) return
+    e.regreso = fuera
+    e.saludaEn = 0
+    const s = playerRef?.current?.position
+    if (e.modo !== 'deambular' || !s) return
+    const dx = e.pos.x - s.x
+    const dz = e.pos.z - s.z
+    const L = Math.hypot(dx, dz) || 1
+    if (L < VER_CERCA) return
+    e.viendo = false
+    const meta = new THREE.Vector3(s.x + (dx / L) * SALUDA.recibe, ALTO, s.z + (dz / L) * SALUDA.recibe)
+    viajar(meta, VEL.prisa, 'skulley')
+    e.fase = 'viaje'
+    pedir(L > 9 ? 'Arrancar' : 'Avanzar')
+    caraRef.current?.poner('feliz')
+  }, [activo]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // dice algo en su viñeta (se escribe letra por letra)
   const decir = (texto, dura) => { est.current.dice = { texto, t: 0, dura } }
+  const reclamoRef = useRef(0)
+  useEffect(() => () => clearTimeout(reclamoRef.current), [])
+  // lo ve llegar cerca: se emociona y lo saluda (no muy seguido); ofendida, se voltea
+  const saludar = (ahora, yaQuieta) => {
+    const e = est.current
+    if (juegoActivoRef.current || e.dice || ahora < e.saludaEn) return
+    const cara = caraRef.current
+    if (madreEnojada()) { cara?.voltear(); return }
+    const T = textosRef.current
+    const regreso = e.regreso > 0
+    const texto = escoger(regreso ? T.regreso : T.veCerca, regreso ? 'regreso' : 'veCerca', { seg: e.regreso, lang: langRef.current })
+    e.regreso = 0
+    decir(texto, 2.6 + texto.length / LETRAS)
+    cara?.poner('feliz')
+    if (yaQuieta) pedir('IdleJugueton')
+    e.saludaEn = ahora + azar(SALUDA.cada[0], SALUDA.cada[1])
+  }
   // un golpe la ladea hacia donde la empujan (resorte en su marco)
   const ladear = (dx, dz, fuerza) => {
     const e = est.current
@@ -206,7 +269,26 @@ export default function DroneNPC({
     if (msg.cara && cara) cara.poner(msg.cara)
     if (msg.voltear && cara) cara.voltear()
     if (msg.accion) pedir(msg.accion)
-    if (msg.fin) { cara?.poner('normal'); pedir('IdleTranquilo') }
+    if (msg.fin) {
+      cara?.poner('normal')
+      pedir('IdleTranquilo')
+      e.saludaEn = Math.max(e.saludaEn, performance.now() / 1000 + SALUDA.trasCharla)
+      // la dejaste hablando sola (o sin adiós, a veces): te lo reclama ya sin las barras
+      const como = msg.como
+      if (como === 'cortada' || (como === 'sinAdios' && Math.random() < 0.6)) {
+        clearTimeout(reclamoRef.current)
+        reclamoRef.current = setTimeout(() => {
+          const e2 = est.current
+          if (e2.modo !== 'deambular') return
+          const texto = escoger(textosRef.current[como], como, { lang: langRef.current })
+          decir(texto, 2.4 + texto.length / LETRAS)
+          caraRef.current?.poner(como === 'cortada' ? 'enojada' : 'confundida')
+          const ahora = performance.now() / 1000
+          e2.alertaHasta = ahora + 4
+          e2.reclamoHasta = ahora + 4
+        }, SALUDA.reclamo * 1000)
+      }
+    }
     if (msg.alJuego === true && e.modo !== 'castigo' && e.modo !== 'quemada' && e.modo !== 'dialogo') {
       e.juegoPedido = performance.now() / 1000
       if (e.modo !== 'juego') entrarAJuego()
@@ -324,6 +406,20 @@ export default function DroneNPC({
       return new THREE.Vector3(x, ALTO + azar(-0.25, 0.35), z)
     }
     return new THREE.Vector3(e.pos.x * 0.5, ALTO, e.pos.z * 0.5)
+  }
+
+  // un lugar de la plaza lejos de Skulley (ofendida, se va)
+  const lejosDe = (s) => {
+    if (!s) return null
+    for (let i = 0; i < 32; i++) {
+      const a = Math.random() * Math.PI * 2
+      const r = azar(4, 12.5)
+      const x = Math.sin(a) * r
+      const z = Math.cos(a) * r
+      if (Math.hypot(x - s.x, z - s.z) < OFENDIDA.lejos || !libre(x, z, s)) continue
+      return new THREE.Vector3(x, ALTO + azar(-0.2, 0.3), z)
+    }
+    return null
   }
 
   // ir a un lugar: si es lejos, arranca con el giro; si no, solo avanza
@@ -545,10 +641,12 @@ export default function DroneNPC({
     if (e.modo === 'deambular' && s) {
       const dS = Math.hypot(s.x - e.pos.x, s.z - e.pos.z)
       const alerta = ahora < e.alertaHasta
-      if (!e.viendo && (dS < VER_CERCA || alerta)) {
+      if (!e.viendo && (dS < VER_CERCA || alerta) && ahora > e.huyeHasta) {
         e.viendo = true
-        if (e.fase === 'quieto') e.hasta = Infinity
+        const yaQuieta = e.fase === 'quieto'
+        if (yaQuieta) e.hasta = Infinity
         else quieto(Infinity, 'IdleTranquilo')
+        if (!alerta) saludar(ahora, yaQuieta)
       } else if (e.viendo && dS > VER_CERCA + VER_SUELTA && !alerta) {
         e.viendo = false
         e.hasta = e.t + azar(0.8, 1.6)
@@ -595,7 +693,7 @@ export default function DroneNPC({
           viajar(elegirMeta(s), VEL.paseo)
           if (Math.random() < 0.25) cara?.poner('normal')
         }
-      } else if (e.fase === 'quieto' && cara && e.t > 0.9 && e.t - dt <= 0.9) {
+      } else if (e.fase === 'quieto' && cara && e.t > 0.9 && e.t - dt <= 0.9 && ahora > e.reclamoHasta && !madreEnojada()) {
         const r = Math.random()
         if (r < 0.3) cara.poner('feliz')
         else if (r < 0.5) cara.voltear()
@@ -762,6 +860,11 @@ export default function DroneNPC({
       yawMeta = hacia
       cara.mirar(THREE.MathUtils.clamp(angulo(hacia - e.yaw) / 0.9, -1, 1), -0.35)
     }
+    // ofendida: le da la espalda mientras no le habla
+    if (e.modo === 'deambular' && e.viendo && s && cara && quietoEnSitio && madreEnojada()) {
+      yawMeta = Math.atan2(e.pos.x - s.x, e.pos.z - s.z)
+      cara.mirar(0, -0.5)
+    }
     // quemada y mareada: gira despacio sobre sí misma
     if (e.modo === 'quemada' && e.sacudida === 0) yawMeta = e.yaw + 0.35
     // viendo la esfera corrupta: de frente y con los ojos abajo, hacia ella
@@ -823,7 +926,26 @@ export default function DroneNPC({
     ev.stopPropagation()
     const e = est.current
     if (!puedeHablar || e.modo === 'castigo' || e.modo === 'quemada' || dialogo) return
-    try { onHablar?.() } catch { }
+    const r = picarMadre()
+    if (r.tipo === 'charla') {
+      try { onHablar?.() } catch { }
+      return
+    }
+    // no te habla: te lo dice en su viñeta, enojada, y a la tercera insistencia se va
+    const T = textosRef.current
+    const clave = r.tipo === 'rechazo' ? (r.por === 'clics' ? 'harta' : 'rechazo') : 'insiste'
+    const texto = escoger(T[clave], clave, { lang: langRef.current })
+    decir(texto, 2.4 + texto.length / LETRAS)
+    caraRef.current?.poner('enojada')
+    e.reclamoHasta = performance.now() / 1000 + 4
+    if (r.tipo === 'insiste' && r.n === OFENDIDA.seVaEn && e.modo === 'deambular') {
+      const meta = lejosDe(playerRef?.current?.position)
+      if (meta) {
+        e.viendo = false
+        e.huyeHasta = performance.now() / 1000 + 5
+        viajar(meta, VEL.prisa)
+      }
+    }
   }
   const sobre = (ev) => {
     ev.stopPropagation()

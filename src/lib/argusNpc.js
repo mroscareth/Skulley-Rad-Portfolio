@@ -14,6 +14,9 @@
 //                               encoge; mirar: 'skulley', 'camara' o [x, y, z].
 // y `argus.hablaUltimo` es el performance.now() de la última letra que dijo
 // (mueve la quijada con el clip Hablar).
+import { escuchar as escucharJuego } from './juegoEsferas.js'
+import scoreStore from './scoreStore.js'
+
 export const argus = {
   hablaUltimo: 0,
   // Skulley está dentro de su radio (lo escribe ZoidianNPC): solo así se abre la escena
@@ -35,3 +38,15 @@ export function avisarArgus(msg) {
     try { fn(msg) } catch { }
   }
 }
+
+// Lo que recuerda de la última vez (Oscar, 2026-11-23: que se sientan vivos): si le
+// dijiste "Ahora no" o cuánto hiciste en tu última partida, para saludarte con eso.
+// ZoidianDialog lo lee al abrir y anota "Ahora no"; el fin de partida anota aquí
+// los puntos: al acabarse el reloj ('tiempo', que ya no manda 'fin') o con END
+// GAME ('fin'). En memoria: una recarga lo olvida.
+argus.memoria = { ultimo: null, puntos: null }
+escucharJuego((tipo) => {
+  if (tipo !== 'fin' && tipo !== 'tiempo') return
+  argus.memoria.ultimo = 'jugo'
+  argus.memoria.puntos = scoreStore.get()
+})

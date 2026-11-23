@@ -169,7 +169,10 @@ function Muestra({ tipo, D, gold, silver }) {
 export default function ZoidianDialog({ onClose, onPlay, playerRef, portals, tactil = false }) {
   const { lang } = useLanguage()
   const tickets = useTicketStats()
-  const D = useMemo(() => dialogoArgus(lang, { gold: tickets.gold, silver: tickets.silver, resetsAt: tickets.resetsAt, tactil }), [lang, tickets.gold, tickets.silver, tickets.resetsAt, tactil])
+  // lo que recuerda de la última vez y la semilla de las variantes: fijos mientras dura la escena
+  const [memoria] = useState(() => ({ ...(argus.memoria || {}) }))
+  const [semilla] = useState(() => Math.random())
+  const D = useMemo(() => dialogoArgus(lang, { gold: tickets.gold, silver: tickets.silver, resetsAt: tickets.resetsAt, tactil, memoria, semilla }), [lang, tickets.gold, tickets.silver, tickets.resetsAt, tactil, memoria, semilla])
   const [fase, setFase] = useState('entra') // entra | texto | menu | sale
   const [cola, setCola] = useState(null)   // { clave, i, despues: 'menu' | 'salir' | 'jugar', n }
   const [completo, setCompleto] = useState(false)
@@ -317,7 +320,11 @@ export default function ZoidianDialog({ onClose, onPlay, playerRef, portals, tac
       empezar('jugar', 'jugar')
       return
     }
-    if (o.id === 'adios') { empezar('adios', 'salir'); return }
+    if (o.id === 'adios') {
+      if (argus.memoria) argus.memoria.ultimo = 'adios'
+      empezar('adios', 'salir')
+      return
+    }
     setVistos((v) => new Set(v).add(o.id))
     empezar(o.id, 'menu')
   }, [opciones, empezar])
