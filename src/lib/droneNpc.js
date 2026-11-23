@@ -76,7 +76,9 @@ if (import.meta.env?.DEV && typeof window !== 'undefined') window.__humorMadre =
 // que dice de cada uno vive en dialogoMadre.js (`proyectos`, por slug; uno nuevo
 // del CMS sin texto propio usa `proyectoGenerico`). Si la API falla, recomienda
 // los que tienen texto. Al recomendar, por `RECOMENDO_S` segundos picarla abre la
-// charla de ese proyecto con "Llévame a verlo".
+// charla de ese proyecto: uno de galería se abre encima de la home (QuickProject,
+// App.jsx) y uno de enlace (`url`, project_type 'link' del CMS: Heritage, The
+// Ethereans) en otra pestaña.
 const RECOMENDO_S = 30
 let proyectos = null
 let pidiendo = null
@@ -87,7 +89,7 @@ export function cargarProyectos() {
     .then((j) => {
       const lista = (j?.projects || [])
         .filter((p) => p?.slug && p.title && p.is_active !== false)
-        .map((p) => ({ slug: p.slug, titulo: p.title }))
+        .map((p) => ({ slug: p.slug, titulo: p.title, url: (p.project_type === 'link' && p.external_url) || null }))
       if (lista.length) proyectos = lista
     })
     .catch(() => { })

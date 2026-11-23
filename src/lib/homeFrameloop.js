@@ -9,13 +9,15 @@
 // 2026-11-10: la escena completa se dibujaba detrás del preloader a 3840×1916
 // con todo el post (~270 draws por cuadro) y el preloader bajaba a 10-20 fps.
 // `historiaCubre`: "Conocer la historia" abierta encima de la home (App.jsx).
+// `proyectoCubre`: la ficha de un proyecto abierta encima de la home (QuickProject).
 export function homeFramePaused({
   showPreloaderOverlay, showSectionUi, sectionUiAnimatingOut,
-  transitionState, noiseMixEnabled, pageHidden, sectionCovered, historiaCubre,
+  transitionState, noiseMixEnabled, pageHidden, sectionCovered, historiaCubre, proyectoCubre,
 }) {
   return Boolean(
     showPreloaderOverlay
     || historiaCubre
+    || proyectoCubre
     || ((showSectionUi || sectionUiAnimatingOut) && !transitionState?.active && !noiseMixEnabled)
     || pageHidden
     || (sectionCovered && transitionState?.active && transitionState.to && transitionState.to !== 'home'),

@@ -21,9 +21,11 @@ import RenglonRunas from './RenglonRunas.jsx'
 // cada tema tiene dos versiones y la despedida cambia. Si la cortas a media frase
 // o te vas del menú sin despedirte, lo cuenta (`cerrarConMadre`) y te lo reclama
 // en su viñeta. Si la picas justo después de que te recomendó un proyecto en su
-// viñeta (saludo 'proyecto'), te ofrece llevarte: "Llévame a ver…" va primero en el
-// menú y, al cerrar, App manda a Skulley al portal de Trabajo con ese proyecto
-// abierto (`onVerProyecto`).
+// viñeta (saludo 'proyecto'), te lo ofrece: "Enséñame…" va primero en el menú y, al
+// cerrar, App abre su ficha encima de la home, sin pasar por Trabajo
+// (`onVerProyecto`). Si el proyecto es un enlace a otro sitio (`url`), lo abre en
+// otra pestaña en el mismo clic o Enter que lo elige (el navegador solo deja abrir
+// pestañas en un gesto del usuario) y luego te dice que ahí te espera.
 
 const ENTRADA_MS = 750
 const SALIDA_MS = 650
@@ -45,7 +47,7 @@ export default function DialogoMadre({ onClose, onVerProyecto, modo = 'charla' }
   const [sel, setSel] = useState(0)
   const [vistos, setVistos] = useState(() => new Set())
   const [pregunta, setPregunta] = useState('')
-  const [proyecto, setProyecto] = useState(null)   // el que acaba de recomendar { slug, titulo }
+  const [proyecto, setProyecto] = useState(null)   // el que acaba de recomendar { slug, titulo, url }
   const verRef = useRef(null)                       // el que pediste ver: al cerrar, App te lleva
   const nombreRef = useRef(null)
   const firma = useGlitchSolo(nombreRef, FIRMA_GLITCH)
@@ -53,7 +55,7 @@ export default function DialogoMadre({ onClose, onVerProyecto, modo = 'charla' }
 
   const linea = cola ? cola.lineas[cola.i] : null
   const opciones = [
-    ...(proyecto ? [{ id: 'verProyecto', label: D.verProyecto.replace('{titulo}', proyecto.titulo) }] : []),
+    ...(proyecto ? [{ id: 'verProyecto', label: (proyecto.url ? D.verFuera : D.verProyecto).replace('{titulo}', proyecto.titulo) }] : []),
     ...D.temas,
     { id: 'adios', label: D.adios.label },
   ]
@@ -96,7 +98,8 @@ export default function DialogoMadre({ onClose, onVerProyecto, modo = 'charla' }
       if (modo === 'bienvenida') { empezar(D.bienvenida, 'salir'); return }
       if (s.tipo === 'proyecto' && s.proyecto) {
         setProyecto(s.proyecto)
-        empezar([{ t: escoger(D.llevar, 'llevar', { lang }).replace('{titulo}', s.proyecto.titulo), cara: 'feliz', accion: 'IdleJugueton' }], 'menu')
+        const lista = s.proyecto.url ? D.llevarFuera : D.llevar
+        empezar([{ t: escoger(lista, s.proyecto.url ? 'llevarFuera' : 'llevar', { lang }).replace('{titulo}', s.proyecto.titulo), cara: 'feliz', accion: 'IdleJugueton' }], 'menu')
         return
       }
       if (primera && s.tipo !== 'regano' && s.tipo !== 'perdon') { empezar(D.saludo, 'menu'); return }
@@ -134,6 +137,11 @@ export default function DialogoMadre({ onClose, onVerProyecto, modo = 'charla' }
     try { blipMadre(1.4) } catch { }
     if (o.id === 'adios') { empezar([escoger(D.adios.lineas, 'adios', { lang })], 'salir'); return }
     if (o.id === 'verProyecto' && proyecto) {
+      if (proyecto.url) {
+        try { window.open(proyecto.url, '_blank', 'noopener,noreferrer') } catch { }
+        empezar([{ t: escoger(D.vamosFuera, 'vamosFuera', { lang }), cara: 'feliz', accion: 'IdleJugueton' }], 'salir')
+        return
+      }
       verRef.current = proyecto.slug
       empezar([{ t: escoger(D.vamos, 'vamos', { lang }), cara: 'feliz', accion: 'IdleJugueton' }], 'salir')
       return

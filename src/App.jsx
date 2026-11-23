@@ -525,6 +525,9 @@ function SiteApp() {
   // Hablando con el drone de M.A.D.R.E.: la UI se va y la cámara se pone sobre el hombro.
   // 'charla' al picarla; 'bienvenida' la primera vez en la experiencia (luego los controles).
   const [dialogoDron, setDialogoDron] = useState(false)
+  // La ficha de un proyecto encima de la home de la completa (QuickProject): desde
+  // que se pide hasta que se cierra, la UI de la home se queda escondida.
+  const [proyectoTapa, setProyectoTapa] = useState(false)
   const [dialogoModo, setDialogoModo] = useState('charla')
   const [sphereGameActive, setSphereGameActive] = useState(false)
   // Guarda de secciones durante la partida (se define junto a sectionLabel).
@@ -1519,8 +1522,8 @@ function SiteApp() {
 
     if (inHome) {
       // In HOME: UI enters when homeLanded is true
-      if (dialogoDron || zoidianDialogOpen || bienvenidaPendiente) {
-        // hablando con el drone o con Argus (o esperando la bienvenida): la UI sale animada y se queda escondida
+      if (dialogoDron || zoidianDialogOpen || bienvenidaPendiente || proyectoTapa) {
+        // hablando con el drone o con Argus (o esperando la bienvenida, o con la ficha de un proyecto): la UI sale animada y se queda escondida
         if (uiAnimPhase === 'visible' || uiAnimPhase === 'entering') {
           setUiAnimPhase('exiting')
           if (uiExitTimerRef.current) clearTimeout(uiExitTimerRef.current)
@@ -1547,7 +1550,7 @@ function SiteApp() {
         clearTimeout(uiEnterTimerRef.current)
       }
     }
-  }, [section, homeLanded, transitionState.active, uiAnimPhase, dialogoDron, zoidianDialogOpen, bienvenidaPendiente])
+  }, [section, homeLanded, transitionState.active, uiAnimPhase, dialogoDron, zoidianDialogOpen, bienvenidaPendiente, proyectoTapa])
 
   // El deck de música se monta UNA vez (al primer aterrizaje, o al entrar
   // directo a una sección) y ya no se desmonta. Antes colgaba de `homeLanded`
@@ -2359,15 +2362,6 @@ function SiteApp() {
     return extractWorkSlug(window.location.pathname)
   })
 
-  // M.A.D.R.E. te recomendó un proyecto y le pediste "Llévame a verlo"
-  // (DialogoMadre): Skulley va al portal de Trabajo como con la barra y Section1
-  // abre ese proyecto al montar (initialSlug).
-  const verProyectoDeMadre = useCallback((slug) => {
-    if (!slug) return
-    setWorkProjectSlug(slug)
-    handleMenuSectionSelect('section1')
-  }, [handleMenuSectionSelect])
-
   // Callback for Section1 to update URL when a project detail is opened/closed
   const handleWorkSlugChange = useCallback((slug) => {
     setWorkProjectSlug(slug)
@@ -2399,8 +2393,10 @@ function SiteApp() {
   // las transiciones, el retrato y la navegación) es el de siempre. En la home
   // la UI del sitio se esconde: QuickHome trae su footer y QuickMenu.
   const rapidaEnHome = VERSION_RAPIDA && section === 'home'
-  // Un proyecto se abre aparte, encima de la home (QuickProject), con los
-  // pasos de beginSectionTransition: hacia él, los puntos tapan en el color de
+  // Un proyecto se abre aparte, encima de la home (QuickProject): en la rápida
+  // desde sus tarjetas y en la completa cuando M.A.D.R.E. te lo enseña (su escena
+  // se pausa debajo, `proyectoCubre`, y la UI de la home se esconde,
+  // `proyectoTapa`). Con los pasos de beginSectionTransition: hacia él, los puntos tapan en el color de
   // Work y se abre desde el centro; de regreso, se deshace en puntos de su color
   // y se abre a 55 % del alto, como una sección que regresa a la home.
   // Tapado, espera a que el proyecto se pueda ver (sus datos y la primera
@@ -2417,6 +2413,7 @@ function SiteApp() {
   const abrirProyectoRapido = useCallback(async (slug, { desdeHistorial = false } = {}) => {
     if (viajeRapidoRef.current || transitionState.active) return
     viajeRapidoRef.current = true
+    if (!VERSION_RAPIDA) setProyectoTapa(true)
     // Si en 150 ms no está, sale la mascota, y una vez fuera se queda al menos
     // 700 ms para no parpadear. La ficha ya no espera la foto más de 6 s; los
     // 20 s son por si la red se cae del todo (abre sobre su mismo loading).
@@ -2442,6 +2439,7 @@ function SiteApp() {
       clearTimeout(mascota)
       proyectoListoRef.current = null
       viajeRapidoRef.current = false
+      if (!proyectoRapidoRef.current) setProyectoTapa(false)
     }
   }, [transitionState.active, baseUrl])
   const cerrarProyectoRapido = useCallback(async ({ desdeHistorial = false } = {}) => {
@@ -2450,10 +2448,12 @@ function SiteApp() {
     try {
       await irisCubrir({ color: fondoDe(document.querySelector('.qp-raiz')) })
       setProyectoRapido(null)
+      setProyectoTapa(false)
       if (!desdeHistorial) {
         try { window.history.pushState({ section: 'home' }, '', rutaHome()) } catch { }
       }
-      await new Promise((listo) => requestAnimationFrame(() => requestAnimationFrame(listo)))
+      // En la completa la escena estaba en pausa: que vuelva a dibujar antes de abrir.
+      await new Promise((listo) => requestAnimationFrame(() => requestAnimationFrame(VERSION_RAPIDA ? listo : () => requestAnimationFrame(listo))))
       await irisOpen({ x: window.innerWidth / 2, y: window.innerHeight * 0.55 })
     } finally {
       viajeRapidoRef.current = false
@@ -2461,6 +2461,12 @@ function SiteApp() {
   }, [baseUrl])
   const proyectoRapidoFnsRef = useRef(null)
   proyectoRapidoFnsRef.current = { abrir: abrirProyectoRapido, cerrar: cerrarProyectoRapido }
+  // M.A.D.R.E. te recomendó un proyecto y le pediste que te lo enseñe
+  // (DialogoMadre): su ficha se abre encima de la home, sin pasar por Trabajo. Los
+  // de enlace ya los abrió ella en otra pestaña.
+  const verProyectoDeMadre = useCallback((slug) => {
+    if (slug) abrirProyectoRapido(slug)
+  }, [abrirProyectoRapido])
   // Desde QuickHome (tarjetas) y QuickMenu. En la home la navegación del sitio
   // manda a Skulley al portal (handleMenuSectionSelect); aquí no hay portal, así
   // que se llama la transición directo.
@@ -2481,7 +2487,7 @@ function SiteApp() {
   }, [section, transitionState.active])
   // Una sección elegida con el proyecto abierto lo cierra ya tapada.
   useEffect(() => {
-    if (VERSION_RAPIDA && section !== 'home' && proyectoRapido) setProyectoRapido(null)
+    if (section !== 'home' && proyectoRapido) { setProyectoRapido(null); setProyectoTapa(false) }
   }, [section, proyectoRapido])
   // El menú de la versión rápida (NavOverlay a pantalla completa): las cinco
   // secciones, con el mismo nombre que en la nav del sitio.
@@ -2694,9 +2700,9 @@ function SiteApp() {
         volverAlInicio({ recargar: true })
         return
       }
-      // Versión rápida: el proyecto abierto aparte (estado proyectoRapido en el
-      // historial) se abre y se cierra con sus puntos.
-      if (VERSION_RAPIDA) {
+      // El proyecto abierto aparte (estado proyectoRapido en el historial) se
+      // abre y se cierra con sus puntos.
+      {
         const proyecto = e?.state?.proyectoRapido || null
         if (proyecto && section === 'home') { proyectoRapidoFnsRef.current?.abrir(proyecto, { desdeHistorial: true }); return }
         if (!proyecto && proyectoRapidoRef.current) { proyectoRapidoFnsRef.current?.cerrar({ desdeHistorial: true }); return }
@@ -3131,7 +3137,7 @@ function SiteApp() {
           />
         </Suspense>
       )}
-      {VERSION_RAPIDA && proyectoRapido && (
+      {proyectoRapido && (
         <Suspense fallback={<div className="qp-raiz" />}>
           <QuickProject slug={proyectoRapido} lang={lang} onCerrar={cerrarProyectoRapido} onLista={alListoProyecto} />
         </Suspense>
@@ -3161,6 +3167,7 @@ function SiteApp() {
           sectionUiAnimatingOut={sectionUiAnimatingOut}
           sectionCovered={showSectionPreloader || sectionPreloaderFading}
           historiaCubre={historiaAbierta}
+          proyectoCubre={Boolean(proyectoRapido)}
           primerPlano={historiaCara}
           dialogoDron={dialogoDron}
           puedeHablarDron={puedeHablarDron}

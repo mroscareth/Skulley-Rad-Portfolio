@@ -429,7 +429,7 @@ function EstadoR3fDev() {
 
 export default function HomeScene({
   // state flags
-  pageHidden, showPreloaderOverlay, showSectionUi, sectionUiAnimatingOut, sectionCovered, historiaCubre, primerPlano,
+  pageHidden, showPreloaderOverlay, showSectionUi, sectionUiAnimatingOut, sectionCovered, historiaCubre, proyectoCubre = false, primerPlano,
   dialogoDron = false, puedeHablarDron = false, onHablarDron, dialogoArgus = false, onHablarArgus,
   transitionState, tramaViaje, noiseMixEnabled, mainWarmStage, sectionHomeWarm, onHomeWarmDone, psychoSceneColor,
   effectiveSceneColor, isMobilePerf, degradedMode, fxWarm, prevSceneTex,
@@ -607,7 +607,7 @@ export default function HomeScene({
             CPU/GPU justo cuando la sección destino está montando (su commit
             pesado + creación de canvas). NO aplica yendo a home (to==='home'):
             ese camino necesita el render corriendo antes del reveal. */}
-        <PauseFrameloop paused={homeFramePaused({ showPreloaderOverlay, showSectionUi, sectionUiAnimatingOut, transitionState, noiseMixEnabled, pageHidden, sectionCovered, historiaCubre })} />
+        <PauseFrameloop paused={homeFramePaused({ showPreloaderOverlay, showSectionUi, sectionUiAnimatingOut, transitionState, noiseMixEnabled, pageHidden, sectionCovered, historiaCubre, proyectoCubre })} />
         {/* Warm-up real detrás del preloader — ver la nota del componente. Gate:
             escena completa montada (stage 2 + PostFX via fxWarm) y overlay aún
             tapando. Se cancela solo si el usuario entra antes de terminar.
@@ -837,7 +837,7 @@ export default function HomeScene({
           goldSkinActive={goldSkinModelActive}
           goldSkinTransformActive={goldSkinTransformActive}
           customizeActive={customizeActive || tramaViaje || primerPlano || dialogoDron || dialogoArgus}
-          powerEnabled={section === 'home' && !saliendoDeHome && !dialogoDron && !dialogoArgus}
+          powerEnabled={section === 'home' && !saliendoDeHome && !dialogoDron && !dialogoArgus && !proyectoCubre}
           homeLanded={homeLanded}
           onPortalEnter={bootLoading ? undefined : handlePortalEnter}
           onProximityChange={bootLoading ? undefined : ((f) => {

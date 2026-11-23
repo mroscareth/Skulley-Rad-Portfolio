@@ -176,7 +176,9 @@ const ES = {
   // ---- los proyectos que recomienda de vez en cuando en su viñeta (DroneNPC), por
   // slug del CMS: un hecho del proyecto y lo que ella no logra. Uno nuevo sin texto
   // usa `proyectoGenerico`. Después, `pistaProyecto`; si la picas, la charla abre
-  // con `llevar` y la opción `verProyecto` (te lleva al proyecto en Trabajo).
+  // con `llevar` y la opción `verProyecto` (te abre su ficha encima de la home).
+  // Los que en el CMS son un enlace a otro sitio (Heritage, The Ethereans) usan
+  // `pistaFuera`, `llevarFuera`, `verFuera` y `vamosFuera`: se abren en otra pestaña.
   proyectos: {
     'galactic-conquest': { titulo: 'Galactic Conquest', t: '¡Galactic Conquest es un proyectazo! Una guerra galáctica que se juega en el navegador, con alianzas que se rompen a media partida. Yo siempre pierdo.' },
     '3d-heads-ii': { titulo: '3D Heads II', t: '¿Ya viste 3D Heads II? Esculpía cabezas y luego las imprimía en 3D para ver si se sostenían. Las mías no se sostienen ni en pantalla.' },
@@ -190,10 +192,14 @@ const ES = {
     ethereans: { titulo: 'The Ethereans', t: '¡The Ethereans es un proyectazo! Diez mil piezas 3D en Ethereum, el primer proyecto 3D de América Latina en esa cadena. Las conté todas.' },
   },
   proyectoGenerico: '¿Ya viste {titulo}? Es un proyectazo. Entra a Trabajo y me cuentas.',
-  pistaProyecto: ['¿Te llevo a verlo? Pícame.', 'Pícame y te llevo.'],
-  llevar: ['¿Te llevo a ver {titulo}? Está a unos pasos.', '¿Quieres ver {titulo}? Yo te llevo.'],
-  verProyecto: 'Llévame a ver {titulo}',
-  vamos: ['¡Ándale! Ahí te va.', '¡Vamos! Luego me cuentas qué te pareció.'],
+  pistaProyecto: ['¿Te lo enseño? Pícame.', 'Pícame y te lo enseño.'],
+  llevar: ['¿Quieres ver {titulo}? Te lo enseño aquí mismo.', '¿Te enseño {titulo}? Ni tienes que caminar.'],
+  verProyecto: 'Enséñame {titulo}',
+  vamos: ['¡Ándale! Ahí te va.', '¡Mira! Luego me cuentas qué te pareció.'],
+  pistaFuera: ['¿Te lo abro? Pícame.', 'Pícame y te lo abro.'],
+  llevarFuera: ['{titulo} tiene su propio sitio. ¿Te lo abro en otra pestaña?', '¿Quieres ver el sitio de {titulo}? Te lo abro en otra pestaña.'],
+  verFuera: 'Abrir {titulo} en otra pestaña',
+  vamosFuera: ['Listo, ya te lo abrí. Aquí te espero, ¿eh?', 'Ya está en otra pestaña. No te tardes.'],
   // ---- viñetas en el mundo (DroneNPC)
   // la cortaste a media frase; te fuiste del menú sin despedirte
   cortada: [
@@ -445,10 +451,14 @@ const EN = {
     ethereans: { titulo: 'The Ethereans', t: 'The Ethereans is a masterpiece! Ten thousand 3D pieces on Ethereum, the first 3D project from Latin America on that chain. I counted them all.' },
   },
   proyectoGenerico: 'Have you seen {titulo}? It’s a masterpiece. Go into Work and tell me what you think.',
-  pistaProyecto: ['Want me to take you? Click on me.', 'Click on me and I’ll take you.'],
-  llevar: ['Want me to take you to {titulo}? It’s just a few steps away.', 'Want to see {titulo}? I’ll take you.'],
-  verProyecto: 'Take me to {titulo}',
-  vamos: ['Off you go!', "Let's go! Tell me what you think after."],
+  pistaProyecto: ['Want me to show you? Click on me.', 'Click on me and I’ll show you.'],
+  llevar: ['Want to see {titulo}? I’ll show you right here.', 'Should I show you {titulo}? You don’t even have to walk.'],
+  verProyecto: 'Show me {titulo}',
+  vamos: ['Here you go!', 'Look! Tell me what you think after.'],
+  pistaFuera: ['Want me to open it? Click on me.', 'Click on me and I’ll open it.'],
+  llevarFuera: ['{titulo} has its own site. Want me to open it in a new tab?', 'Want to see the {titulo} site? I’ll open it in a new tab.'],
+  verFuera: 'Open {titulo} in a new tab',
+  vamosFuera: ['Done, it’s open. I’ll wait right here, okay?', 'It’s in another tab. Don’t take too long.'],
   cortada: [
     "Hey! I wasn't done.",
     "I'm talking to you, human!",

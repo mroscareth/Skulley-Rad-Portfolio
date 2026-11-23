@@ -458,10 +458,12 @@ export default function DroneNPC({
     // en trozos por frase: un globo de 8 renglones no se lee
     const [primero, ...resto] = trozos(texto)
     decir(primero, 2.4 + primero.length / LETRAS)
-    e.diceCola = [...resto, escoger(T.pistaProyecto, 'pistaProyecto', { lang: langRef.current })]
+    e.diceCola = [...resto, p.url
+      ? escoger(T.pistaFuera, 'pistaFuera', { lang: langRef.current })
+      : escoger(T.pistaProyecto, 'pistaProyecto', { lang: langRef.current })]
     caraRef.current?.poner('feliz')
     if (e.fase === 'quieto') pedir('IdleJugueton')
-    recomendo({ slug: p.slug, titulo })
+    recomendo({ slug: p.slug, titulo, url: p.url || null })
     e.recomiendaEn = ahora + azar(RECOMIENDA.cada[0], RECOMIENDA.cada[1])
     e.saludaEn = Math.max(e.saludaEn, ahora + 30)
   }
