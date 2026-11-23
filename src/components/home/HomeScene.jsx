@@ -245,6 +245,7 @@ import Environment from '../Environment.jsx'
 import FakeGrass from '../FakeGrass.jsx'
 import PastoPintado from './PastoPintado.jsx'
 import BosquePintado from './BosquePintado.jsx'
+import PetalosCamino from './PetalosCamino.jsx'
 import FloatingExclamation from '../FloatingExclamation.jsx'
 import ZoidianNPC from '../ZoidianNPC.jsx'
 import DroneNPC from '../drone/DroneNPC.jsx'
@@ -648,6 +649,9 @@ export default function HomeScene({
         {/* Matas pintadas a mano (home/PastoPintado.jsx): del color del piso, se
             doblan y se aplastan al pasar Skulley. Montadas siempre: no compilan al jugar. */}
         <PastoPintado playerRef={playerRef} portales={portals} colorPiso={psychoSceneColor || '#204580'} />
+        {/* Pétalos de cempasúchil donde la tierra tapa el camino escondido
+            (home/PetalosCamino.jsx); Skulley los levanta al pasar. Montados siempre. */}
+        <PetalosCamino playerRef={playerRef} />
         {/* El bosque del claro (home/BosquePintado.jsx): pinos, peñascos y los menhires
             rúnicos de cada portal. Montado siempre; se compila antes de entrar a la escena. */}
         <BosquePintado playerRef={playerRef} portales={portals} colorPiso={psychoSceneColor || '#204580'} portalMixMap={portalMixMap} visible={comoHome} />

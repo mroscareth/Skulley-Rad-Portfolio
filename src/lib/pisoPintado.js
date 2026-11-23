@@ -59,7 +59,7 @@ const RADIO_DESGASTE = 6.5
 // visibles del camino (Oscar: que se vea en la textura del inicio y en el camino).
 const RADIO_DESGASTE_PLAZA = 11.0
 // Para que lo que crece en el piso (las matas de PastoPintado) sepa dónde hay lozas y camino.
-export const zonasPiso = { plaza: PLAZA, plazaGlifo: PLAZA_GLIFO, camino: CAMINO, caminoTramos: CAMINO_TRAMOS }
+export const zonasPiso = { plaza: PLAZA, plazaGlifo: PLAZA_GLIFO, camino: CAMINO, caminoTramos: CAMINO_TRAMOS, caminoLargo: 90 }
 
 export const uniformsPiso = {
   uPisoFuerza: { value: 1 },
@@ -85,9 +85,10 @@ export const uniformsPiso = {
   uPisoCaminoTramos: { value: Array.from({ length: 6 }, (_, i) => new THREE.Vector2(...(CAMINO_TRAMOS[i] || [0, 0]))) },
 }
 
-// El campo del camino: la curva suavizada, su caja (más el ancho de la tira) y,
-// por texel, la distancia con signo, la vuelta de la tira y lo recorrido.
-function armarCamino() {
+// La curva del camino suavizada con Catmull-Rom y lo recorrido en cada punto.
+let curva = null
+function curvaCamino() {
+  if (curva) return curva
   const ext = [CAMINO[0], ...CAMINO, CAMINO[CAMINO.length - 1]]
   const pts = []
   const cr = (a, b, c, d, t) => {
@@ -100,6 +101,35 @@ function armarCamino() {
   pts.push(CAMINO[CAMINO.length - 1])
   const acum = [0]
   for (let i = 1; i < pts.length; i++) acum.push(acum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]))
+  curva = { pts, acum }
+  return curva
+}
+
+// Lo más cercano de la curva a (x, z): distancia con signo, lo recorrido y si cae
+// pasado una punta.
+function cercaDeCurva(x, z) {
+  const { pts, acum } = curvaCamino()
+  let lejos = Infinity, recorrido = 0, lado = 1, pasado = false
+  for (let k = 0; k < pts.length - 1; k++) {
+    const ax = pts[k][0], az = pts[k][1]
+    const ex = pts[k + 1][0] - ax, ez = pts[k + 1][1] - az
+    const crudo = ((x - ax) * ex + (z - az) * ez) / Math.max(ex * ex + ez * ez, 1e-6)
+    const t = Math.max(0, Math.min(1, crudo))
+    const d = Math.hypot(x - (ax + ex * t), z - (az + ez * t))
+    if (d < lejos) {
+      lejos = d
+      recorrido = acum[k] + t * (acum[k + 1] - acum[k])
+      lado = ex * (z - az) - ez * (x - ax) < 0 ? -1 : 1
+      pasado = (k === 0 && crudo < 0) || (k === pts.length - 2 && crudo > 1)
+    }
+  }
+  return { d: lado * lejos, s: recorrido, pasado }
+}
+
+// El campo del camino: la curva suavizada, su caja (más el ancho de la tira) y,
+// por texel, la distancia con signo, la vuelta de la tira y lo recorrido.
+function armarCamino() {
+  const { pts } = curvaCamino()
   const m = CAMINO_TAM[0]
   const caja = [
     Math.min(...pts.map((p) => p[0])) - m, Math.min(...pts.map((p) => p[1])) - m,
@@ -115,25 +145,12 @@ function armarCamino() {
     const z = caja[1] + ((j + 0.5) / h) * (caja[3] - caja[1])
     for (let i = 0; i < w; i++) {
       const x = caja[0] + ((i + 0.5) / w) * (caja[2] - caja[0])
-      let lejos = Infinity, recorrido = 0, lado = 1, pasado = false
-      for (let k = 0; k < pts.length - 1; k++) {
-        const ax = pts[k][0], az = pts[k][1]
-        const ex = pts[k + 1][0] - ax, ez = pts[k + 1][1] - az
-        const crudo = ((x - ax) * ex + (z - az) * ez) / Math.max(ex * ex + ez * ez, 1e-6)
-        const t = Math.max(0, Math.min(1, crudo))
-        const d = Math.hypot(x - (ax + ex * t), z - (az + ez * t))
-        if (d < lejos) {
-          lejos = d
-          recorrido = acum[k] + t * (acum[k + 1] - acum[k])
-          lado = ex * (z - az) - ez * (x - ax) < 0 ? -1 : 1
-          pasado = (k === 0 && crudo < 0) || (k === pts.length - 2 && crudo > 1)
-        }
-      }
+      const c = cercaDeCurva(x, z)
+      const recorrido = c.s
+      const o = (j * w + i) * 4
       // Pasado una punta del camino no hay tira: ahí el lado se voltea sobre el eje y
       // dejaba una línea hasta el centro del portal.
-      if (pasado) lejos = 50
-      const o = (j * w + i) * 4
-      datos[o] = media(lado * lejos)
+      datos[o] = media(c.pasado ? 50 : c.d)
       datos[o + 1] = media(Math.cos(recorrido * vuelta))
       datos[o + 2] = media(Math.sin(recorrido * vuelta))
       datos[o + 3] = media(recorrido / 100)
@@ -164,8 +181,20 @@ function cargarTextura(gl, url, envolver) {
 
 // Ruido suave que cierra en mosaico (valor en una retícula periódica, tres
 // octavas): rompe la orilla del desgaste. Se lee a dos escalas.
+const RUIDO_N = 128
+let datosRuido = null
 function ruidoSuave() {
-  const n = 128
+  const t = new THREE.DataTexture(generarRuido(), RUIDO_N, RUIDO_N, THREE.RGBAFormat)
+  t.wrapS = t.wrapT = THREE.RepeatWrapping
+  t.magFilter = t.minFilter = THREE.LinearFilter
+  t.generateMipmaps = false
+  t.needsUpdate = true
+  return t
+}
+
+function generarRuido() {
+  if (datosRuido) return datosRuido
+  const n = RUIDO_N
   const datos = new Uint8Array(n * n * 4)
   let s = 0x2545f491
   const azar = () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return (s >>> 0) / 4294967296 }
@@ -188,12 +217,43 @@ function ruidoSuave() {
       datos[(y * n + x) * 4] = Math.round((suma / peso) * 255)
     }
   }
-  const t = new THREE.DataTexture(datos, n, n, THREE.RGBAFormat)
-  t.wrapS = t.wrapT = THREE.RepeatWrapping
-  t.magFilter = t.minFilter = THREE.LinearFilter
-  t.generateMipmaps = false
-  t.needsUpdate = true
-  return t
+  datosRuido = datos
+  return datos
+}
+
+// El ruido leído como lo lee el shader (bilineal, repetido, sin mipmaps).
+function leerRuido(u, v) {
+  const d = generarRuido()
+  const n = RUIDO_N
+  const fx = u * n - 0.5, fy = v * n - 0.5
+  const ix = Math.floor(fx), iy = Math.floor(fy)
+  const tx = fx - ix, ty = fy - iy
+  const at = (i, j) => d[((((j % n) + n) % n) * n + (((i % n) + n) % n)) * 4] / 255
+  const a = at(ix, iy) * (1 - tx) + at(ix + 1, iy) * tx
+  const b = at(ix, iy + 1) * (1 - tx) + at(ix + 1, iy + 1) * tx
+  return a * (1 - ty) + b * ty
+}
+
+const suaveEntre = (a, b, x) => {
+  const t = Math.max(0, Math.min(1, (x - a) / (b - a)))
+  return t * t * (3 - 2 * t)
+}
+
+/** El camino escondido en (x, z), con la misma cuenta que el shader del piso:
+ * `d` distancia con signo a la curva, `s` lo recorrido (0 a 90), `medio` su medio
+ * ancho ahí y `visible` qué tanto se ven sus lozas (0 = las tapa la tierra). Para
+ * lo que se siembra en el piso según el camino (los pétalos de PetalosCamino). */
+export function caminoEnPiso(x, z) {
+  const c = cercaDeCurva(x, z)
+  const s = c.s
+  let tramo = 0
+  for (const [a, b] of CAMINO_TRAMOS) tramo = Math.max(tramo, suaveEntre(a - 3, a + 3, s) * (1 - suaveEntre(b - 3, b + 3, s)))
+  const rotos = leerRuido(x * 0.12 + 0.13, z * 0.12 + 0.57) * 0.65 + leerRuido(x * 0.41 + 0.37, z * 0.41 + 0.11) * 0.35
+  tramo = suaveEntre(0.42, 0.58, tramo + (rotos - 0.5) * 1.6)
+  const medio = Math.max(1, Math.min(2.8, 1 + 4.5 * (leerRuido(s * 0.021, 0.31) - 0.3)))
+  const rotosLado = leerRuido(x * 0.33 + 0.71, z * 0.33 + 0.29)
+  const lado = c.pasado ? 0 : 1 - suaveEntre(medio - 0.35, medio + 0.35, Math.abs(c.d) + (rotosLado - 0.5) * 1.1)
+  return { d: c.d, s, medio, pasado: c.pasado, visible: tramo * lado }
 }
 
 // Los portales del home ({ position: [x, y, z] }): ahí se gasta el piso.
