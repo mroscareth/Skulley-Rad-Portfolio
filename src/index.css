@@ -7647,6 +7647,35 @@ div:has(> #privy-dialog-backdrop) {
   font-size: 1.05rem;
   letter-spacing: 0.03em;
 }
+/* La barra de secciones de escritorio en blanco, levantada como las teclas
+   (Oscar, 2026-11-24: el azul de la placa no le gustó) y del alto de las teclas
+   de junto, 52 px: 2 + 7 + 34 + 7 + 2. El aire es parejo para que las letras
+   queden al centro y alcanza para que el nombre se levante sus 5 px sin tocar
+   el borde. Sin el 0.2em de arriba: aquí Luckiest Guy ya se centra sola (medido
+   con la tinta). El switch Skins | Props de la barra de Customize usa la misma
+   placa (--switch, abajo); en compacto sigue azul. */
+.nav-tinta__placa--tecla {
+  padding: 7px 6px;
+  background: #ffffff;
+  border: 2px solid #0a0510;
+  box-shadow: 0 5px 0 0 #0a0510;
+  transform: translateY(-5px);
+}
+.nav-tinta__placa--tecla .nav-tinta__item { min-height: 34px; padding-top: 0; color: #0a0510; }
+.nav-tinta__placa--tecla .nav-tinta__item:focus-visible { outline-color: #0a0510; }
+/* Switch: la pestaña puesta va hundida en tinta, como prendida (Oscar,
+   2026-11-24, entre magenta, tinta y amarillo: el amarillo competía con
+   Wallpaper 4K y en Customize ya dice "puesto", y el magenta se pierde si
+   ese es el fondo). Al señalarla no se levanta. */
+.nav-tinta__placa--switch .nav-tinta__item.es-activa,
+.nav-tinta__placa--switch .nav-tinta__item.es-activa:hover,
+.nav-tinta__placa--switch .nav-tinta__item.es-activa:active {
+  --alto: 0px;
+  background: #0a0510;
+  color: #ffffff;
+  border-color: #0a0510;
+  transform: none;
+}
 .nav-tinta__tecla .icono-tinta { margin-top: -0.12em; }
 
 /* Los abanicos de redes y del engrane: el translate del abanico va en línea

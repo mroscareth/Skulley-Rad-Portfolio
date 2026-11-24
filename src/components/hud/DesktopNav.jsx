@@ -14,9 +14,10 @@ const emitPortalHover = (id) => {
 
 // Desktop bottom-center section nav + language + la bocina (lib/silencioSitio.js:
 // calla la música y los efectos; la música se abre con el botón amarillo del
-// retrato). Tinta sólida (2026-11-21): una placa plana con los nombres impresos;
-// el que señalas y la sección activa se levantan como tecla en el color de su
-// sección (.nav-tinta en index.css). El idioma y la bocina son teclas.
+// retrato). Tinta sólida (2026-11-21): una placa blanca levantada como las
+// teclas, con los nombres impresos en tinta; el que señalas y la sección activa
+// se levantan como tecla en el color de su sección (.nav-tinta en index.css).
+// El idioma y la bocina son teclas.
 // Presentational. App owns nav state (`navRef`, `navInnerRef`, `navBtnRefs`,
 // `navHover` + `updateNavHighlightForEl`) and passes them as props.
 export default function DesktopNav({
@@ -49,7 +50,7 @@ export default function DesktopNav({
       inert={juego === 'oculta'}
     >
       <div ref={navInnerRef} className={`nav-tinta ${animClass}`}>
-        <div className="nav-tinta__placa">
+        <div className="nav-tinta__placa nav-tinta__placa--tecla">
           {sections.map((id) => {
             const isActive = showSectionUi && section === id
             const sColor = sectionColors[id] || '#fff'

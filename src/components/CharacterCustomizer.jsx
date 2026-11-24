@@ -197,8 +197,10 @@ const PESTANAS = [
   { id: 'props', es: 'Props', en: 'Props' },
 ]
 
-// `enBarra`: dentro de la barra de abajo de escritorio, en la placa impresa de
-// tinta sólida; la puesta se levanta como tecla (.nav-tinta__item.es-activa).
+// `enBarra`: dentro de la barra de abajo de escritorio es un switch en la placa
+// blanca de la barra de secciones (.nav-tinta__placa--tecla), del alto de las
+// teclas de junto; la puesta va hundida en tinta (.nav-tinta__placa--switch,
+// Oscar, 2026-11-24). En compacto sigue en la placa azul.
 function Pestanas({ pestana, onPestana, lang, centradas = false, enBarra = false }) {
   const idDe = (id) => `cc-pestana-${id}`
   const onKeyDown = (e) => {
@@ -214,7 +216,7 @@ function Pestanas({ pestana, onPestana, lang, centradas = false, enBarra = false
     document.getElementById(idDe(PESTANAS[n].id))?.focus()
   }
   return (
-    <div role="tablist" aria-label={lang === 'es' ? 'Guardarropa' : 'Wardrobe'} onKeyDown={onKeyDown} className={`relative flex nav-tinta__placa ${centradas ? 'justify-center' : ''}`}>
+    <div role="tablist" aria-label={lang === 'es' ? 'Guardarropa' : 'Wardrobe'} onKeyDown={onKeyDown} className={`relative flex nav-tinta__placa${enBarra ? ' nav-tinta__placa--tecla nav-tinta__placa--switch' : ''}${centradas ? ' justify-center' : ''}`}>
       {PESTANAS.map((p) => {
         const activa = p.id === pestana
         return (

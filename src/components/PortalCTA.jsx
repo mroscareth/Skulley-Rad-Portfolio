@@ -116,11 +116,16 @@ export default function PortalCTA({
       : <span key={i} style={{ fontFamily: RUNE_FONT_FAMILY }}>{it.value}</span>
   ))
   const labelClass = 'w-full flex items-center justify-center whitespace-nowrap text-[34px] leading-[1.2] pt-[4px] pb-[4px]'
+  // En escritorio va justo arriba de la barra de secciones (DesktopNav, bottom-10;
+  // su placa levantada llega a ~97 px del borde): al centro tapaba a Skulley
+  // (Oscar, 2026-11-24). El scale-150 crece desde el centro, así que la píldora
+  // asoma 15 px abajo de su caja. En la UI compacta no hay barra y se queda al
+  // centro.
+  const posicion = compact
+    ? 'inset-0 grid place-items-center'
+    : 'inset-x-0 bottom-[130px] flex justify-center'
   return (
-    <div
-      // Always centered on screen (like mobile) at all sizes
-      className="pointer-events-none fixed inset-0 z-[300] grid place-items-center"
-    >
+    <div className={`pointer-events-none fixed z-[300] ${posicion}`}>
       <button
         type="button"
         onClick={handleClick}
