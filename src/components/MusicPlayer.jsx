@@ -3,6 +3,8 @@ import { playSfx } from '../lib/sfx.js'
 import { FUNDIDO_ENTRADA_S, esperarDestape, fundir, esCancionLobby, LOBBY_LENTO_FALTA_S, LOBBY_LENTO_EVENT } from '../lib/musicaLobby.js'
 import { EVENTO_SILENCIO, sitioEnSilencio } from '../lib/silencioSitio.js'
 import { VOLUMEN_MUSICA } from '../lib/mezcla.js'
+import { esCancionOfrenda, nivelOfrenda, escucharOfrendas, TOTAL_OFRENDAS, MISIONES_ABIERTAS } from '../lib/ofrendas.js'
+import { CancionOfrenda } from '../lib/cancionOfrenda.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import SlimeSlugDOM from './SlimeSlugDOM.jsx'
 // AudioWorklet-based scratch engine. Sustituye al viejo
@@ -158,6 +160,25 @@ export default function MusicPlayer({
 
   const hasTracks = tracks && tracks.length > 0
   const current = hasTracks ? tracks[Math.min(index, tracks.length - 1)] : null
+
+  // La ofrenda del Día de los Skulleys (lib/ofrendas.js, lib/cancionOfrenda.js):
+  // su canción no sale en la lista hasta completar la ofrenda. Mientras tanto
+  // solo suena, rota, cerca del portal del glifo, y ahí el reproductor la
+  // enseña en lugar de la pista que suena (que sigue corriendo, callada).
+  const [nivelOfr, setNivelOfr] = useState(() => nivelOfrenda())
+  useEffect(() => escucharOfrendas(setNivelOfr), [])
+  const ofrendaLista = nivelOfr >= TOTAL_OFRENDAS
+  const ofrendaListaRef = useRef(ofrendaLista)
+  ofrendaListaRef.current = ofrendaLista
+  const esOculta = (tr) => !ofrendaListaRef.current && esCancionOfrenda(tr)
+  const pistaOfrenda = hasTracks ? tracks.find(esCancionOfrenda) || null : null
+  const visibles = hasTracks ? tracks.filter((tr) => !esOculta(tr)) : []
+  const cuantasVisibles = () => (tracksRef.current || []).filter((tr) => !esOculta(tr)).length
+  const [enZona, setEnZona] = useState(false)
+  const enZonaRef = useRef(false)
+  enZonaRef.current = enZona
+  const [tiempoZona, setTiempoZona] = useState(0)
+  const ofrendaRef = useRef(null)
   const esLobbyRef = useRef(false)
   esLobbyRef.current = esCancionLobby(current)
   const duracionRef = useRef(0)
@@ -187,16 +208,31 @@ export default function MusicPlayer({
 
   // Helper: get next index respecting shuffle.
   // Reads shuffle state from ref so it's always current, even in stale closures.
+  // La canción de la ofrenda, mientras siga escondida, se salta.
   function getNextIndex(currentIdx) {
     const t = tracksRef.current
     const len = t ? t.length : 0
     if (len <= 1) return 0
+    const vale = (i) => !esOculta(t[i])
     if (shuffleRef.current) {
-      let r = currentIdx
-      while (r === currentIdx) r = Math.floor(Math.random() * len)
-      return r
+      const opciones = []
+      for (let i = 0; i < len; i++) if (i !== currentIdx && vale(i)) opciones.push(i)
+      return opciones.length ? opciones[Math.floor(Math.random() * opciones.length)] : currentIdx
     }
-    return (currentIdx + 1) % len
+    for (let k = 1; k <= len; k++) {
+      const i = (currentIdx + k) % len
+      if (vale(i)) return i
+    }
+    return currentIdx
+  }
+  function getPrevIndex(currentIdx) {
+    const t = tracksRef.current
+    const len = t ? t.length : 0
+    for (let k = 1; k <= len; k++) {
+      const i = (currentIdx - k + len * 2) % len
+      if (!esOculta(t[i])) return i
+    }
+    return currentIdx
   }
 
   const resolveUrl = (path) => {
@@ -209,7 +245,7 @@ export default function MusicPlayer({
 
   async function handleDownloadCurrentTrack(e) {
     try { e?.preventDefault?.() } catch { }
-    const track = current
+    const track = pistaDescarga
     const src = track?.src
     if (!src) return
     const url = resolveUrl(src)
@@ -349,8 +385,18 @@ export default function MusicPlayer({
     lp.type = 'lowpass'
     lp.frequency.value = 22050 // transparent at normal speed
     lp.Q.value = 0.7 // gentle resonance — avoids harsh peak
-    lp.connect(g)
+    // El cruce con la canción de la ofrenda: la pista del reproductor pasa por
+    // su propia ganancia (la baja CancionOfrenda según qué tan cerca va Skulley
+    // del portal del glifo) y la ofrenda entra a `g`, así los fundidos, el TTS,
+    // la historia y la bocina mueven a las dos juntas.
+    const zonaPrincipal = ctx.createGain()
+    zonaPrincipal.connect(g)
+    lp.connect(zonaPrincipal)
     filterRef.current = lp
+    const ofrenda = new CancionOfrenda(ctx, g, zonaPrincipal)
+    ofrenda.alCambiarZona = (si) => setEnZona(si)
+    ofrendaRef.current = ofrenda
+    if (import.meta.env.DEV) window.__cancionOfrenda = ofrenda
     // Carga el AudioWorklet antes de marcar ctx listo — playFrom depende de él.
     let cancelled = false
     ensureScratchWorkletLoaded(ctx)
@@ -364,6 +410,9 @@ export default function MusicPlayer({
     return () => {
       cancelled = true
       try { srcRef.current?.stop(0) } catch { }
+      try { ofrenda.destruir() } catch { }
+      ofrendaRef.current = null
+      if (import.meta.env.DEV && window.__cancionOfrenda === ofrenda) delete window.__cancionOfrenda
       try { ctx.close() } catch { }
       setCtxReady(false)
     }
@@ -381,6 +430,33 @@ export default function MusicPlayer({
     window.addEventListener('audio-unlock', onUnlock)
     return () => window.removeEventListener('audio-unlock', onUnlock)
   }, [])
+
+  // La canción de la ofrenda sigue al reproductor: suena si él suena, con el
+  // nivel de la ofrenda. Con la ofrenda completa y su canción puesta en el
+  // reproductor, el portal no la vuelve a tocar encima.
+  useEffect(() => {
+    const o = ofrendaRef.current
+    if (!o) return
+    let url = null
+    if (pistaOfrenda?.src) {
+      try { url = new URL(pistaOfrenda.src.replace(/^\/+/, ''), window.location.origin + (import.meta.env.BASE_URL || '/')).href } catch { url = pistaOfrenda.src }
+    }
+    o.ponerPista(url)
+  }, [ctxReady, pistaOfrenda?.src])
+  useEffect(() => { ofrendaRef.current?.ponerCorriendo(isPlaying) }, [isPlaying, ctxReady])
+  useEffect(() => { ofrendaRef.current?.ponerNivel(nivelOfr) }, [nivelOfr, ctxReady])
+  useEffect(() => {
+    const o = ofrendaRef.current
+    if (o) o.anular = ofrendaLista && esCancionOfrenda(current)
+  }, [ofrendaLista, current, ctxReady])
+  useEffect(() => { if (enZona) setListOpen(false) }, [enZona])
+  // Si la pista puesta es la escondida (el CMS la dejó primera), a la primera
+  // que sí se ve.
+  useEffect(() => {
+    if (!current || !esOculta(current) || isPlayingRef.current) return
+    const i = tracks.findIndex((tr) => !esOculta(tr))
+    if (i >= 0) setIndex(i)
+  }, [tracks, ofrendaLista])
 
   // ─── "Conocer la historia" desde una experiencia ───
   // Mientras dura, la música se va con fundido y no regresa con el TTS (la
@@ -679,7 +755,7 @@ export default function MusicPlayer({
           return
         }
         const t = tracksRef.current
-        if (!t || t.length <= 1) return
+        if (!t || cuantasVisibles() <= 1) return
         switchingRef.current = true
         setIndex((i) => getNextIndex(i))
       }
@@ -783,9 +859,9 @@ export default function MusicPlayer({
     if (autoplayedRef.current || esperandoAudioRef.current) return
     if (!autoStart) return
     if (!ctxReady) return
-    const first = tracks && tracks.length ? tracks[0] : null
+    const idx = tracks ? tracks.findIndex((tr) => !esOculta(tr)) : -1
+    const first = idx >= 0 ? tracks[idx] : null
     if (!first) return
-    const idx = 0
     const attempt = async () => {
       try {
         const ok = await loadTrack(first.src, { activate: true })
@@ -879,6 +955,7 @@ export default function MusicPlayer({
   }
 
   function onDown(e) {
+    if (enZonaRef.current) return
     isDraggingRef.current = true
     setScratchingFlag(true)
     const el = e.currentTarget
@@ -975,8 +1052,12 @@ export default function MusicPlayer({
       anglePrevRef.current = angleRef.current
       tsPrevRef.current = now
 
-      // Direct DOM mutation for disc rotation — avoids React re-render
-      setDiscRotation((angleRef.current * 180) / Math.PI)
+      // Direct DOM mutation for disc rotation — avoids React re-render.
+      // Junto al portal del glifo el plato gira con la canción de la ofrenda.
+      const ofr = ofrendaRef.current
+      if (ofr) ofr.ponerVelocidad(velocidadMotor())
+      const enZonaAhora = enZonaRef.current && ofr
+      setDiscRotation(enZonaAhora ? ofr.tiempo() * v * 360 : (angleRef.current * 180) / Math.PI)
 
       const secondsPlayed = (angleRef.current / TWO_PI) / v
       // Pasamos rate signado directo; updateSpeed ya no necesita flag reversed.
@@ -990,6 +1071,7 @@ export default function MusicPlayer({
       // Throttle React state updates to ~4fps — time display doesn't need 60fps
       if (now - lastTimeUpdateRef.current > 250) {
         setCurrentTime(secondsPlayed)
+        if (enZonaAhora) setTiempoZona(ofr.tiempo())
         lastTimeUpdateRef.current = now
       }
 
@@ -1014,7 +1096,7 @@ export default function MusicPlayer({
               playFrom(0)
               return
             }
-            if (tracksRef.current && tracksRef.current.length > 1) {
+            if (tracksRef.current && cuantasVisibles() > 1) {
               switchingRef.current = true
               stoppingRef.current = true
               pauseWA()
@@ -1177,7 +1259,7 @@ export default function MusicPlayer({
 
   // Anterior / siguiente: mismas guardas que antes — no cambiar de pista a
   // media carga, a medio scratch ni justo después de soltar el disco.
-  const stepBlocked = !hasTracks || switchingRef.current || isDraggingRef.current || scratchGuardActive()
+  const stepBlocked = !hasTracks || enZona || switchingRef.current || isDraggingRef.current || scratchGuardActive()
   function stepTrack(dir) {
     clickSfx()
     if (!hasTracks) return
@@ -1187,7 +1269,7 @@ export default function MusicPlayer({
     stoppingRef.current = true
     pauseWA()
     switchingRef.current = true
-    setIndex((i) => (dir < 0 ? (i - 1 + tracks.length) % tracks.length : getNextIndex(i)))
+    setIndex((i) => (dir < 0 ? getPrevIndex(i) : getNextIndex(i)))
     setIsPlaying(true)
   }
 
@@ -1312,19 +1394,37 @@ export default function MusicPlayer({
     try { row.focus({ preventScroll: true }) } catch { }
   }, [listOpen])
 
-  const trackNo = hasTracks ? String(Math.min(index, tracks.length - 1) + 1).padStart(2, '0') : '00'
-  const progress = duration ? Math.max(0, Math.min(1, currentTime / duration)) : 0
+  // Junto al portal del glifo la pantalla es de la ofrenda: su título roto
+  // según lo que falta, su tiempo y su disco. Sin las misiones abiertas no
+  // dice cuántas ofrendas van (ofrendas.js, MISIONES_ABIERTAS).
+  const enPantalla = enZona && pistaOfrenda ? pistaOfrenda : current
+  const pistaDescarga = enZona ? (ofrendaLista ? pistaOfrenda : null) : current
+  const idxVisible = enPantalla ? visibles.indexOf(enPantalla) : -1
+  const trackNo = (enZona && !ofrendaLista)
+    ? (MISIONES_ABIERTAS ? `${nivelOfr}/${TOTAL_OFRENDAS}` : '??')
+    : (idxVisible >= 0 ? String(idxVisible + 1).padStart(2, '0') : '00')
+  const trackNoLector = (enZona && !ofrendaLista)
+    ? (MISIONES_ABIERTAS ? t('music.offeringOf', { n: nivelOfr, total: TOTAL_OFRENDAS }) : t('music.offeringUnknown'))
+    : t('music.trackOf', { n: idxVisible + 1, total: visibles.length })
+  const durPantalla = enZona ? (ofrendaRef.current?.D || 0) : duration
+  const tiempoPantalla = enZona ? tiempoZona : currentTime
+  const progress = durPantalla ? Math.max(0, Math.min(1, tiempoPantalla / durPantalla)) : 0
   const litSegments = Math.round(progress * METER_SEGMENTS)
-  const screenText = current
-    ? `${current.title || t('music.unknownTitle')}${current.artist ? `  ·  ${current.artist}` : ''}`
+  const tituloPantalla = enZona && pistaOfrenda && !ofrendaLista
+    ? tituloRoto(pistaOfrenda.title || '', nivelOfr)
+    : enPantalla?.title || t('music.unknownTitle')
+  const screenText = enPantalla
+    ? `${tituloPantalla}${enPantalla.artist ? `  ·  ${enPantalla.artist}` : ''}`
     : t('music.noTracks')
+  const zonaRota = enZona && !ofrendaLista
 
   return (
     <div
       ref={deckRef}
       className="sr-deck"
       data-playing={isPlaying ? 'true' : 'false'}
-      style={getVinylStyle(current?.vinylColor)}
+      data-ofrenda={enZona ? 'true' : undefined}
+      style={getVinylStyle(enPantalla?.vinylColor)}
     >
       <div className="sr-deck__head">
         <span className="sr-deck__mark" aria-hidden="true">SR-90</span>
@@ -1337,7 +1437,7 @@ export default function MusicPlayer({
         <SlimeSlugDOM id="music" size={26} style={{ position: 'relative', flexShrink: 0 }} />
         <span className="sr-deck__grille" aria-hidden="true" />
         <div className="sr-deck__head-actions">
-          {hasTracks && tracks.length > 1 && (
+          {visibles.length > 1 && !enZona && (
             <button
               ref={listBtnRef}
               type="button"
@@ -1370,15 +1470,16 @@ export default function MusicPlayer({
       </div>
 
       <div className="sr-deck__screen">
-        <ScreenTitle text={screenText} />
+        <ScreenTitle text={screenText} oculto={zonaRota} />
+        {zonaRota && <span className="sr-only">{t('music.offeringBroken', { title: pistaOfrenda?.title || '' })}</span>}
         <div className="sr-deck__readout">
           <span className="sr-deck__time">
-            {formatTime(currentTime)} / {formatTime(duration)}
+            {formatTime(tiempoPantalla)} / {formatTime(durPantalla)}
           </span>
           {hasTracks && (
             <span className="sr-deck__chip">
               <span aria-hidden="true">{trackNo}</span>
-              <span className="sr-only">{t('music.trackOf', { n: Math.min(index, tracks.length - 1) + 1, total: tracks.length })}</span>
+              <span className="sr-only">{trackNoLector}</span>
             </span>
           )}
         </div>
@@ -1387,9 +1488,9 @@ export default function MusicPlayer({
           role="progressbar"
           aria-label={t('music.progress')}
           aria-valuemin={0}
-          aria-valuemax={Math.round(duration) || 0}
-          aria-valuenow={Math.round(currentTime)}
-          aria-valuetext={`${formatTime(currentTime)} / ${formatTime(duration)}`}
+          aria-valuemax={Math.round(durPantalla) || 0}
+          aria-valuenow={Math.round(tiempoPantalla)}
+          aria-valuetext={`${formatTime(tiempoPantalla)} / ${formatTime(durPantalla)}`}
         >
           {Array.from({ length: METER_SEGMENTS }, (_, i) => (
             <span
@@ -1411,16 +1512,18 @@ export default function MusicPlayer({
               <span className="sr-deck__print sr-deck__print--b">RPM</span>
             </span>
             <span className="sr-deck__label">
-              {current?.cover ? (
-                <img src={resolveUrl(current.cover)} alt="" className="sr-deck__cover" draggable={false} />
+              {enPantalla?.cover ? (
+                <img src={resolveUrl(enPantalla.cover)} alt="" className="sr-deck__cover" draggable={false} />
               ) : (
-                <CoverFromMeta src={current?.src} activo={despierto} className="sr-deck__cover" alt="" />
+                <CoverFromMeta src={enPantalla?.src} activo={despierto} className="sr-deck__cover" alt="" />
               )}
             </span>
             <span className="sr-deck__spindle" />
           </div>
+          {/* La ofrenda no se raya: suena desde su propio motor. */}
           <div
             className="sr-deck__hit"
+            style={enZona ? { pointerEvents: 'none' } : undefined}
             onPointerDown={onDown}
             onPointerMove={onMove}
             onPointerUp={onUp}
@@ -1442,7 +1545,7 @@ export default function MusicPlayer({
         <button
           type="button"
           className="sr-deck__key sr-deck__key--tr"
-          disabled={!hasTracks}
+          disabled={!hasTracks || enZona}
           aria-pressed={shuffle}
           aria-label={t('music.shuffle')}
           data-tip={t('music.shuffle')}
@@ -1454,7 +1557,7 @@ export default function MusicPlayer({
         <button
           type="button"
           className="sr-deck__key sr-deck__key--bl"
-          disabled={!hasTracks}
+          disabled={!hasTracks || enZona}
           aria-pressed={repeatOne}
           aria-label={t('music.repeat')}
           data-tip={t('music.repeat')}
@@ -1464,21 +1567,27 @@ export default function MusicPlayer({
           <IconoTinta nombre="reiniciar" tam={30} />
           <span className="sr-deck__key-badge" aria-hidden="true">1</span>
         </button>
-        <a
-          href={resolveUrl(current?.src) || '#'}
-          download
-          className="sr-deck__key sr-deck__key--br"
-          aria-label={current?.title ? t('music.downloadTitle', { title: current.title }) : t('music.downloadThisTrack')}
-          data-tip={t('music.downloadThisTrack')}
-          onMouseEnter={() => hoverSfx(0.6)}
-          onClick={handleDownloadCurrentTrack}
-        >
-          <IconoTinta nombre="descargar" tam={30} />
-        </a>
+        {pistaDescarga ? (
+          <a
+            href={resolveUrl(pistaDescarga.src) || '#'}
+            download
+            className="sr-deck__key sr-deck__key--br"
+            aria-label={pistaDescarga.title ? t('music.downloadTitle', { title: pistaDescarga.title }) : t('music.downloadThisTrack')}
+            data-tip={t('music.downloadThisTrack')}
+            onMouseEnter={() => hoverSfx(0.6)}
+            onClick={handleDownloadCurrentTrack}
+          >
+            <IconoTinta nombre="descargar" tam={30} />
+          </a>
+        ) : (
+          <button type="button" className="sr-deck__key sr-deck__key--br" disabled aria-label={t('music.downloadThisTrack')}>
+            <IconoTinta nombre="descargar" tam={30} />
+          </button>
+        )}
 
         {listOpen && (
           <div id="sr-deck-list" ref={listRef} className="sr-deck__list modal-scroll">
-            {tracks.map((track, i) => (
+            {tracks.map((track, i) => esOculta(track) ? null : (
               <button
                 key={track.src || i}
                 type="button"
@@ -1490,7 +1599,7 @@ export default function MusicPlayer({
                   try { listBtnRef.current?.focus({ preventScroll: true }) } catch { }
                 }}
               >
-                <span className="sr-deck__chip sr-deck__row-no">{String(i + 1).padStart(2, '0')}</span>
+                <span className="sr-deck__chip sr-deck__row-no">{String(visibles.indexOf(track) + 1).padStart(2, '0')}</span>
                 <span className="sr-deck__row-text">
                   <span className="sr-deck__row-title">{track.title || t('music.unknownTitle')}</span>
                   {track.artist && <span className="sr-deck__row-artist">{track.artist}</span>}
@@ -1544,6 +1653,21 @@ export default function MusicPlayer({
 }
 
 function hoverSfx(volume) { try { playSfx('hover', { volume }) } catch { } }
+
+// El título de la canción de la ofrenda, roto según lo que falta: cada letra
+// tiene su lugar fijo en la fila (siempre las mismas se rompen) y las que ya se
+// arreglaron no se vuelven a romper. Signos que tiene Doto, la fuente del LCD.
+const LETRAS_ROTAS = '#%&?/*<>|'
+function tituloRoto(titulo, nivel) {
+  const queda = 1 - Math.min(1, nivel / TOTAL_OFRENDAS)
+  if (queda <= 0) return titulo
+  let h = 2166136261
+  return Array.from(titulo).map((ch, i) => {
+    h = Math.imul(h ^ (i + 31), 16777619) >>> 0
+    if (ch === ' ' || (h % 1000) / 1000 >= 0.3 * queda) return ch
+    return LETRAS_ROTAS[(h >>> 10) % LETRAS_ROTAS.length]
+  }).join('')
+}
 function clickSfx() { try { playSfx('click', { volume: 1.0 }) } catch { } }
 
 // Título de la pantalla: quieto si cabe; si no, corre en loop (dos copias +
@@ -1551,7 +1675,9 @@ function clickSfx() { try { playSfx('click', { volume: 1.0 }) } catch { } }
 // brinque). Se mide al cambiar el texto y cuando cambia el ancho del visor o
 // el del texto: Doto llega con swap y la primera medida sale con la fuente de
 // respaldo, más angosta o más ancha.
-function ScreenTitle({ text }) {
+// `oculto`: el lector de pantalla no lee el título roto de la ofrenda (va
+// aparte, en sr-only).
+function ScreenTitle({ text, oculto = false }) {
   const boxRef = useRef(null)
   const textRef = useRef(null)
   const [scroll, setScroll] = useState(false)
@@ -1573,7 +1699,7 @@ function ScreenTitle({ text }) {
     return () => ro?.disconnect()
   }, [text])
   return (
-    <div ref={boxRef} className="sr-deck__title" data-scroll={scroll ? 'true' : 'false'}>
+    <div ref={boxRef} className="sr-deck__title" data-scroll={scroll ? 'true' : 'false'} aria-hidden={oculto || undefined}>
       <span className="sr-deck__title-track">
         <span ref={textRef}>{text}</span>
         {scroll && <span aria-hidden="true">{text}</span>}

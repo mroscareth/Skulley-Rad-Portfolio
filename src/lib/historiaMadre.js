@@ -2,6 +2,7 @@ import { lineasMadre } from './vozMadre.js'
 import { cadenaCyberVox, VOZ_LIGERA } from './cyberVox.js'
 import { NUMERITO, INSPECCION } from './numeritoCabeza.js'
 import { VOZ_VERSION } from './vozMadreVersion.js'
+import { impulsoReverb } from './reverbAlReves.js'
 
 // "Conocer la historia": M.A.D.R.E. la cuenta sola, con su voz y subtítulos,
 // dentro de barras de cine, con entrada de teatro y planos como de varias
@@ -207,38 +208,9 @@ export function fuenteDeVoz(ctx, buffer, destino) {
 // armarHistoria lo arranca ese tanto antes que su subtítulo.
 const PRE_REVERB = { largo: 0.55, caida: 16, nota: 170, realimenta: 0.9, brilloPeine: 1400, brilloSala: 2800, peine: 0.5, sala: 0.85, seco: 0.85, mojado: 1, pico: 0.9 }
 
-function pasaBajos(x, hz, sr) {
-  const a = Math.exp((-2 * Math.PI * hz) / sr)
-  for (let i = 1; i < x.length; i++) x[i] = (1 - a) * x[i] + a * x[i - 1]
-}
-function energia(x) {
-  let e = 0
-  for (let i = 0; i < x.length; i++) e += x[i] * x[i]
-  return Math.sqrt(e) || 1
-}
-// La reverb: un tren de ecos cada 1/`nota` s (el resonador) más ruido que cae
-// `caida` por segundo (la sala), distinto en cada canal y con semilla fija.
-function impulsoPreReverb(sr) {
-  const n = Math.floor(sr * PRE_REVERB.largo)
-  const peine = new Float32Array(n)
-  for (let k = 1; ; k++) {
-    const i = Math.round((k * sr) / PRE_REVERB.nota)
-    if (i >= n) break
-    peine[i] = Math.pow(PRE_REVERB.realimenta, k)
-  }
-  pasaBajos(peine, PRE_REVERB.brilloPeine, sr)
-  const kp = PRE_REVERB.peine / energia(peine)
-  let semilla = 7
-  const azar = () => { semilla = (semilla * 16807) % 2147483647; return (semilla - 1) / 2147483646 }
-  return [0, 1].map(() => {
-    const sala = new Float32Array(n)
-    for (let i = 0; i < n; i++) sala[i] = (azar() * 2 - 1) * Math.exp((-PRE_REVERB.caida * i) / sr)
-    pasaBajos(sala, PRE_REVERB.brilloSala, sr)
-    const ks = PRE_REVERB.sala / energia(sala)
-    for (let i = 0; i < n; i++) sala[i] = sala[i] * ks + peine[i] * kp
-    return sala
-  })
-}
+// La reverb (el resonador y la sala) vive en reverbAlReves.js: la comparte la
+// canción rota de la ofrenda.
+const impulsoPreReverb = (sr) => impulsoReverb(sr, PRE_REVERB)
 function rms(x) {
   let e = 0
   for (let i = 0; i < x.length; i++) e += x[i] * x[i]

@@ -1,5 +1,54 @@
 # Features por construir
 
+## La ofrenda del Día de los Skulleys (en construcción)
+
+Pedido de Oscar, 2026-11-24. Hecho hasta hoy: la canción rota que se recompone, el cruce con la música al acercarse al portal y el estado de las ofrendas. Lo demás está abajo, en orden.
+
+### La historia
+
+- El usuario consigue seis objetos importantes para Oscar y los lleva al portal de SKULLEYGLYPH, como ofrendas de Día de Muertos. Unos se consiguen con M.A.D.R.E. y otros con Argus, con dinámicas que Oscar todavía no define, por caminos nuevos que va a abrir en el mapa.
+- En la plaza del portal suena "Dia de los Skulley" (canción de Oscar, estilo mexicano para Día de Muertos). Al principio suena rota, en pedazos con la reverb al revés de la historia, y con cada ofrenda se recompone, hasta quedar completa. Solo se oye y se ve en el reproductor en ese lugar; con la ofrenda completa se desbloquea en el reproductor.
+- El último paso: Skulley se duerme con la almohada atrás del portal, junto a las barricadas. Eso arranca una cinemática: M.A.D.R.E. lo tapa con su cobija (la siesta con la cobija ya existe, `lib/siestaSkulley.js`) y dice un soliloquio. Lamenta que algunos humanos la odien por hacerles la vida más simple. Con humildad revela que solo admira la creatividad de los humanos (sobre todo la de los mexicanos como Skulley) y que su sueño es facilitarnos el camino a nuestro máximo potencial. Guion por escribir con Oscar, con las reglas de voz de CLAUDE.md (Narrativa de M.A.D.R.E.: Oscar es el foco).
+- El final: M.A.D.R.E. usa la esfera corrupta en el portal, lo activa y revela memorias que ni ella conocía.
+- La sección 6 (hoy la tipografía, `/skulleyglyph`) se va a llamar Goodies o Freebies: un taller donde se bajan cosas gratis, como la tipografía, un generador de códigos QR y más.
+
+### Los objetos (modelos 3D por hacer)
+
+| # | Objeto | Qué representa | Modelo 3D |
+|---|---|---|---|
+| 1 | iPad | Donde dibuja | Pendiente |
+| 2 | Cámara Leica | La fotografía | Pendiente |
+| 3 | Álbum de fotos | Sus personas importantes y cercanas | Pendiente |
+| 4 | Teclado MIDI tipo Arturia MiniLab 3 (25 teclas, 8 perillas, 8 pads de colores, 4 faders, pantallita) | Su lado musical | Pendiente |
+| 5 | Caja de cerillos | Regalo de su novia | Pendiente |
+| 6 | Almohada | Lo deja soñar. Va al último, atrás del portal | Pendiente |
+
+Los ids en código: `ipad`, `leica`, `album`, `teclado`, `cerillos`, `almohada` (`OFRENDAS` en `src/lib/ofrendas.js`).
+
+### La plaza del portal
+
+- Muchos pétalos de cempasúchil, como los del camino (`home/PetalosCamino.jsx`).
+- Lugares para colocar las ofrendas alrededor del portal.
+- Antorchas clavadas en el piso, con el fuego toon que ya existe (`fx/LlamaMano.jsx`, `lib/fuegoToon.js`).
+- Atrás del portal, junto a las barricadas (`home/BordeDelMundo.jsx`): el lugar de la almohada, donde se duerme Skulley.
+
+### Hecho
+
+- La canción rota y su cruce con la música: `lib/cancionOfrenda.js`, `lib/zonaOfrenda.js`, `home/ZonaOfrenda.jsx` y el modo ofrenda de `MusicPlayer.jsx` (detalle en CLAUDE.md, Audio).
+- El estado: `lib/ofrendas.js` (en el navegador, `skulley_ofrendas`). En desarrollo, `window.__ofrendas.nivel(n)` y `window.__zonaOfrenda(d)` para oírla en cada nivel sin caminar.
+
+### Por hacer
+
+1. Modelos 3D de los seis objetos.
+2. La plaza: pétalos, lugares de ofrenda, antorchas y el lugar de la almohada.
+3. Las misiones (con M.A.D.R.E. y con Argus) y los caminos nuevos.
+4. Poner una ofrenda en su lugar llama a `ponerOfrenda(id)`; la canción se recompone sola.
+5. Dormir con la almohada: cinemática y soliloquio, con voz pregrabada como la historia.
+6. M.A.D.R.E. activa el portal con la esfera corrupta y aparecen las memorias.
+7. Sección 6 → Goodies / Freebies.
+8. Al abrir las misiones: `MISIONES_ABIERTAS = true` (el reproductor enseña cuántas ofrendas van en lugar de "??") y guardar las ofrendas en la cuenta, no solo en el navegador.
+9. Decidir si la canción sigue sonando dentro de la sección 6. Hoy, al entrar, regresa la música del reproductor.
+
 ## Láser de la esfera (reemplazó la explosión de la E)
 
 Pedido de Oscar, 2026-11-05. Las cuatro fases están hechas. Queda probarlo en una tablet real, y que Oscar afine la pose en el estudio cuando quiera.

@@ -248,6 +248,7 @@ import PastoPintado from './PastoPintado.jsx'
 import BosquePintado from './BosquePintado.jsx'
 import PetalosCamino from './PetalosCamino.jsx'
 import BordeDelMundo from './BordeDelMundo.jsx'
+import ZonaOfrenda from './ZonaOfrenda.jsx'
 import { PrecalentarGlobo } from '../SpeechBubble3D.jsx'
 import FloatingExclamation from '../FloatingExclamation.jsx'
 import ZoidianNPC from '../ZoidianNPC.jsx'
@@ -680,6 +681,9 @@ export default function HomeScene({
         {/* Pasando el portal del glifo: barricadas de calle cerrada y, detrás, el código
             crudo del mundo, que se revela al acercarse (home/BordeDelMundo.jsx). */}
         <BordeDelMundo playerRef={playerRef} />
+        {/* La ofrenda del Día de los Skulleys: qué tan cerca va Skulley del portal del
+            glifo, para cruzar la música con la canción rota (lib/cancionOfrenda.js). */}
+        <ZonaOfrenda playerRef={playerRef} activa={section === 'home' && !bootLoading} />
         {/* God Rays anchor (hidden when inactive and no depth write) */}
         {fx.godEnabled && (
           <mesh ref={sunRef} position={[0, 8, 0]}>
