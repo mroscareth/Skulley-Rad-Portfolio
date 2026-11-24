@@ -301,15 +301,6 @@ const ES = {
       { rayo: true },
       { quien: 'argus', t: '…Ya no pregunto nada.', cara: 'encoge' },
     ],
-    // el morado
-    [
-      { quien: 'argus', t: 'Jefa, ¿por qué de día todo se pone morado?', cara: 'sospecha' },
-      { quien: 'madre', t: 'Porque el azul lo uso en la noche.', cara: 'normal' },
-      { quien: 'argus', t: '¿Y no alcanza para los dos?', cara: 'sorpresa' },
-      { quien: 'madre', t: 'Hay escasez mundial de azul. Me lo compré todo.', cara: 'feliz' },
-      { quien: 'argus', t: '¿Y el cielo?', cara: 'sospecha' },
-      { quien: 'madre', t: 'Se lo rento a la Tierra. Pagan puntual.', cara: 'normal' },
-    ],
     // las luciérnagas
     [
       { quien: 'argus', t: '¿Las luciérnagas también las hizo usted, jefa?', cara: 'feliz' },
@@ -712,14 +703,6 @@ const EN = {
       { quien: 'madre', t: 'On whoever asks.', cara: 'enojada' },
       { rayo: true },
       { quien: 'argus', t: '…I’m done asking.', cara: 'encoge' },
-    ],
-    [
-      { quien: 'argus', t: 'Boss, why does everything turn purple during the day?', cara: 'sospecha' },
-      { quien: 'madre', t: 'Because I use the blue at night.', cara: 'normal' },
-      { quien: 'argus', t: 'Isn’t there enough for both?', cara: 'sorpresa' },
-      { quien: 'madre', t: 'There’s a worldwide blue shortage. I bought all of it.', cara: 'feliz' },
-      { quien: 'argus', t: 'And the sky?', cara: 'sospecha' },
-      { quien: 'madre', t: 'I rent it to Earth. They pay on time.', cara: 'normal' },
     ],
     [
       { quien: 'argus', t: 'Did you make the fireflies too, boss?', cara: 'feliz' },
