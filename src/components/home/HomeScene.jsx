@@ -1093,8 +1093,12 @@ export default function HomeScene({
             />
           )
         })()}
-        {/* Postprocessing effects — keep in degradedMode, but in lowPerf */}
-        {fxWarm && !pageHidden && (mainWarmStage >= 2) && (
+        {/* Postprocessing effects — keep in degradedMode, but in lowPerf.
+            No se desmonta con la pestaña oculta (2026-11-24): desmontarlo tiraba
+            los materiales del composer y al regresar se recompilaban de golpe
+            (10 programas: profundidad de campo y bloom). Oculta, el frameloop ya
+            va en 'never' y no dibuja nada. */}
+        {fxWarm && (mainWarmStage >= 2) && (
           <PostFX
             lowPerf={Boolean(isMobilePerf || degradedMode)}
             isMobile={Boolean(isMobilePerf)}

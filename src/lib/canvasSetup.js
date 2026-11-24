@@ -25,10 +25,10 @@ export const canvasGLOptions = {
 //
 // Nota: `degradedMode` arranca en true y hoy NADIE lo vuelve a false (el
 // PerformanceMonitor que lo apagaba fue removido, ver HomeScene), así que ya no
-// es señal útil de degradación real — solo pageHidden pinea el DPR a 1.0 para
-// ahorrar batería con la pestaña oculta.
-export function computeCanvasDpr({ pageHidden, degradedMode, isMobilePerf, escala = 1 }) {
-  if (pageHidden) return [1, 1.0]
+// es señal útil de degradación real. Con la pestaña oculta el DPR ya no baja a
+// 1 (2026-11-24): el frameloop va en 'never' y no dibuja, así que no ahorraba
+// nada, y al regresar redimensionaba todos los buffers en el primer cuadro.
+export function computeCanvasDpr({ degradedMode, isMobilePerf, escala = 1 }) {
   const deviceDpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1
   const top = Math.min(deviceDpr, 2)
   return escala < 1 ? Math.max(0.5, top * escala) : [1, top]

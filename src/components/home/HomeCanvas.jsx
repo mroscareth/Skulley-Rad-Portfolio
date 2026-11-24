@@ -26,7 +26,7 @@ export default function HomeCanvas(props) {
   return (
     <Canvas
       shadows={false}
-      dpr={computeCanvasDpr({ pageHidden, degradedMode, isMobilePerf, escala: escalaDpr })}
+      dpr={computeCanvasDpr({ degradedMode, isMobilePerf, escala: escalaDpr })}
       frameloop={homeFramePaused({ ...scene, pageHidden }) ? 'never' : 'always'}
       gl={canvasGLOptions}
       camera={{ position: [0, 3, 8], fov: 60, near: 0.1, far: 2000 }}

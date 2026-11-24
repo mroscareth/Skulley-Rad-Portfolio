@@ -467,6 +467,20 @@ Oscar sentía tirones y lentitud en la home después del bosque, los globos, la 
 - **Brave caía en el modo ligero en producción.** `isMobilePerf` se prendía con 4 GB de memoria o 4 núcleos, y Brave altera esos dos datos por privacidad, distinto en cada sitio: en localhost la laptop de Oscar salía completa y en skulleyrad.com reportaba 4 GB, así que producción le montaba el modo ligero (39 pases de pantalla completa por cuadro contra 63 con todo). Ahora solo cuentan 2 o menos.
 - **Profundidad de campo** (encendida desde hoy, la burbuja nítida de PostFX): +0.6 ms de GPU en la 4060 a 2560 × 1326 (7.3 → 7.9, tres pares intercalados) y el cuadro igual; el desenfoque (bokeh) no cambia el costo. Se compila en el warm-up: 129 programas al cargar, 0 al caminar y al entrar y salir de Customize.
 
+## 2026-11-24 · Lo que se recompilaba "al bajar la resolución"
+
+Una sesión que medía la plaza de la ofrenda vio ~19 programas compilados mientras caminaba del claro a la plaza del glifo y la resolución adaptable bajaba de 1 a 0.6 (Iris Xe del navegador integrado, 1600 × 900): los pases del composer (CircleOfConfusion, KawaseBlur, Copy, Mask, Bokeh ×4, Luminance, Downsampling, Upsampling), materiales de Skulley (Pupils, Lentes_Armazon, toon) y una capa de BordeDelMundo. Con el DPR fijo en 1 el mismo recorrido daba 0. Parecía el cambio de DPR; no lo era.
+
+**Cómo se midió.** Envolviendo `linkProgram` y `deleteProgram` de `WebGL2RenderingContext.prototype` (nombre por `#define SHADER_NAME`, hora y pila), anotando cada cambio de ancho del canvas grande y cada `visibilitychange`, con un servidor de Vite sin HMR ni watcher (otras sesiones editaban la carpeta y cada recarga o remontaje ensuciaba la cuenta). El navegador integrado con el panel escondido casi no dibuja; una captura de pantalla cada pocos segundos lo mantiene a ~30 cuadros por segundo.
+
+**Los escalones no compilan nada.** Quieto en el claro, forzando `'lento'` y luego `'holgado'`: 1 → 0.85 → 0.72 → 0.6 y de regreso a 1, 0 programas y 0 borrados en cada escalón, antes y después del arreglo. El cambio de DPR redimensiona los buffers del composer, pero ninguna llave de programa depende del tamaño.
+
+**Lo que sí compilaba:**
+- **Ocultar la pestaña desmontaba PostFX** (`fxWarm && !pageHidden && …` en HomeScene, de abril). Al desmontarse, el composer tira sus materiales y three borra sus programas (10 `deleteProgram` en el mismo instante); al regresar, PostFX se monta otra vez y los 10 se compilan de golpe en el primer cuadro. El panel escondido del navegador integrado manda `hidden` / `visible` solo, así que en la medición de la plaza coincidió con los escalones. Para un visitante es cambiar de pestaña o minimizar y regresar: un tirón al volver. Ahora PostFX se queda montado (oculta, el frameloop ya va en `'never'` y no dibuja nada): ocultar y mostrar compila 0 y borra 0 (probado con un `visibilitychange` de mentira, `document.visibilityState` redefinido, y la escena dibujando después).
+- **El DPR también bajaba a 1 con la pestaña oculta** (`computeCanvasDpr`), para "ahorrar batería": sin cuadros no ahorraba nada, y al regresar redimensionaba todos los buffers en el primer cuadro. Ya no cambia.
+- **Los materiales de Skulley eran su primer despiece.** En la caminata de prueba Skulley se despiezó al arrancar (`__despieceGolpe.t0`) y justo después se compilaron Head, Pupils y Lentes_Armazon en su variante `rigid_piece`, más dos programas sin nombre: es el pendiente conocido de que el primer despiece de la visita compila (ver CLAUDE.md, despiece). En la segunda vuelta ya estaban compilados, por eso con `'holgado'` salía 0.
+- **BordeDelMundo**: después del arreglo, la caminata del claro a la plaza (bajando de 1 a 0.6 en el camino) no compiló nada de él ni de la plaza.
+
 ## Reglas
 
 1. **Un Canvas que se pausa necesita las dos cosas:** `PauseFrameloop` y la prop `frameloop` del `<Canvas>` con la misma condición. Solo una no basta.
@@ -491,6 +505,7 @@ Oscar sentía tirones y lentitud en la home después del bosque, los globos, la 
 20. **El primer cuadro de un canvas manda todos sus programas juntos.** Un `gl.compile` en el commit que monta lo que se va a ver (escena, más lo que los pases dibujan sobre él, más los pases del composer) deja que la GPU los compile en paralelo; sin eso el primer cuadro los crea y los espera uno por uno. Lo que no se ve en ese cuadro va después, en otra ráfaga, y se estrena hasta que `isReady`.
 21. **Un shader con variantes por uniform paga todas en cada compilación.** Si una rama casi nunca se usa (las skins con la base), una variante sin ella para la primera pantalla y la completa compilada aparte antes de que se pida.
 22. **`React.lazy` suspende aunque el módulo ya haya llegado.** En lo que está en el camino a la primera pantalla, `lib/lazyListo.js`, y el módulo se pide desde antes.
+23. **Con la pestaña oculta se pausa, no se desmonta.** Desmontar algo de la escena o del composer tira sus programas y al regresar se compilan de golpe. El frameloop en `'never'` ya deja de dibujar.
 
 ## Cómo medir
 
@@ -534,6 +549,8 @@ Envolver todas las funciones de `WebGL2RenderingContext.prototype` antes del bun
 - La caché de shaders hace que todo parezca bien en la computadora de quien desarrolla. La corrida que importa es la primera visita.
 - `getProgramParameter` casi no bloquea: el tiempo se va al primer uso del programa. Por eso se mide con long animation frames y no envolviendo llamadas sueltas.
 - El navegador integrado de la app de escritorio dibuja con la Iris Xe, no con la RTX 4060. Revisar siempre con `WEBGL_debug_renderer_info` qué GPU se está midiendo.
+- Con el panel del navegador integrado escondido, la página casi no dibuja (de 0 a 1 cuadro por segundo) y a veces recibe `visibilitychange` a `hidden` y de regreso. Al contar compilaciones ahí, anotar también los `visibilitychange`: una vuelta de visibilidad se confundió con los escalones de la resolución (2026-11-24). Una captura de pantalla cada pocos segundos lo despierta.
+- Otras sesiones editan la misma carpeta: el HMR de Vite remonta componentes (compila) o recarga la página a media medición. Para contar programas, un servidor aparte con `server.hmr: false` y `server.watch: null` (una config que importa `vite.config.js` y cambia solo eso), reiniciándolo después de cada cambio propio.
 - En el modo por objeto, la consulta de tiempo le suma algo a cada dibujo y el primero de cada pase carga con el cambio de destino o el borrado pendiente. Sirve para ver qué pesa; los totales se toman por llamada o por cuadro.
 - Saltar en la historia con `__historiaT` hornea las piezas en ese momento, así que compila lo del golpe aunque no se llegue a él. Para contar compilaciones, la historia se deja correr sola.
 - La historia no se congela con `setFrameloop('never')` y `performance.now` fijo: la cámara y el grano siguen otros relojes. Con su pausa (el botón o K) y ~3 s para que se asiente, el cuadro queda quieto.
