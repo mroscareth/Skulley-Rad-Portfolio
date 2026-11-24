@@ -10,16 +10,34 @@ import * as THREE from 'three'
 // Monta desde el principio con todo en tamaño cero.
 //
 // `fuenteRef.current`: { pos: Vector3 (de dónde sale), nivel: 0..1 (cuánto humea) }.
+// `config` (al montar) cambia cuántas, cuántas por segundo, su vida, tamaño, subida, cuánto se abren y sus tres tonos
+// (del que nace al que se va): así sale también el fuego y la ceniza de la guitarra del solo (Player), con los
+// mismos programas.
 
-const N = 40
-const POR_SEGUNDO = 11          // con nivel 1
-const VIDA = [1.3, 2.1]
-const TAM = [0.1, 0.19]         // al nacer; crece hasta ~2.1 veces
-const SUBE = [0.9, 1.5]
-const OUTLINE = 0.035
-const TONOS = ['#2b2a31', '#57555f', '#8c8a96'].map((c) => new THREE.Color(c))
+const BASE = {
+  n: 40,
+  porSegundo: 11,               // con nivel 1
+  vida: [1.3, 2.1],
+  tam: [0.1, 0.19],             // al nacer; crece hasta ~2.1 veces
+  sube: [0.9, 1.5],
+  abre: 0.35,
+  outline: 0.035,
+  tonos: ['#2b2a31', '#57555f', '#8c8a96'],
+}
 
-export default function HumoDron({ fuenteRef }) {
+export default function HumoDron({ fuenteRef, config }) {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const C = useMemo(() => {
+    const c = { ...BASE, ...(config || {}) }
+    return { ...c, tonos: c.tonos.map((t) => new THREE.Color(t)) }
+  }, [])
+  const N = C.n
+  const POR_SEGUNDO = C.porSegundo
+  const VIDA = C.vida
+  const TAM = C.tam
+  const SUBE = C.sube
+  const OUTLINE = C.outline
+  const TONOS = C.tonos
   const humoRef = useRef(null)
   const tintaRef = useRef(null)
   const geo = useMemo(() => new THREE.IcosahedronGeometry(1, 2), [])
@@ -72,7 +90,7 @@ export default function HumoDron({ fuenteRef }) {
         const b = e.p.find((x) => !x.vivo)
         if (!b) { e.acc = 0; break }
         const a = Math.random() * Math.PI * 2
-        const r0 = Math.random() * 0.35
+        const r0 = Math.random() * C.abre
         b.vivo = true
         b.t = 0
         b.vida = VIDA[0] + Math.random() * (VIDA[1] - VIDA[0])

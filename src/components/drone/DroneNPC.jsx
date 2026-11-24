@@ -13,6 +13,7 @@ import scoreStore from '../../lib/scoreStore.js'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { argus, avisarArgus } from '../../lib/argusNpc.js'
 import { escenasArgusMadre } from '../../lib/escenasArgusMadre.js'
+import { siesta, pedirCobija } from '../../lib/siestaSkulley.js'
 
 // El drone de M.A.D.R.E. como NPC de la home (Oscar, 2026-11-19). Anda por ahí
 // feliz y despacio entre los portales; al picarlo se abre su diálogo
@@ -116,6 +117,10 @@ const OFENDIDA = { seVaEn: 3, lejos: 9 }
 // El rayo que le cae a Argus: a qué altura de él termina, cuándo caen los destellos
 // de más (ms), cuándo se chamusca y qué tanto tiembla la cámara.
 const RAYO_ARGUS = { cabeza: 0.95, destellos: [140, 330], quema: 60, temblor: 1.1 }
+// Skulley se durmió en el piso (lib/siestaSkulley.js): tras `espera` s va sobre él, a `alto` del
+// centro de la cobija, la imprime y la suelta; lo dice `dice` s después y se queda `queda` s viéndolo.
+// Si el humano lo despierta, lo comenta `despierta` s después.
+const COBIJA = { espera: 2.4, alto: 1.25, vel: 5.5, dice: 1.5, queda: 5, despierta: 1.6 }
 const CHARLA = { primera: [60, 100], cada: [140, 230], espera: 12, lejos: 18, frente: 2.7, lado: 2.1, alto: 3.4, aCamara: 0.35, antes: 0.5, entre: 0.25, trasRayo: 1.6 }
 // Al regresar del proyecto que te enseñó, cuánto espera para comentarlo (segundos
 // después de que se abrió el iris o se fueron las barras).
@@ -225,6 +230,12 @@ export default function DroneNPC({
       bolsaEscenas: [],         // no repite escena hasta acabarlas
       burlaArgusEn: 0,          // cuándo se burló Argus de ella (la quemó el rayo de la esfera)
       quemadaDesde: 0,
+      tCobija: -1,              // la cobija: desde que llegó sobre Skulley dormido
+      dijoCobija: false,
+      tapo: false,              // ella lo tapó en esta siesta (al despertarlo lo comenta)
+      siestaAntes: 'nada',
+      despiertaEn: 0,           // cuándo dice lo de que lo despertaron
+      despiertaSeg: 0,
     }
   }
   const pedir = (nombre) => setAccion((a) => ({ nombre, n: a.n + 1 }))
@@ -778,6 +789,38 @@ export default function DroneNPC({
     sc.hasta = sc.t + dura + CHARLA.entre
   }
 
+  // ---- la siesta de Skulley: va sobre él con la cobija y lo tapa
+  const empezarCobija = () => {
+    const e = est.current
+    if (e.modo === 'curiosa') terminarCuriosa(false)
+    e.modo = 'cobija'
+    e.tCobija = -1
+    e.dijoCobija = false
+    e.ofertaTexto = ''
+    e.dice = null
+    e.diceCola = []
+    e.viendo = false
+    caraRef.current?.poner('feliz')
+    const c = siesta.cobijaCentro
+    const meta = new THREE.Vector3(c.x, c.y + COBIJA.alto, c.z)
+    viajar(meta, COBIJA.vel)
+    e.fase = 'viaje'
+    pedir(e.pos.distanceTo(meta) > 6 ? 'Arrancar' : 'Avanzar')
+  }
+  function terminarCobija() {
+    const e = est.current
+    e.modo = 'deambular'
+    e.tCobija = -1
+    caraRef.current?.mirar(0, 0)
+    caraRef.current?.poner('normal')
+    const ahora = performance.now() / 1000
+    // dormido no lo saluda ni le recomienda nada: que descanse
+    e.saludaEn = Math.max(e.saludaEn, ahora + 30)
+    e.recomiendaEn = Math.max(e.recomiendaEn, ahora + 40)
+    e.charlaEn = Math.max(e.charlaEn, ahora + 40)
+    quieto(azar(3, 5), 'IdleTranquilo')
+  }
+
   // junto a Argus, de prisa; se queda ahí viendo a Skulley
   function entrarAJuego() {
     const e = est.current
@@ -874,6 +917,28 @@ export default function DroneNPC({
     // ---- decidir
     const ahora = performance.now() / 1000
     if (e.modo !== 'deambular') e.viendo = false
+    // la siesta de Skulley: dormido, nada de saludos, escenas ni recomendaciones
+    const enSiesta = siesta.estado !== 'nada' && siesta.estado !== 'guitarra'
+    if (siesta.estado === 'sale' && e.siestaAntes === 'dormido' && e.tapo) {
+      e.despiertaEn = ahora + COBIJA.despierta
+      e.despiertaSeg = Math.round(siesta.desde - siesta.dormidoDesde)
+    }
+    if (siesta.estado !== 'dormido' && siesta.estado !== 'sale') e.tapo = e.tapo && e.despiertaEn > 0
+    e.siestaAntes = siesta.estado
+    if (e.despiertaEn && ahora > e.despiertaEn && e.modo === 'deambular' && !e.dice && !juegoActivo) {
+      const T = textosRef.current
+      const texto = escoger(T.despierta, 'despierta', { seg: e.despiertaSeg, lang: langRef.current })
+      if (texto) {
+        decir(texto, 2.6 + texto.length / LETRAS)
+        cara?.poner('feliz')
+      }
+      e.despiertaEn = 0
+      e.tapo = false
+    }
+    if (e.modo === 'deambular' && s && siesta.estado === 'dormido' && siesta.cobija.fase === 'nada'
+      && ahora - siesta.dormidoDesde > COBIJA.espera && !juegoActivo && !dialogo && !madreEnojada() && !argus.dialogo) {
+      empezarCobija()
+    }
     if (e.modo === 'deambular' && s) {
       const dS = Math.hypot(s.x - e.pos.x, s.z - e.pos.z)
       const alerta = ahora < e.alertaHasta
@@ -882,7 +947,7 @@ export default function DroneNPC({
         const yaQuieta = e.fase === 'quieto'
         if (yaQuieta) e.hasta = Infinity
         else quieto(Infinity, 'IdleTranquilo')
-        if (!alerta) saludar(ahora, yaQuieta)
+        if (!alerta && !enSiesta) saludar(ahora, yaQuieta)
       } else if (e.viendo && dS > VER_CERCA + VER_SUELTA && !alerta) {
         e.viendo = false
         e.hasta = e.t + azar(0.8, 1.6)
@@ -890,14 +955,14 @@ export default function DroneNPC({
       }
     }
     // de vez en cuando va con Argus y tienen una escena (si Skulley anda cerca de él y se ve)
-    if (e.modo === 'deambular' && e.fase === 'quieto' && s && !juegoActivo && !dialogo && !e.dice && ahora > e.charlaEn
+    if (e.modo === 'deambular' && e.fase === 'quieto' && s && !juegoActivo && !dialogo && !e.dice && ahora > e.charlaEn && !enSiesta
       && ahora > e.huyeHasta && !madreEnojada() && !argus.dialogo) {
       const dA = Math.hypot(s.x - argus.pos.x, s.z - argus.pos.z)
       if (dA < CHARLA.lejos && argusEnCuadro()) empezarEscena(sacarEscena(), 'ambiente')
       else e.charlaEn = ahora + CHARLA.espera
     }
     // de vez en cuando le recomienda un proyecto: viéndolo lo dice; a medio camino va hacia él
-    if (e.modo === 'deambular' && s && !juegoActivo && !e.dice && ahora > e.recomiendaEn && ahora > e.huyeHasta && !madreEnojada()) {
+    if (e.modo === 'deambular' && s && !juegoActivo && !e.dice && ahora > e.recomiendaEn && ahora > e.huyeHasta && !madreEnojada() && !enSiesta) {
       const dS = Math.hypot(s.x - e.pos.x, s.z - e.pos.z)
       if (e.viendo && dS < VER_CERCA + VER_SUELTA) recomendar(ahora)
       else if (dS < RECOMIENDA.lejos && e.fase === 'quieto') {
@@ -952,6 +1017,23 @@ export default function DroneNPC({
         const r = Math.random()
         if (r < 0.3) cara.poner('feliz')
         else if (r < 0.5) cara.voltear()
+      }
+    } else if (e.modo === 'cobija') {
+      // lo despertaron antes de que llegara, o algo más importante (la partida, el trato)
+      if ((siesta.estado !== 'dormido' && siesta.cobija.fase === 'nada') || juegoActivo || dialogo || !activo) terminarCobija()
+      else if (e.fase === 'quieto') {
+        if (e.tCobija < 0) {
+          e.tCobija = 0
+          if (pedirCobija()) e.tapo = true
+          pedir('IdleJugueton')
+        }
+        e.tCobija += dt
+        if (!e.dijoCobija && e.tCobija > COBIJA.dice) {
+          e.dijoCobija = true
+          const texto = escoger(textosRef.current.cobija, 'cobija', { lang: langRef.current })
+          if (texto) decir(texto, 2.8 + texto.length / LETRAS)
+        }
+        if (e.tCobija > COBIJA.queda) terminarCobija()
       }
     } else if (e.modo === 'conArgus') {
       // el trato con Argus, su charla, la partida o salir de la home la cortan
@@ -1136,6 +1218,11 @@ export default function DroneNPC({
     if (e.modo === 'deambular' && e.viendo && s && cara && quietoEnSitio && madreEnojada()) {
       yawMeta = Math.atan2(e.pos.x - s.x, e.pos.z - s.z)
       cara.mirar(0, -0.5)
+    }
+    // tapándolo: de frente a la cámara, con los ojos abajo (hacia él)
+    if (e.modo === 'cobija' && quietoEnSitio && cara) {
+      yawMeta = Math.atan2(camera.position.x - e.pos.x, camera.position.z - e.pos.z)
+      cara.mirar(0, -0.8)
     }
     // quemada y mareada: gira despacio sobre sí misma
     if (e.modo === 'quemada' && e.sacudida === 0) yawMeta = e.yaw + 0.35

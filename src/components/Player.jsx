@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useGLTF, useAnimations } from '@react-three/drei'
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
@@ -56,10 +56,32 @@ import { pasoCaminata } from '../lib/caminataAuto.js'
 import { sacarDeObstaculos, sacarAlClaro } from '../lib/obstaculosHome.js'
 import { avisarExplosion } from '../lib/explosionesHome.js'
 import { caidaRetenida } from '../lib/caidaHome.js'
+import { juego } from '../lib/juegoEsferas.js'
+import { SIESTA, URL_IDLES, URL_COBIJA, URL_GUITARRA, URL_PUA, GUITARRA, CLIP_IDLE, siesta, ponerEstado, respiracion } from '../lib/siestaSkulley.js'
+import CobijaSkulley from './home/CobijaSkulley.jsx'
+import { sonarRonquido, sonarSilbido, sonarPuf, sonarRasgueo, sonarCaeGuitarra, sonarCachaGuitarra } from '../lib/siestaSonidos.js'
+import { sonarPrenden } from '../lib/petalosSonidos.js'
+import { crearGuitarraSolo } from '../lib/guitarraSolo.js'
+import HumoDron from './drone/HumoDron.jsx'
+import { ponerGuitarra } from '../lib/accesorios.js'
 
 // Identidad fija para un componente definido dentro de otro: `render` cambia en cada
 // render del padre, pero React ve siempre el mismo tipo y no lo vuelve a montar.
 const ComponenteEstable = ({ render }) => render()
+
+// El fuego de la guitarra del solo: bolitas toon chicas y rápidas que nacen naranjas y se van rojas; la ceniza, el
+// humo gris de siempre más abierto
+const FUEGO_GUITARRA = { n: 70, porSegundo: 45, vida: [0.45, 0.8], tam: [0.07, 0.13], sube: [1.4, 2.4], abre: 0.12, tonos: ['#ffa53a', '#ff5a14', '#c2240f'] }
+const CENIZA_GUITARRA = { n: 40, porSegundo: 20, vida: [1.0, 1.6], tam: [0.12, 0.22], abre: 0.55 }
+
+// Los clips de los idles (lib/siestaSkulley.js): se piden ya en la home, en su propio
+// Suspense, para no alargar la carga ni suspender a Player.
+const IDLES_URLS = [URL_IDLES.guitarra, URL_IDLES.entra, URL_IDLES.dormido, URL_IDLES.sale]
+function ClipsIdles({ alCargar }) {
+  const gltfs = useGLTF(IDLES_URLS, true)
+  useEffect(() => { alCargar(gltfs.flatMap((g) => g.animations || [])) }, [gltfs, alCargar])
+  return null
+}
 
 // Stable refs for the lightning bolt endpoints — module-level so they don't
 // allocate a new array each render (the bolt geometry keys off these values).
@@ -230,6 +252,9 @@ export default function Player({
   useEffect(() => { customizeActiveRef.current = !!customizeActive }, [customizeActive])
   const powerEnabledRef = useRef(powerEnabled)
   powerEnabledRef.current = powerEnabled
+  // Los idles (lib/siestaSkulley.js): cuánto lleva quieto, la fase y el peso de cada clip.
+  // `bloquea`: acostado o levantándose no camina; `despierta`: algo pidió despertarlo.
+  const idleRef = useRef({ fase: 'nada', quieto: 0, toco: false, acciones: null, w: {}, fundido: 0.3, bloquea: false, despierta: false, total: 0 })
   // Disassembly (easter egg) DISABLED: caused intermittent material/visibility states.
   // New workaround: instanced fragment FX + brief character hide (no reparenting, no material mutation).
   const DISASSEMBLE_ENABLED = false
@@ -257,6 +282,11 @@ export default function Player({
   const lentes3dGltf = useGLTF(URL_LENTES3D, true)
   const correrGltf = useGLTF(URL_CORRER, true)
   const idleGltf = useGLTF(URL_IDLE, true)
+  // la cobijita de la siesta (lib/siestaSkulley.js): con lo demás, para que el warm-up compile su material
+  const cobijaGltf = useGLTF(URL_COBIJA, true)
+  // y la guitarra del solo: con lo demás, para que se le ponga el toon, el contorno y la tinta al clonar
+  const guitarraGltf = useGLTF(URL_GUITARRA, true)
+  const puaGltf = useGLTF(URL_PUA, true)
   // Detect GPU compressed-texture support once per renderer
   useEffect(() => { detectKTX2Support(gl) }, [gl])
 
@@ -287,6 +317,7 @@ export default function Player({
     try { ponerPantalones(s, pantalonesGltf) } catch (e) { if (import.meta.env.DEV) console.warn('[pantalones]', e) }
     try { ponerMunequeras(s, munequerasGltf) } catch (e) { if (import.meta.env.DEV) console.warn('[munequeras]', e) }
     try { ponerBeanie(s, beanieGltf) } catch (e) { if (import.meta.env.DEV) console.warn('[beanie]', e) }
+    try { ponerGuitarra(s, guitarraGltf, puaGltf) } catch (e) { if (import.meta.env.DEV) console.warn('[guitarra]', e) }
     // Con los bóxers (o los pantalones), las manos se abren para no atravesarlos; con la chamarra, el
     // hoodie o la inflada, los brazos, para que las mangas no se metan al costado (se mide en reposo).
     try {
@@ -295,7 +326,7 @@ export default function Player({
       s.userData.apartaManos = crearApartaManos(s, (b) => new THREE.Matrix4().multiplyMatrices(raizInv, b.matrixWorld))
     } catch { }
     return s
-  }, [originalScene, lentesGltf, boxersGltf, chamarraGltf, hoodieGltf, tenisGltf, infladaGltf, botasGltf, pantalonesGltf, munequerasGltf, beanieGltf, lentes3dGltf])
+  }, [originalScene, lentesGltf, boxersGltf, chamarraGltf, hoodieGltf, tenisGltf, infladaGltf, botasGltf, pantalonesGltf, munequerasGltf, beanieGltf, lentes3dGltf, guitarraGltf, puaGltf])
 
   // CRITICAL: Clone animation clips per scene swap. Three.js AnimationClips cache
   // PropertyBinding objects that reference specific skeleton nodes. When the scene
@@ -916,6 +947,8 @@ export default function Player({
     if (otroDetras && !tocaCuerpoSkulley(ev.ray)) return
     ev.stopPropagation()
     if (!puedeHablar || disassembleActiveRef.current) return
+    // dormido (o acostándose), picarlo lo despierta
+    if (idleRef.current.bloquea || idleRef.current.fase === 'dormido') { idleRef.current.despierta = true; return }
     const c = clicsRef.current
     // Con una frase en pantalla (o recién ida) los clics no cuentan: la que
     // sigue pide otros 3 después (Oscar: que no salgan una tras otra).
@@ -1141,6 +1174,7 @@ export default function Player({
     const libre = !orbActiveRef.current && !showOrbRef.current && !disassembleActiveRef.current && (op < 0 || op > 0.01)
     for (let i = 0; i < pr.mallas.length; i++) {
       const m = pr.mallas[i]
+      if (m.userData.deIdle) continue // la guitarra del solo: la muestra pasoIdles
       m.visible = libre && !!estado[m.userData.accesorio]
     }
   }
@@ -1158,7 +1192,10 @@ export default function Player({
       else if (mallas[i].userData.accesorio === 'pantalones') conPantalones = true
       else if (mallas[i].userData.accesorio === 'munequeras') conMunequeras = true
     }
-    try { scene?.userData.apartaManos?.aplicar(dt, { boxers: conBoxers, pantalones: conPantalones, chamarra: conChamarra, hoodie: conHoodie, inflada: conInflada, munequeras: conMunequeras }) } catch (e) { if (import.meta.env.DEV) console.warn('[manos]', e) }
+    try {
+      if (idleRef.current.total > 0.01) scene?.userData.apartaManos?.soltar()
+      else scene?.userData.apartaManos?.aplicar(dt, { boxers: conBoxers, pantalones: conPantalones, chamarra: conChamarra, hoodie: conHoodie, inflada: conInflada, munequeras: conMunequeras })
+    } catch (e) { if (import.meta.env.DEV) console.warn('[manos]', e) }
     // los cordones del hoodie se mecen (con los brazos ya donde van)
     for (let i = 0; i < mallas.length; i++) {
       if (mallas[i].userData.cordones) try { pasoCordones(mallas[i], dt) } catch (e) { if (import.meta.env.DEV) console.warn('[cordones]', e) }
@@ -4930,6 +4967,7 @@ export default function Player({
     const isSpace = (e) => e && (e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar')
     const onKeyDown = (e) => {
       if (!e || e.repeat || !isSpace(e) || !powerEnabledRef.current) return
+      if (idleRef.current.bloquea) { idleRef.current.despierta = true; return }
       const tag = (e.target?.tagName || '').toLowerCase()
       if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) return
       // Sin esto la barra hace scroll de la página y/o "clickea" el botón que
@@ -5716,6 +5754,252 @@ export default function Player({
     }
   }, [actions, idleName, walkName])
 
+  // ── IDLES (lib/siestaSkulley.js) ──────────────────────────────────────────
+  // Quieto SIESTA.guitarraTras segundos toca un solo de guitarra de aire; si sigue
+  // quieto hasta SIESTA.dormirTras se tira a dormir en el piso (y M.A.D.R.E. le trae
+  // una cobija). Moverlo, la E, la barra espaciadora o picarlo lo despiertan. Los
+  // clips van encima de la locomoción: su peso total le quita lo mismo a idle/walk.
+  const alCargarIdles = useCallback((clips) => {
+    if (!mixer || !scene) return
+    const I = idleRef.current
+    if (I.acciones) for (const a of Object.values(I.acciones)) a.stop()
+    const acc = {}
+    for (const [k, nombre] of Object.entries(CLIP_IDLE)) {
+      const clip = clips.find((c) => c.name === nombre)
+      if (!clip) continue
+      const a = mixer.clipAction(clip.clone(), scene)
+      if (k === 'dormido') a.setLoop(THREE.LoopRepeat, Infinity)
+      else { a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true }
+      a.setEffectiveWeight(0)
+      acc[k] = a
+      I.w[k] = 0
+    }
+    I.acciones = Object.keys(acc).length === 4 ? acc : null
+    I.fase = 'nada'
+    I.total = 0
+  }, [mixer, scene])
+
+  const idleEmpezar = (fase, fundido) => {
+    const I = idleRef.current
+    const a = I.acciones[fase]
+    // el solo y la siesta son para quien ve: voltea hacia la cámara (en el juego le da la espalda)
+    if (fase === 'guitarra' || fase === 'entra') {
+      const p = playerRef.current?.position
+      if (p) I.giro = Math.atan2(camera.position.x - p.x, camera.position.z - p.z)
+    }
+    a.reset()
+    a.setEffectiveTimeScale(fase === 'sale' ? SIESTA.despiertaVel : 1)
+    a.play()
+    I.fase = fase
+    I.fundido = fundido
+    ponerEstado(fase)
+  }
+  const idleCortar = (fundido) => {
+    const I = idleRef.current
+    I.fase = 'nada'
+    I.fundido = fundido
+    ponerEstado('nada')
+    // la cobija, si había, se va (Customize, una sección, la esfera…)
+    if (siesta.cobija.fase !== 'nada') { siesta.cobija.fase = 'sevaya'; siesta.cobija.t0 = performance.now() / 1000 }
+  }
+  const idleDespertar = () => {
+    idleEmpezar('sale', 0.3)
+    const c = siesta.cobija
+    if (c.fase === 'aparece' || c.fase === 'cae' || c.fase === 'puesta') { c.fase = 'tirada'; c.t0 = performance.now() / 1000 }
+  }
+  // los ojos de Skulley (material Eyes) a `k` de su brillo; con 1 los regresa como estaban y los suelta.
+  // Si algo más los cambia mientras tanto (los colores de Customize, una skin), eso es lo que se regresa.
+  const pintarOjos = (k) => {
+    const I = idleRef.current
+    if (!I.ojos || I.ojos.raiz !== scene) {
+      const mats = new Set()
+      scene.traverse((o) => {
+        if (!o.isMesh || o.name.endsWith('_outline')) return
+        for (const m of [].concat(o.material)) if (m && /^Eyes$/i.test(m.name || '')) mats.add(m)
+      })
+      I.ojos = { raiz: scene, mats: [...mats].map((m) => ({ m, c: m.color.clone(), e: m.emissive ? m.emissive.clone() : null, escrito: null })) }
+    }
+    for (const o of I.ojos.mats) {
+      const { m } = o
+      if (!o.escrito || !m.color.equals(o.escrito)) {
+        // nadie lo controla, o alguien lo cambió: ese es su color prendido
+        if (k >= 1 && !o.escrito) { o.c.copy(m.color); if (o.e) o.e.copy(m.emissive); continue }
+        if (o.escrito) { o.c.copy(m.color); if (o.e) o.e.copy(m.emissive) }
+      }
+      if (k >= 1) {
+        m.color.copy(o.c)
+        if (o.e) m.emissive.copy(o.e)
+        o.escrito = null
+        continue
+      }
+      m.color.copy(o.c).multiplyScalar(k)
+      if (o.e) m.emissive.copy(o.e).multiplyScalar(k)
+      o.escrito = (o.escrito || new THREE.Color()).copy(m.color)
+    }
+  }
+  // La guitarra del solo (Egg_Guitarra, ponerGuitarra; lib/guitarraSolo.js): cae del cielo dando vueltas, él la
+  // cacha, toca, se quema y se deshace en ceniza (GUITARRA en lib/siestaSkulley.js). Si cortan el solo se encoge
+  // con la mezcla. El fuego y la ceniza son dos HumoDron (mismos programas que el humo del drone).
+  const fuegoGuitarraRef = useRef({ pos: new THREE.Vector3(), nivel: 0 })
+  const cenizaGuitarraRef = useRef({ pos: new THREE.Vector3(), nivel: 0 })
+  const ejeGuitarraRef = useRef(new THREE.Vector3())
+  const pasoGuitarra = (I, A) => {
+    if (!I.guit || I.guit.raiz !== scene) I.guit = { raiz: scene, solo: crearGuitarraSolo(scene), fAnt: null }
+    const G = I.guit
+    if (!G.solo) return
+    const peso = A ? I.w.guitarra || 0 : 0
+    const f = A && peso > 0 ? A.guitarra.time * 30 : null
+    camera.getWorldDirection(ejeGuitarraRef.current)
+    const e = G.solo.aplicar(f, peso, ejeGuitarraRef.current)
+    const F = fuegoGuitarraRef.current
+    const C = cenizaGuitarraRef.current
+    F.nivel = e ? e.fuego : 0
+    C.nivel = e ? e.ceniza : 0
+    if (e && e.fuego > 0) G.solo.puntoAlAzar(F.pos)
+    if (e && e.ceniza > 0) C.pos.copy(e.centro)
+    // sus sonidos, cuando pasa cada cuadro (solo viéndose el solo, no en la mezcla de salida)
+    if (f != null && I.fase === 'guitarra') {
+      const antes = G.fAnt ?? f
+      const pasa = (x) => antes < x && f >= x
+      if (pasa(GUITARRA.cae[0])) sonarCaeGuitarra()
+      if (pasa(GUITARRA.cae[1])) sonarCachaGuitarra()
+      for (const r of GUITARRA.rasgueos) if (pasa(r.f)) sonarRasgueo(r)
+      if (pasa(GUITARRA.quema[0])) sonarPrenden(60)
+      if (pasa(GUITARRA.deshace[0] + 2)) sonarPuf()
+      G.fAnt = f
+    } else G.fAnt = null
+  }
+  const pasoIdles = (dt, quiereMover) => {
+    const I = idleRef.current
+    const A = I.acciones
+    pasoGuitarra(I, A)
+    const k = kickRef.current
+    const l = laserRef.current
+    const permitido = homeLanded && powerEnabledRef.current && !customizeActiveRef.current
+      && !orbActiveRef.current && !showOrbRef.current && !disassembleActiveRef.current
+      && !eggActiveRef.current && !juego.activo
+    const ocupado = quiereMover || I.despierta || k.charging || k.t >= 0 || (l.phase && l.phase !== 'off')
+    I.despierta = false
+    if (!A) {
+      I.quieto = permitido && !ocupado ? I.quieto + dt : 0
+      I.total = 0
+      I.bloquea = false
+      return
+    }
+    const frac = (a) => a.time / Math.max(1e-3, a.getClip().duration)
+    if (!permitido) {
+      I.quieto = 0
+      I.toco = false
+      if (I.fase !== 'nada') idleCortar(SIESTA.cortaFundido)
+    } else if (ocupado) {
+      I.quieto = 0
+      I.toco = false
+      if (I.fase === 'guitarra') idleCortar(SIESTA.cortaFundido)
+      else if (I.fase === 'entra') {
+        if (frac(A.entra) < SIESTA.entraDePie) idleCortar(SIESTA.cortaFundido)
+        else idleDespertar()
+      } else if (I.fase === 'dormido') idleDespertar()
+      else if (I.fase === 'sale' && frac(A.sale) >= SIESTA.saleLibre) idleCortar(SIESTA.saleFundido)
+    } else {
+      I.quieto += dt
+      if (I.fase === 'nada' && I.total < 0.01) {
+        if (I.quieto >= SIESTA.dormirTras) idleEmpezar('entra', SIESTA.entraFundido)
+        else if (I.quieto >= SIESTA.guitarraTras && !I.toco) {
+          I.toco = true
+          idleEmpezar('guitarra', SIESTA.entraFundido)
+        }
+      }
+    }
+    // el final de cada clip
+    if (I.fase === 'guitarra' && frac(A.guitarra) >= 0.999) { I.fase = 'nada'; I.fundido = SIESTA.saleFundido; ponerEstado('nada') }
+    if (I.fase === 'entra' && frac(A.entra) >= 0.999) {
+      // el último cuadro de Dormir_entra es el primero de Dormir: el relevo es exacto
+      A.dormido.reset().setEffectiveTimeScale(1).play()
+      I.w.dormido = I.w.entra
+      I.w.entra = 0
+      A.entra.stop()
+      I.fase = 'dormido'
+      scene.updateWorldMatrix(true, false)
+      siesta.matriz.set(scene.matrixWorld.elements)
+      ponerEstado('dormido')
+    }
+    if (I.fase === 'sale' && frac(A.sale) >= 0.999) { I.fase = 'nada'; I.fundido = SIESTA.saleFundido; ponerEstado('nada') }
+    // los pesos: el clip de la fase sube y los demás bajan al mismo ritmo (suman 1 en los relevos)
+    const paso = dt / Math.max(0.05, I.fundido)
+    let total = 0
+    for (const n in A) {
+      const w = I.w[n]
+      const meta = I.fase === n ? 1 : 0
+      const nw = w < meta ? Math.min(meta, w + paso) : Math.max(meta, w - paso)
+      I.w[n] = nw
+      if (nw <= 0 && w > 0) A[n].stop()
+      else if (nw > 0) A[n].setEffectiveWeight(nw)
+      total += nw
+    }
+    I.total = Math.min(1, total)
+    if (I.fase === 'nada') I.giro = null
+    I.bloquea = I.fase === 'dormido'
+      || (I.fase === 'entra' && frac(A.entra) >= SIESTA.entraDePie)
+      || (I.fase === 'sale' && frac(A.sale) < SIESTA.saleLibre)
+    siesta.respira = I.fase === 'dormido' ? respiracion(A.dormido.time) : 0
+    // La llama de la mano se apaga mientras duerme (Oscar): se encoge la esfera de la mano, que es
+    // la que manda el tamaño del fuego (LlamaMano mide en sus radios), como en la historia; casi a
+    // cero y no oculta, para no recompilar. Se prende otra vez cuando se sienta al despertar.
+    const apagar = (I.fase === 'entra' && frac(A.entra) >= SIESTA.llamaApaga) || I.fase === 'dormido'
+      || (I.fase === 'sale' && frac(A.sale) < SIESTA.llamaPrende)
+    const metaLlama = apagar ? 0 : 1
+    if (I.llama == null) I.llama = 1
+    if (I.llama !== metaLlama || (I.orbe && I.orbe.m !== metaLlama)) {
+      if (!I.orbe || I.orbe.raiz !== scene) {
+        const o = scene.getObjectByName('Egg_EnergyBall')
+        I.orbe = o ? { o, raiz: scene, base: o.scale.clone(), m: 1 } : null
+      }
+      I.llama += (metaLlama - I.llama) * (1 - Math.exp(-SIESTA.llamaVel * Math.min(0.05, dt)))
+      if (Math.abs(metaLlama - I.llama) < 0.003) I.llama = metaLlama
+      if (I.orbe) {
+        I.orbe.m = I.llama
+        I.orbe.o.scale.copy(I.orbe.base).multiplyScalar(Math.max(1e-4, I.llama))
+      }
+    }
+    // Los ojos se apagan del todo mientras duerme y al despertar se prenden parpadeando (Oscar):
+    // el color y el emisivo del material Eyes (uniforms: no compila nada) bajan a negro.
+    const ojosOscuros = (I.fase === 'entra' && frac(A.entra) >= SIESTA.ojosApaga) || I.fase === 'dormido'
+    if (I.ojosK == null) I.ojosK = 1
+    let luz = I.ojosK
+    if (ojosOscuros) {
+      I.parpadeo = null
+      luz = Math.max(0, luz - dt / SIESTA.ojosFundido)
+    } else if (luz < 1 || I.parpadeo) {
+      // de apagados a prendidos: el parpadeo y luego prendidos
+      if (!I.parpadeo) I.parpadeo = { t: 0 }
+      I.parpadeo.t += dt
+      let t = I.parpadeo.t
+      luz = 1
+      for (const [dura, brillo] of SIESTA.ojosParpadeo) {
+        if (t < dura) { luz = brillo; break }
+        t -= dura
+      }
+      if (luz === 1 && I.parpadeo.t > SIESTA.ojosParpadeo.reduce((a, [d]) => a + d, 0)) I.parpadeo = null
+    }
+    I.ojosK = luz
+    pintarOjos(luz)
+    // ronca al inhalar y silba al soltar el aire (cuadros de Dormir a 30 fps; desde la segunda vuelta)
+    if (I.fase === 'dormido') {
+      const f = (A.dormido.time * 30) % (SIESTA.respira.largo - 1) + 1
+      const antes = I.fRespira ?? f
+      const cruza = (x) => (antes <= f ? antes < x && f >= x : antes < x || f >= x)
+      if (A.dormido.time > 2.5) {
+        if (cruza(4)) sonarRonquido()
+        if (cruza(SIESTA.respira.sube + 2)) sonarSilbido()
+      }
+      I.fRespira = f
+    } else I.fRespira = null
+  }
+  if (import.meta.env.DEV && typeof window !== 'undefined') {
+    // desarrollo: window.__idles.quieto = 47 lo deja a un segundo de dormirse
+    window.__idles = idleRef.current
+  }
+
   // Rising-edge detector per portal + cooldown to avoid instant re-entries
   const insideMapRef = useRef({})
   const cooldownRef = useRef({ portalId: null, untilS: 0 })
@@ -5742,7 +6026,7 @@ export default function Player({
       const tag = (el?.tagName || '').toLowerCase()
       return tag === 'input' || tag === 'textarea' || !!el?.isContentEditable
     })()
-    const powerBlocked = typing || customizeActiveRef.current || !powerEnabledRef.current
+    const powerBlocked = typing || customizeActiveRef.current || !powerEnabledRef.current || idleRef.current.bloquea
     const pressed = !!keyboard?.action && !powerBlocked
     // --- IMPROVED DELTA SMOOTHING ---
     // Wider limits: 1/144 (high refresh) to 1/10 (100ms, very low FPS)
@@ -6396,6 +6680,9 @@ export default function Player({
     // Customizer abierto: congela la locomoción (sin early-return → idle y el
     // simulador siguen vivos; solo se anula el input para que no camine).
     if (customizeActiveRef.current) { xInputRaw = 0; zInputRaw = 0; inputMag = 0 }
+    // Los idles: acostado (o levantándose) no camina; lo que quisiera moverlo lo despierta.
+    pasoIdles(dtRaw, inputMag > 0 || !!keyboard.action)
+    if (idleRef.current.bloquea) { xInputRaw = 0; zInputRaw = 0; inputMag = 0 }
     // Caminata sola (lib/caminataAuto.js, la escena del trato de Argus): la
     // dirección del mundo pasa a la base de la cámara, como si fuera una tecla.
     const auto = pasoCaminata(simPosRef.current)
@@ -6616,6 +6903,9 @@ export default function Player({
       if (!hasInput && aimAngle === null && giroAuto !== null) {
         // ya llegó: voltea despacio hacia quien le habla
         simYawRef.current = dampAngleWrapped(simYawRef.current, giroAuto, 7.0, stepDt)
+      } else if (!hasInput && aimAngle === null && idleRef.current.giro != null && idleRef.current.fase !== 'nada') {
+        // los idles: hacia la cámara, mientras entra el clip
+        simYawRef.current = dampAngleWrapped(simYawRef.current, idleRef.current.giro, 5.0, stepDt)
       } else if (hasInput || aimAngle !== null) {
         const ROT_LAMBDA = planted ? (aimAngle !== null ? 22.0 : 14.0) : 50.0
         simYawRef.current = dampAngleWrapped(
@@ -6686,13 +6976,15 @@ export default function Player({
         runWeightRef.current = THREE.MathUtils.clamp(
           THREE.MathUtils.damp(runWeightRef.current, quiereCorrer ? 1 : 0, BLEND_LAMBDA, stepDt), 0, 1)
         const runW = runAction ? runWeightRef.current : 0
-        walkAction.setEffectiveWeight(walkW * (1 - runW))
+        // lo que pesen los idles (guitarra, dormir) se le quita a la locomoción
+        const loco = 1 - idleRef.current.total
+        walkAction.setEffectiveWeight(walkW * (1 - runW) * loco)
         if (runAction) {
           runAction.enabled = true
-          runAction.setEffectiveWeight(walkW * runW)
+          runAction.setEffectiveWeight(walkW * runW * loco)
           runAction.setEffectiveTimeScale(RUN_TIMESCALE)
         }
-        idleAction.setEffectiveWeight(idleW)
+        idleAction.setEffectiveWeight(idleW * loco)
 
         // Walk timeScale proportional to weight for smooth transition
         const animScale = THREE.MathUtils.lerp(1, baseWalkScale, walkW)
@@ -7389,6 +7681,7 @@ export default function Player({
           outlineMesh.userData.accesorio = original.userData.accesorio
           depthMesh.userData.accesorio = original.userData.accesorio
         }
+        if (original.userData?.deIdle) outlineMesh.userData.deIdle = depthMesh.userData.deIdle = true
         // el pie se oculta con los tenis, y su contorno con él
         if (original.userData?.ocultaCon) {
           outlineMesh.userData.ocultaCon = original.userData.ocultaCon
@@ -7636,6 +7929,18 @@ export default function Player({
           <KickSwoosh activeRef={kickSwooshRef} bonesRef={kickBonesRef} originRef={playerRef} />
         </>
       )}
+      {/* Los idles: sus clips se piden ya en la home (sin alargar la carga) */}
+      {homeLanded && !prewarm && (
+        <Suspense fallback={null}>
+          <ClipsIdles alCargar={alCargarIdles} />
+        </Suspense>
+      )}
+      {/* El fuego y la ceniza de la guitarra del solo: montados siempre (en cero), mismos programas del humo del drone */}
+      <HumoDron fuenteRef={fuegoGuitarraRef} config={FUEGO_GUITARRA} />
+      <HumoDron fuenteRef={cenizaGuitarraRef} config={CENIZA_GUITARRA} />
+      {/* La cobijita de la siesta: montada siempre (bajo el piso hasta que la traen) para que el
+          warm-up compile su material; va en el mundo, en el espacio del modelo de cuando se durmió. */}
+      <CobijaSkulley gltf={cobijaGltf} playerRef={playerRef} />
       {/* World-space sparks trail (not parented to player) */}
       {/* Mount spark shader always (drawRange 0 when idle) to avoid first-use jank */}
       <ComponenteEstable render={TrailSparks} />

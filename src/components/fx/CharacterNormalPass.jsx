@@ -5,6 +5,9 @@ import { characterNormalTexture } from '../../lib/toonInkBuffer.js'
 
 // Grupos que no entran al buffer de normales (three no dibuja un material invisible).
 const SIN_TINTA = new THREE.MeshBasicMaterial({ visible: false })
+// Lo que tapa al personaje y cuelga de él (`userData.ocluyeTinta`: la cobija de la siesta) entra
+// solo en profundidad y antes que él: donde lo tapa queda el fondo y ahí no hay tinta.
+const SOLO_PROFUNDIDAD = new THREE.MeshBasicMaterial({ colorWrite: false })
 
 // Renderiza SOLO los meshes del personaje a un render target con normales
 // geométricas (MeshNormalMaterial, respeta skinning). EdgeInk (PostFX) lee esta
@@ -104,6 +107,11 @@ export default function CharacterNormalPass({ playerRef, enabled = true, target 
       didPrewarmRef.current = true
       const restore = []
       root.traverse((o) => {
+        if (o.userData?.ocluyeTinta) {
+          restore.push([o, o.material])
+          o.material = SOLO_PROFUNDIDAD
+          return
+        }
         if (!o.isSkinnedMesh) return
         restore.push([o, o.material])
         o.material = normalDe(o)
@@ -173,7 +181,12 @@ export default function CharacterNormalPass({ playerRef, enabled = true, target 
       // la tapa adentro de la silueta, igual que en la escena). En el buffer queda
       // como un anillo de rgb 0 con alfa, que EdgeInk distingue del fondo (alfa 0).
       const marca = isOutline && o.userData?.marcaContorno
-      if (marca) {
+      if (o.userData?.ocluyeTinta) {
+        restore.push([o, 'mat', o.material])
+        restore.push([o, 'orden', o.renderOrder])
+        o.material = SOLO_PROFUNDIDAD
+        o.renderOrder = -100
+      } else if (marca) {
         restore.push([o, 'mat', o.material])
         o.material = marca
       } else if (isBody) {
@@ -206,6 +219,7 @@ export default function CharacterNormalPass({ playerRef, enabled = true, target 
     for (let i = 0; i < restore.length; i += 1) {
       const [o, type, val] = restore[i]
       if (type === 'mat') o.material = val
+      else if (type === 'orden') o.renderOrder = val
       else o.visible = val
     }
 

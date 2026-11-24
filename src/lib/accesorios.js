@@ -35,6 +35,21 @@ const MATERIALES_LENTES3D = {
 }
 const LENTES3D = { id: 'lentes3d', malla: 'Egg_Lentes3D', materiales: MATERIALES_LENTES3D, base: 'Lentes3D_Armazon' }
 
+// La Flying V azul del solo de guitarra (Oscar, 2026-11-23; scripts/skulley-anim/guitarra.py): no es un prop de
+// Customize, la saca el idle (lib/siestaSkulley.js). Entra como los lentes, colgada de un hueso (el pecho).
+const MATERIALES_GUITARRA = {
+  Guitarra_Cuerpo: { color: 0x2f7dff, roughness: 0.45, metalness: 0 },
+  Guitarra_Canto: { color: 0x9ccdff, roughness: 0.45, metalness: 0 },
+  Guitarra_Negro: { color: 0x121212, roughness: 0.4, metalness: 0 },
+  Guitarra_Madera: { color: 0x8a5a35, roughness: 0.7, metalness: 0 },
+  Guitarra_Diapason: { color: 0x3a1f17, roughness: 0.7, metalness: 0 },
+  Guitarra_Metal: { color: 0xd4d8de, roughness: 0.3, metalness: 0 },
+  Guitarra_Blanco: { color: 0xf2efe8, roughness: 0.5, metalness: 0 },
+}
+const GUITARRA = { id: 'guitarra', malla: 'Egg_Guitarra', materiales: MATERIALES_GUITARRA, base: 'Guitarra_Cuerpo' }
+// su púa (Oscar: "como si estuviera tocando con una púa"), colgada del pulgar derecho entre él y el índice
+const PUA = { id: 'pua', malla: 'Egg_GuitarraPua', materiales: { Pua: { color: 0xf5ff00, roughness: 0.4, metalness: 0 } }, base: 'Pua' }
+
 function material(cfg, nombre) {
   const p = cfg.materiales[nombre] || cfg.materiales[cfg.base]
   const m = new THREE.MeshStandardMaterial(p)
@@ -61,6 +76,15 @@ export function ponerLentes(escena, gltfLentes, hueso = 'headx') {
 /** Los lentes 3D como `Egg_Lentes3D`, igual que los Lentes (armazón y micas en una malla). */
 export function ponerLentes3D(escena, gltf, hueso = 'headx') {
   return ponerEnCabeza(escena, gltf, LENTES3D, hueso)
+}
+
+/** La guitarra del solo como `Egg_Guitarra`, colgada del pecho (`spine_03x`), y su púa como `Egg_GuitarraPua`,
+ *  del pulgar (`thumb3r`); `userData.deIdle`: las muestra el idle, no Customize. */
+export function ponerGuitarra(escena, gltf, gltfPua = null) {
+  const hechos = [...ponerEnCabeza(escena, gltf, GUITARRA, 'spine_03x')]
+  if (gltfPua) hechos.push(...ponerEnCabeza(escena, gltfPua, PUA, 'thumb3r'))
+  for (const m of hechos) m.userData.deIdle = true
+  return hechos
 }
 
 function ponerEnCabeza(escena, gltfLentes, cfg, hueso) {

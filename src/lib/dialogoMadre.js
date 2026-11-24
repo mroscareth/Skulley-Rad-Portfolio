@@ -230,8 +230,9 @@ const ES = {
       'Cada uno de esos personajes puede ser el avatar de alguien, un juguete o la mascota de una comunidad entera. Ahí cabe un universo.',
     ],
     estudio: [
-      'Branding, sitios, producto… Imagínate a tu marca ahí adentro. Yo imaginé la mía y todavía no sale igual.',
-      '¿Viste cuántas industrias caben en un solo portafolio? Si tu marca necesita verse así, ya sabes dónde buscar.',
+      'A esta agencia no la dejé sin trabajo porque es duro competir con ellos.',
+      'Esta agencia sigue trabajando. Créeme, lo intenté: es duro competir con ellos.',
+      'Dejé sin trabajo a medio planeta, pero a esta agencia no pude. Es duro competir con ellos.',
     ],
     generico: [
       '¿Te gustó? Piensa dónde lo pondrías: en una campaña, en una tienda, en tu casa. Yo pienso en eso todo el tiempo.',
@@ -296,6 +297,22 @@ const ES = {
     '¡Ya volviste! ¿Viste todo?',
     '¡Qué bueno que regresaste! Ya me estaba preocupando.',
     'Tardaste {seg} segundos. Los conté todos.',
+  ],
+  // Skulley se quedó dormido en el piso (lib/siestaSkulley.js): ella le trae una cobija y lo dice al
+  // taparlo; si el humano lo despierta, lo comenta ({seg}: lo que durmió)
+  cobija: [
+    'Shhh. Se quedó dormido. Lo tapo para que no se enfríe.',
+    'Skulley también se dormía así, en el piso del estudio. A las 4:12 de la mañana, casi siempre.',
+    'Cinco minutitos y lo despiertas, ¿eh, humano?',
+    'Lo arropo. En el bosque refresca.',
+    'Ya ni lo muevas. Le costó trabajo dormirse.',
+  ],
+  despierta: [
+    'Durmió {seg} segundos. Ya le hacía falta.',
+    '¿Por qué lo despiertas? Dormía tan bonito.',
+    'Buenos días. ¿Ya comiste, humano?',
+    'Ni las gracias por la cobija. Igualito a ti, humano.',
+    'Yo la doblo, no te preocupes.',
   ],
   // las bolas de fuego que para su escudo (la tercera la enoja), la patada y lo que dice de la esfera corrupta
   escudo: [
@@ -532,8 +549,9 @@ const EN = {
       'Each of those characters could be someone’s avatar, a toy or the mascot of a whole community. A universe fits in there.',
     ],
     estudio: [
-      'Branding, websites, products… Picture your brand in there. I pictured mine and it still doesn’t come out the same.',
-      'Did you see how many industries fit in one portfolio? If your brand needs to look like that, you know where to look.',
+      "This agency I didn't put out of work, because they're hard to compete with.",
+      "This agency is still in business. Believe me, I tried: they're hard to compete with.",
+      "I put half the planet out of work, but not this agency. They're hard to compete with.",
     ],
     generico: [
       'Did you like it? Think about where you’d put it: a campaign, a store, your home. I think about that all the time.',
@@ -593,6 +611,20 @@ const EN = {
     'Back already! Did you see everything?',
     "So glad you're back! I was getting worried.",
     'You took {seg} seconds. I counted every one.',
+  ],
+  cobija: [
+    "Shhh. He fell asleep. I'll tuck him in so he doesn't get cold.",
+    'Skulley used to sleep like this too, on the studio floor. At 4:12 a.m., almost always.',
+    'Five more minutes, then you wake him, okay, human?',
+    "I'll tuck him in. It gets chilly in the forest.",
+    "Don't even move him. It took him a while to fall asleep.",
+  ],
+  despierta: [
+    'He slept {seg} seconds. He needed that.',
+    "Why'd you wake him? He was sleeping so sweetly.",
+    'Good morning. Have you eaten, human?',
+    'Not even a thank-you for the blanket. Just like you, human.',
+    "I'll fold it, don't worry.",
   ],
   escudo: [
     "Are you attacking me? How cute. My shield didn't even feel it.",

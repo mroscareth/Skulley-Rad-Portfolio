@@ -44,6 +44,14 @@ ANIMACIONES = {
 # del clip del mismo nombre (conClipsDelBlend en accesoriosEstado.js). El idle completo pesa 262 KB y las seis
 # pistas de la pierna izquierda unos KB (la primera pantalla del teléfono espera a este archivo).
 PARCIALES = {"root|root|Iddle"}
+# Los idles de Skulley quieto (idles.py, lib/siestaSkulley.js): el sitio los pide ya en la home, aparte,
+# y van comprimidos con meshopt (useGLTF los lee igual): sin comprimir pesan cientos de KB cada uno.
+IDLES = {
+    "Guitarra": "guitarra",
+    "Dormir_entra": "dormir_entra",
+    "Dormir": "dormir",
+    "Dormir_sale": "dormir_sale",
+}
 
 
 def exportar(accion, archivo, carpeta=SALIDA, armature=ARMATURE):
@@ -54,11 +62,13 @@ def exportar(accion, archivo, carpeta=SALIDA, armature=ARMATURE):
     vl = bpy.context.view_layer
     antes = dict(action=ad.action, slot=getattr(ad, "action_slot", None), use_nla=ad.use_nla,
                  activo=vl.objects.active, seleccion=[o for o in vl.objects if o.select_get()],
-                 cuadro=bpy.context.scene.frame_current)
+                 cuadro=bpy.context.scene.frame_current, pose=arm.data.pose_position)
     os.makedirs(carpeta, exist_ok=True)
     ruta = os.path.join(carpeta, archivo + ".glb")
     props = [b for b in arm.data.bones if b.name.startswith("prop_") and b.use_deform]
     try:
+        # en "Posición de reposo" el muestreo sale en reposo en todos los cuadros
+        arm.data.pose_position = "POSE"
         for b in props:
             b.use_deform = False
         # Solo la acción pedida: sin el NLA (idle y walk viven en pistas NLA)
@@ -96,6 +106,7 @@ def exportar(accion, archivo, carpeta=SALIDA, armature=ARMATURE):
             except Exception:
                 pass
         ad.use_nla = antes["use_nla"]
+        arm.data.pose_position = antes["pose"]
         for o in vl.objects:
             o.select_set(o in antes["seleccion"])
         vl.objects.active = antes["activo"]
@@ -193,6 +204,19 @@ def aligerar(ruta):
     return ruta
 
 
+def comprimir(ruta):
+    """Comprime el GLB con meshopt (gltf-transform): las pistas de la animación incluidas."""
+    import subprocess
+    tmp = ruta[:-4] + "_tmp.glb"
+    npx = "npx.cmd" if os.name == "nt" else "npx"
+    r = subprocess.run([npx, "--no-install", "gltf-transform", "meshopt", ruta, tmp], cwd=REPO, capture_output=True, text=True)
+    if r.returncode != 0 or not os.path.exists(tmp):
+        print("no se pudo comprimir", ruta, r.stderr[-400:])
+        return ruta
+    os.replace(tmp, ruta)
+    return ruta
+
+
 def exportar_todas():
     rutas = []
     for a, f in ANIMACIONES.items():
@@ -200,6 +224,8 @@ def exportar_todas():
         if a in PARCIALES:
             solo_lo_que_cambia(r, a)
         rutas.append(r)
+    for a, f in IDLES.items():
+        rutas.append(comprimir(aligerar(exportar(a, f))))
     return rutas
 
 
@@ -230,6 +256,10 @@ PROPS = {
     "Beanie": dict(archivo="beanie", piel=True, imagenes=True),
     # los lentes 3D de cartón (lentes3d.py): sin piel, colgados de head.x como los Lentes
     "Lentes3D": dict(archivo="lentes3d", piel=False),
+    # la Flying V del solo de guitarra (guitarra.py): sin piel, colgada de spine_03.x; el sitio pone sus colores
+    "Guitarra": dict(archivo="guitarra", piel=False, imagenes=False),
+    # la púa del solo (guitarra.py, pua_modelar): colgada del pulgar derecho
+    "Pua": dict(archivo="pua", piel=False, imagenes=False),
 }
 SALIDA_PROPS = os.path.join(REPO, "public", "props")
 
