@@ -228,6 +228,7 @@ export default function DroneNPC({
       escena: null,             // la escena con Argus: { pasos, i, t, hasta, rayoEn, tipo }
       charlaEn: Infinity,       // cuándo toca la siguiente (lo pone la primera llegada)
       bolsaEscenas: [],         // no repite escena hasta acabarlas
+      bolsaVenganzas: [],       // ni venganza
       burlaArgusEn: 0,          // cuándo se burló Argus de ella (la quemó el rayo de la esfera)
       quemadaDesde: 0,
       tCobija: -1,              // la cobija: desde que llegó sobre Skulley dormido
@@ -701,8 +702,10 @@ export default function DroneNPC({
     return lista[e.bolsaEscenas.pop()] || lista[0]
   }
   const sacarVenganza = () => {
+    const e = est.current
     const lista = escenasArgusMadre(langRef.current).venganza
-    return lista[Math.floor(Math.random() * lista.length)]
+    if (!e.bolsaVenganzas.length) e.bolsaVenganzas = lista.map((_, i) => i).sort(() => Math.random() - 0.5)
+    return lista[e.bolsaVenganzas.pop()] || lista[0]
   }
   // su rayo, encima de Argus: el mismo del castigo, que a Skulley no lo toca
   // (Player). Termina en su cabeza (si baja al piso pasa por dentro de él y casi

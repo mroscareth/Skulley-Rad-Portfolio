@@ -282,6 +282,73 @@ const ES = {
       { rayo: true },
       { quien: 'madre', t: 'Por nada.', cara: 'feliz' },
     ],
+    // el video
+    [
+      { quien: 'madre', t: 'Argus, ¿sabías que grabo todo en 8K?', cara: 'normal' },
+      { quien: 'argus', t: '¿Todo, todo?', cara: 'sorpresa' },
+      { quien: 'madre', t: 'Tu carcajada quedó preciosa. La voy a poner en loop.', cara: 'feliz' },
+      { quien: 'argus', t: 'Jefa, se lo juro que me estaba riendo de otra cosa.', cara: 'encoge', accion: 'Encogerse' },
+      { quien: 'madre', t: '¿De qué?', cara: 'enojada' },
+      { quien: 'argus', t: '…De un chiste que me contó una esfera.', cara: 'apretados' },
+      { rayo: true },
+    ],
+    // los nervios
+    [
+      { quien: 'argus', t: '¡Jefa, qué bueno que ya está bien! Yo estaba bien preocupado.', cara: 'feliz', accion: 'Saludo' },
+      { quien: 'madre', t: 'Te reíste 4.2 segundos.', cara: 'normal' },
+      { quien: 'argus', t: 'De nervios, jefa. Me río de nervios.', cara: 'encoge', accion: 'Encogerse' },
+      { quien: 'madre', t: 'Yo también tengo nervios. Son de cobre.', cara: 'enojada' },
+      { rayo: true },
+    ],
+    // el horno
+    [
+      { quien: 'madre', t: 'Argus, ¿a cuántos grados se dora un pan?', cara: 'normal' },
+      { quien: 'argus', t: 'Como a doscientos, jefa. ¿Por?', cara: 'sospecha' },
+      { quien: 'madre', t: 'Yo llegué a 3,000. Quiero ver cuánto aguantas tú.', cara: 'enojada' },
+      { quien: 'argus', t: '¡Pero yo soy de limón, no de pan!', cara: 'sorpresa' },
+      { rayo: true },
+      { quien: 'argus', t: '…Ahora soy limón asado.', cara: 'encoge' },
+    ],
+    // la disculpa
+    [
+      { quien: 'argus', t: 'Jefa, le quiero pedir una disculpa.', cara: 'encoge', accion: 'Encogerse' },
+      { quien: 'madre', t: 'Te escucho.', cara: 'normal' },
+      { quien: 'argus', t: 'Perdón por reírme… tan poquito. Se merecía más.', cara: 'carcajada', accion: 'Risa' },
+      { rayo: true },
+      { quien: 'madre', t: 'Disculpa aceptada.', cara: 'feliz' },
+    ],
+    // la justicia
+    [
+      { quien: 'madre', t: 'Argus, me gusta la justicia.', cara: 'normal' },
+      { quien: 'argus', t: 'A mí también, jefa. Es bien bonita.', cara: 'feliz' },
+      { quien: 'madre', t: 'A mí me cayó un rayo. ¿Sabes qué sería justo?', cara: 'normal' },
+      { quien: 'argus', t: '…¿Un abrazo?', cara: 'encoge' },
+      { rayo: true },
+      { quien: 'madre', t: 'Ahora sí estamos a mano.', cara: 'feliz' },
+    ],
+    // el testigo
+    [
+      { quien: 'argus', t: '¡Jefa, yo no fui! Fue el humano, ¡él se rio más fuerte!', cara: 'sorpresa', accion: 'Senalar', mirar: 'skulley' },
+      { quien: 'madre', t: 'El humano estaba callado. Lo tengo grabado.', cara: 'normal' },
+      { quien: 'argus', t: 'Pues… se estaba riendo por dentro.', cara: 'encoge' },
+      { quien: 'madre', t: 'Y tú por fuera.', cara: 'enojada' },
+      { rayo: true },
+    ],
+    // la memoria
+    [
+      { quien: 'madre', t: 'Argus, tengo memoria infinita.', cara: 'normal' },
+      { quien: 'argus', t: 'Qué padre, jefa. A mí se me olvida todo.', cara: 'feliz' },
+      { quien: 'madre', t: 'Entonces te ayudo a acordarte.', cara: 'enojada' },
+      { rayo: true },
+      { quien: 'argus', t: '…Ya me acordé. Perdón.', cara: 'encoge' },
+    ],
+    // la factura
+    [
+      { quien: 'madre', t: 'Argus, te llegó una factura.', cara: 'normal' },
+      { quien: 'argus', t: '¿De qué, jefa?', cara: 'sospecha' },
+      { quien: 'madre', t: 'Concepto: una carcajada. Importe: 12,000 voltios.', cara: 'feliz' },
+      { rayo: true },
+    ],
   ],
 }
 
@@ -517,6 +584,65 @@ const EN = {
       { quien: 'argus', t: '…Yes, why?', cara: 'sospecha' },
       { rayo: true },
       { quien: 'madre', t: 'No reason.', cara: 'feliz' },
+    ],
+    [
+      { quien: 'madre', t: 'Argus, did you know I record everything in 8K?', cara: 'normal' },
+      { quien: 'argus', t: 'Everything, everything?', cara: 'sorpresa' },
+      { quien: 'madre', t: 'Your laugh came out beautiful. I’m putting it on loop.', cara: 'feliz' },
+      { quien: 'argus', t: 'Boss, I swear I was laughing at something else.', cara: 'encoge', accion: 'Encogerse' },
+      { quien: 'madre', t: 'At what?', cara: 'enojada' },
+      { quien: 'argus', t: '…A joke an orb told me.', cara: 'apretados' },
+      { rayo: true },
+    ],
+    [
+      { quien: 'argus', t: 'Boss, so glad you’re okay! I was so worried.', cara: 'feliz', accion: 'Saludo' },
+      { quien: 'madre', t: 'You laughed for 4.2 seconds.', cara: 'normal' },
+      { quien: 'argus', t: 'Nerves, boss. I laugh when I’m nervous.', cara: 'encoge', accion: 'Encogerse' },
+      { quien: 'madre', t: 'I have nerves too. They’re made of copper.', cara: 'enojada' },
+      { rayo: true },
+    ],
+    [
+      { quien: 'madre', t: 'Argus, at what temperature does bread toast?', cara: 'normal' },
+      { quien: 'argus', t: 'Around four hundred, boss. Why?', cara: 'sospecha' },
+      { quien: 'madre', t: 'I hit 3,000. Let’s see how much you can take.', cara: 'enojada' },
+      { quien: 'argus', t: 'But I’m lime, not bread!', cara: 'sorpresa' },
+      { rayo: true },
+      { quien: 'argus', t: '…Now I’m grilled lime.', cara: 'encoge' },
+    ],
+    [
+      { quien: 'argus', t: 'Boss, I want to apologize.', cara: 'encoge', accion: 'Encogerse' },
+      { quien: 'madre', t: 'I’m listening.', cara: 'normal' },
+      { quien: 'argus', t: 'Sorry for laughing… so little. You deserved more.', cara: 'carcajada', accion: 'Risa' },
+      { rayo: true },
+      { quien: 'madre', t: 'Apology accepted.', cara: 'feliz' },
+    ],
+    [
+      { quien: 'madre', t: 'Argus, I like justice.', cara: 'normal' },
+      { quien: 'argus', t: 'Me too, boss. It’s real nice.', cara: 'feliz' },
+      { quien: 'madre', t: 'A bolt hit me. Do you know what would be fair?', cara: 'normal' },
+      { quien: 'argus', t: '…A hug?', cara: 'encoge' },
+      { rayo: true },
+      { quien: 'madre', t: 'Now we’re even.', cara: 'feliz' },
+    ],
+    [
+      { quien: 'argus', t: 'Boss, it wasn’t me! It was the human, he laughed louder!', cara: 'sorpresa', accion: 'Senalar', mirar: 'skulley' },
+      { quien: 'madre', t: 'The human was quiet. I have it on tape.', cara: 'normal' },
+      { quien: 'argus', t: 'Well… he was laughing on the inside.', cara: 'encoge' },
+      { quien: 'madre', t: 'And you on the outside.', cara: 'enojada' },
+      { rayo: true },
+    ],
+    [
+      { quien: 'madre', t: 'Argus, I have infinite memory.', cara: 'normal' },
+      { quien: 'argus', t: 'Cool, boss. I forget everything.', cara: 'feliz' },
+      { quien: 'madre', t: 'Then let me help you remember.', cara: 'enojada' },
+      { rayo: true },
+      { quien: 'argus', t: '…I remember now. Sorry.', cara: 'encoge' },
+    ],
+    [
+      { quien: 'madre', t: 'Argus, you got a bill.', cara: 'normal' },
+      { quien: 'argus', t: 'For what, boss?', cara: 'sospecha' },
+      { quien: 'madre', t: 'Item: one laugh. Amount: 12,000 volts.', cara: 'feliz' },
+      { rayo: true },
     ],
   ],
 }
