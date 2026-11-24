@@ -77,7 +77,7 @@ const ES = {
           { t: 'Un mausoleo digital. Lo construí con todo lo que Skulley Rad dejó en internet.', cara: 'normal' },
           { t: 'Cada portal guarda un pedazo de él: su trabajo, quién era, su tienda, su blog…', cara: 'feliz', voltear: true },
           { t: '…y un buzón, por si alguien todavía quiere escribirle. Yo leo todo, por si acaso.', cara: 'confundida' },
-          { t: 'Hay un portal más, escondido. No lo busques: luego te metes en problemas.', cara: 'normal' },
+          { t: 'Son cinco portales. Bueno… cinco que yo haya hecho. Mejor pregúntame otra cosa.', cara: 'confundida', voltear: true },
         ],
         [
           { t: 'Es su mausoleo. Lo armé con sus archivos, sus fotos y hasta sus contraseñas.', cara: 'normal' },
@@ -408,7 +408,7 @@ const EN = {
           { t: 'A digital mausoleum. I built it from everything Skulley Rad left online.', cara: 'normal' },
           { t: 'Each portal keeps a piece of him: his work, who he was, his shop, his blog…', cara: 'feliz', voltear: true },
           { t: '…and a mailbox, in case someone still wants to write to him. I read everything, just in case.', cara: 'confundida' },
-          { t: "There's one more portal, hidden. Don't look for it: you'll just get yourself in trouble.", cara: 'normal' },
+          { t: 'There are five portals. Well… five that I made. Ask me something else.', cara: 'confundida', voltear: true },
         ],
         [
           { t: "It's his mausoleum. I put it together from his files, his photos and even his passwords.", cara: 'normal' },
