@@ -5,15 +5,19 @@
 // la cobija (home/CobijaSkulley.jsx) y el drone (drone/DroneNPC.jsx).
 
 const BASE = import.meta.env.BASE_URL
+// va en la URL de cada archivo de los idles: con el mismo nombre, el navegador seguía dando el de antes (en producción
+// se veía la cobija vieja después del deploy). Si se vuelve a exportar algo de aquí, subirla.
+const VERSION = '2026-11-24'
+const url = (ruta) => `${BASE}${ruta}?v=${VERSION}`
 export const URL_IDLES = {
-  guitarra: `${BASE}animaciones/guitarra.glb`,
-  entra: `${BASE}animaciones/dormir_entra.glb`,
-  dormido: `${BASE}animaciones/dormir.glb`,
-  sale: `${BASE}animaciones/dormir_sale.glb`,
+  guitarra: url('animaciones/guitarra.glb'),
+  entra: url('animaciones/dormir_entra.glb'),
+  dormido: url('animaciones/dormir.glb'),
+  sale: url('animaciones/dormir_sale.glb'),
 }
-export const URL_COBIJA = `${BASE}props/cobija.glb`
-export const URL_GUITARRA = `${BASE}props/guitarra.glb`
-export const URL_PUA = `${BASE}props/pua.glb`
+export const URL_COBIJA = url('props/cobija.glb')
+export const URL_GUITARRA = url('props/guitarra.glb')
+export const URL_PUA = url('props/pua.glb')
 // La guitarra del solo (cuadros de la acción Guitarra, los mismos de idles.py; Oscar, 2026-11-23: "que le caiga del
 // cielo, y al terminar que se queme y se desintegre"): cae dando vueltas desde `alto` (unidades del mundo) en `cae`
 // y él la cacha al final; después del último acorde se quema (`quema`: se pone negra con brillo de brasa y echa
