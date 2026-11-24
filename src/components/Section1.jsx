@@ -4,6 +4,7 @@ import { useLanguage } from '../i18n/LanguageContext.jsx'
 import DragShaderOverlay from './DragShaderOverlay.jsx'
 import WorkCard, { transformApiProject } from './work/WorkCard.jsx'
 import { ProjectDetailArticle } from './work/ProjectDetail.jsx'
+import BarraScroll from './ui/BarraScroll.jsx'
 import SlimeSlugDOM from './SlimeSlugDOM.jsx'
 import useFocoModal from '../hooks/useFocoModal.js'
 
@@ -529,6 +530,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
               loading={detailLoading}
               error={detailError}
             />
+            <BarraScroll scrollerRef={detailOverlayRef} lenisRef={detailLenisRef} />
           </div>
         )
       })()}

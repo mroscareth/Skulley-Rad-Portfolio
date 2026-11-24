@@ -3,6 +3,7 @@ import useFocoModal from '../../hooks/useFocoModal.js'
 import Lenis from 'lenis'
 import { ProjectDetailArticle, useProjectDetail } from '../work/ProjectDetail.jsx'
 import IconoTinta from '../ui/IconoTinta.jsx'
+import BarraScroll from '../ui/BarraScroll.jsx'
 
 // Un proyecto abierto aparte en la versión rápida de escritorio: su propia
 // página encima de la home, sin pasar por Work (pedido de Oscar). La ficha es
@@ -96,6 +97,7 @@ export default function QuickProject({ slug, onCerrar, onLista, lang }) {
         sobreColor
         onLista={alLista}
       />
+      <BarraScroll scrollerRef={raizRef} lenisRef={lenisRef} tono="color" />
       <button
         type="button"
         className="qp-cerrar h-12 w-12 grid place-items-center burbuja-vidrio"

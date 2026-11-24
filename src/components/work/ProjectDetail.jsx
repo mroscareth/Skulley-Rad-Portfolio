@@ -120,10 +120,11 @@ export function ProjectDetailArticle({
   // Ficha arriba y galería abajo, a todo el ancho. Antes el texto vivía en
   // una columna del 25% (259 px a 1100 px de ancho, ~29 letras por renglón) y
   // el título chocaba con los botones fijos. El padding de arriba deja libres
-  // el botón de regresar y el carrito; el de abajo, la música y el menú.
+  // el botón de regresar y el carrito; el de abajo va en .pd-ficha
+  // (index.css): que la última pieza quede arriba de la barra de abajo.
   return (
     <article
-      className={`pd-ficha mx-auto w-full max-w-[1200px] px-5 sm:px-8 lg:px-10 pt-20 md:pt-28 pb-32${esperando ? ' is-esperando' : ''}`}
+      className={`pd-ficha${esperando ? ' is-esperando' : ''} mx-auto w-full max-w-[1200px] px-5 sm:px-8 lg:px-10 pt-20 md:pt-28`}
       onClick={(e) => e.stopPropagation()}
       aria-busy={esperando || undefined}
     >

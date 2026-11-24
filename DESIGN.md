@@ -580,6 +580,10 @@ Nuevos tokens Tailwind disponibles (§6.3):
 
 ## Changelog
 
+**2026-11-24 — Barra de scroll propia en el detalle de un proyecto**
+- Oscar: el detalle (Work y la ficha encima de la home) escondía la barra del navegador y nadie sabía que bajaba ni dónde iba. `BarraScroll` (`src/components/ui/`, estilos `.barra-scroll` en `index.css`): riel impreso a la orilla derecha y pulgar amarillo con filo de tinta, que se ve sobre el velo oscuro de Work y sobre el azul. Sigue el scroll real (también el de Lenis), se arrastra con mouse o dedo y picar el riel lleva el pulgar ahí; encima del pulgar el cursor del sitio es la mano de agarrar.
+- La última pieza de la galería ya no llega a la orilla: el `pb-32` del JSX nunca se generaba (pegado a un `${…}`, Tailwind no lo encontraba). Ahora `.pd-ficha` deja libre la barra de abajo: en escritorio la barra de secciones con su aire (2.5rem + 59 px + 2.5rem), en el teléfono `--msh-libre` + 1rem, como el final de los capítulos.
+
 **2026-11-22 — Tinta sólida en todo el sitio**
 - Oscar: "dale a todo lo que falta". Los ~55 Heroicons que quedaban fuera del CMS (modales, tienda, reproductor, historia, wallpaper, menú, Customize) pasaron a `IconoTinta`, con 47 íconos nuevos en la retícula; las prendas y las partes del cuerpo usan sus siluetas de antes, ya en tinta, y Behance tiene el suyo.
 - Se fue el vidrio que quedaba: velos planos, toasts y puntaje como tarjetas de tinta, botones de cerrar y flechas como teclas, los botones principales y secundarios como teclas, chips de Customize como `.chip-tinta` y el editor del wallpaper en placas. §6.1 queda retirado.

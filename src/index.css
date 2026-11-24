@@ -7135,6 +7135,95 @@ div:has(> #privy-dialog-backdrop) {
   animation: qp-entra 520ms var(--ease-expo-out) 120ms both;
 }
 
+/* El final de la ficha: la última pieza de la galería termina arriba de la
+   barra de abajo, con aire. Hasta el 2026-11-24 era `pb-32` en el JSX pegado
+   a un `${…}` del template: Tailwind no lo encontraba, la clase no existía y
+   la última imagen llegaba a la orilla, debajo de la barra (Oscar). En
+   escritorio la barra de secciones (DesktopNav) va a 2.5rem del borde y su
+   placa mide 59 px (medido: 9 + 44 + 6); arriba de ella, el mismo aire que la
+   separa del borde. En el teléfono, lo que pide la barra de abajo
+   (--msh-libre), igual que el final de cada capítulo. */
+.pd-ficha {
+  padding-bottom: calc(2.5rem + 59px + 2.5rem);
+}
+
+.mobile-section .pd-ficha {
+  padding-bottom: calc(var(--msh-libre) + 1rem);
+}
+
+/* La barra de scroll del detalle de un proyecto (BarraScroll), en Work y en
+   la ficha encima de la home: un riel impreso a la orilla derecha y el pulgar
+   amarillo con filo de tinta, que se ve sobre el velo oscuro y sobre el azul.
+   La caja mide 24 px de ancho para agarrarla fácil (el pulgar dibujado, 12).
+   Empieza debajo del renglón de botones de arriba: en el teléfono y con la UI
+   compacta, la hamburguesa y el carrito van pegados a la orilla derecha. */
+.barra-scroll {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 5rem);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
+  right: env(safe-area-inset-right, 0px);
+  z-index: 3;
+  width: 24px;
+  touch-action: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 260ms ease;
+}
+
+.barra-scroll::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 10px;
+  width: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.barra-scroll--color::before {
+  background: rgba(10, 5, 16, 0.24);
+}
+
+.barra-scroll__pulgar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  will-change: transform;
+}
+
+.barra-scroll__pulgar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 6px;
+  right: 6px;
+  border: 2px solid #0a0510;
+  border-radius: 999px;
+  background: var(--amarillo);
+  transition: left 140ms ease, right 140ms ease;
+}
+
+/* Al señalarla o arrastrarla el pulgar engorda: se nota que se agarra. */
+@media (hover: hover) and (pointer: fine) {
+  .barra-scroll:hover .barra-scroll__pulgar::before {
+    left: 4px;
+    right: 4px;
+  }
+}
+
+.barra-scroll.is-arrastrando .barra-scroll__pulgar::before {
+  left: 4px;
+  right: 4px;
+}
+
+.barra-scroll.is-vacia {
+  opacity: 0;
+  pointer-events: none;
+}
+
 @keyframes qp-entra {
   from { opacity: 0; transform: translateY(32px); }
   to { opacity: 1; transform: none; }
