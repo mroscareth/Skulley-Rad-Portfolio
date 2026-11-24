@@ -51,7 +51,9 @@ import { siesta, pedirCobija } from '../../lib/siestaSkulley.js'
 // (lib/escenasArgusMadre.js, modo 'conArgus'); si él se pasa de la raya, ella le
 // recuerda su lugar y a veces le cae su rayo (se chamusca, ZoidianNPC). Si Argus
 // se burla de ella porque le cayó el rayo de la esfera corrupta, en cuanto se
-// recupera va y se las cobra (`venganza`).
+// recupera va y se las cobra (`venganza`). Si es Skulley el que lo chamusca con el
+// rayo de la corrupta, ella va y lo defiende casi siempre (`chamusca`; si el rayo
+// la quemó a ella también, `chamuscaAmbos`, ya recuperada), y a veces lo castiga.
 //
 // Monta desde el warm-up con Argus (comoHome), así sus programas se compilan
 // detrás del preloader. Todo lo que anima va por refs; el estado de React solo
@@ -122,6 +124,9 @@ const RAYO_ARGUS = { cabeza: 0.95, destellos: [140, 330], quema: 60, temblor: 1.
 // Si el humano lo despierta, lo comenta `despierta` s después.
 const COBIJA = { espera: 2.4, alto: 1.25, vel: 5.5, dice: 1.5, queda: 5, despierta: 1.6 }
 const CHARLA = { primera: [60, 100], cada: [140, 230], espera: 12, lejos: 18, frente: 2.7, lado: 2.1, alto: 3.4, aCamara: 0.35, antes: 0.5, entre: 0.25, trasRayo: 1.6 }
+// Skulley chamuscó a Argus: si en `espera` s no pudo ir (castigo, su diálogo, la
+// partida), ya no va (ya quemada, espera a recuperarse)
+const CHAMUSCA = { espera: 6 }
 // Al regresar del proyecto que te enseñó, cuánto espera para comentarlo (segundos
 // después de que se abrió el iris o se fueron las barras).
 const COMENTA_S = 0.8
@@ -229,6 +234,9 @@ export default function DroneNPC({
       charlaEn: Infinity,       // cuándo toca la siguiente (lo pone la primera llegada)
       bolsaEscenas: [],         // no repite escena hasta acabarlas
       bolsaVenganzas: [],       // ni venganza
+      bolsaChamusca: [],        // ni las de cuando Skulley chamusca a Argus
+      bolsaChamuscaAmbos: [],
+      chamusca: null,           // Skulley chamuscó a Argus y ella todavía no va: { en, ambos }
       burlaArgusEn: 0,          // cuándo se burló Argus de ella (la quemó el rayo de la esfera)
       quemadaDesde: 0,
       tCobija: -1,              // la cobija: desde que llegó sobre Skulley dormido
@@ -383,6 +391,7 @@ export default function DroneNPC({
       }, COMENTA_S * 1000)
     }
     if (msg.burlaArgus) e.burlaArgusEn = performance.now() / 1000
+    if (msg.argusChamuscado) e.chamusca = { en: performance.now() / 1000, ambos: Boolean(msg.argusChamuscado.ambos) }
     if (msg.alJuego === true && e.modo !== 'castigo' && e.modo !== 'quemada' && e.modo !== 'dialogo') {
       e.juegoPedido = performance.now() / 1000
       if (e.modo !== 'juego') entrarAJuego()
@@ -465,9 +474,12 @@ export default function DroneNPC({
     }
     // window.__dronRecomendar() hace que recomiende un proyecto ya (va hacia Skulley si está a medio camino)
     window.__dronRecomendar = () => { est.current.recomiendaEn = 0; est.current.dice = null }
-    // window.__dronEscena() la manda a una escena con Argus (un número: esa; 'venganza': una de esas)
+    // window.__dronEscena() la manda a una escena con Argus (un número: esa; 'venganza',
+    // 'chamusca' o 'chamuscaAmbos': una de esas). Para chamuscarlo de verdad:
+    // dispatchEvent('thunder-strike', { detail: { points: [argus.pos] } })
     window.__dronEscena = (cual = null) => {
       const E = escenasArgusMadre(langRef.current)
+      if (cual === 'chamusca' || cual === 'chamuscaAmbos') { empezarEscena(sacarChamusca(cual === 'chamuscaAmbos'), 'chamusca'); return }
       const venganza = cual === 'venganza'
       const pasos = venganza ? sacarVenganza() : Number.isInteger(cual) ? E.ambiente[cual] : sacarEscena()
       empezarEscena(pasos, venganza ? 'venganza' : 'ambiente')
@@ -707,6 +719,13 @@ export default function DroneNPC({
     if (!e.bolsaVenganzas.length) e.bolsaVenganzas = lista.map((_, i) => i).sort(() => Math.random() - 0.5)
     return lista[e.bolsaVenganzas.pop()] || lista[0]
   }
+  const sacarChamusca = (ambos) => {
+    const e = est.current
+    const lista = escenasArgusMadre(langRef.current)[ambos ? 'chamuscaAmbos' : 'chamusca']
+    const bolsa = ambos ? 'bolsaChamuscaAmbos' : 'bolsaChamusca'
+    if (!e[bolsa].length) e[bolsa] = lista.map((_, i) => i).sort(() => Math.random() - 0.5)
+    return lista[e[bolsa].pop()] || lista[0]
+  }
   // su rayo, encima de Argus: el mismo del castigo, que a Skulley no lo toca
   // (Player). Termina en su cabeza (si baja al piso pasa por dentro de él y casi
   // no se ve) y cae en `RAYO_ARGUS.destellos` (un solo trueno: los demás van con
@@ -778,14 +797,23 @@ export default function DroneNPC({
       sc.hasta = sc.t + INVOCAR_GOLPE_S + CHARLA.trasRayo
       return
     }
+    if (paso.castigo) {
+      // deja a Argus y va por Skulley con su rayo: el mismo castigo del escudo
+      terminarEscena()
+      dron.castigo = { alGolpe: rayoASkulley, pedido: performance.now() }
+      return
+    }
     const texto = paso.t || ''
     const dura = durLinea(texto)
     if (paso.quien === 'madre') {
+      // le habla al humano: lo voltea a ver; si no, a Argus
+      e.mirar = paso.mirar === 'skulley' ? 'skulley' : 'argus'
       decir(texto, dura)
       cara?.poner(paso.cara || 'normal')
       if (paso.accion) pedir(paso.accion)
       if (paso.oye !== undefined) avisarArgus({ cara: paso.oye })
     } else {
+      e.mirar = 'argus'
       avisarArgus({ dice: texto, dura, tecleo: 1000 / LETRAS, cara: paso.cara ?? null, accion: paso.accion, mirar: paso.mirar || 'dron' })
       if (paso.oye) cara?.poner(paso.oye)
     }
@@ -941,6 +969,17 @@ export default function DroneNPC({
     if (e.modo === 'deambular' && s && siesta.estado === 'dormido' && siesta.cobija.fase === 'nada'
       && ahora - siesta.dormidoDesde > COBIJA.espera && !juegoActivo && !dialogo && !madreEnojada() && !argus.dialogo) {
       empezarCobija()
+    }
+    // Skulley chamuscó a Argus: ella va con él (si el mismo rayo la quemó, ya recuperada)
+    if (e.chamusca) {
+      if (e.modo === 'quemada') e.chamusca.en = ahora
+      else if (ahora - e.chamusca.en > CHAMUSCA.espera) e.chamusca = null
+      else if (s && (e.modo === 'deambular' || e.modo === 'oferta' || e.modo === 'curiosa') && !juegoActivo && !dialogo
+        && !argus.dialogo && activo && !madreEnojada() && !enSiesta) {
+        const { ambos } = e.chamusca
+        e.chamusca = null
+        empezarEscena(sacarChamusca(ambos), 'chamusca')
+      }
     }
     if (e.modo === 'deambular' && s) {
       const dS = Math.hypot(s.x - e.pos.x, s.z - e.pos.z)

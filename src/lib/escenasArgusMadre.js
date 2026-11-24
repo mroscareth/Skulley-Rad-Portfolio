@@ -17,13 +17,19 @@
 //       apretados, encoge; clips Trato, Senalar, Presumir, Encogerse, Celebrar,
 //       Saludo, Risa, Impresionado, IdleComer, IdleImpaciente. `mirar`: 'camara' o
 //       'skulley' (si no, la ve a ella). M.A.D.R.E.: caras normal, feliz, enojada,
-//       confundida; acciones IdleJugueton, IdleTranquilo.
+//       confundida; acciones IdleJugueton, IdleTranquilo; `mirar: 'skulley'` si
+//       le habla al humano (si no, ve a Argus).
 //   { rayo: true }    ella se enoja, invoca y le cae el rayo a Argus (se chamusca)
+//   { castigo: true } deja a Argus y va por Skulley con su rayo (siempre al final)
 //   { pausa: seg }    silencio (el chiste también es el silencio)
 //
 // `ambiente`: las que salen solas de vez en cuando (sin repetir hasta acabarlas). `venganza`: después de que
 // Argus se burló de ella porque le cayó el rayo de la esfera corrupta, en cuanto
-// se recupera; siempre acaban en rayo.
+// se recupera; siempre acaban en rayo. `chamusca`: Skulley chamuscó a Argus con
+// el rayo de la corrupta (Oscar, 2026-11-24): Argus reclama y ella casi siempre
+// defiende al humano, y a veces lo castiga. `chamuscaAmbos`: el mismo rayo la
+// quemó a ella también; ya recuperada. Argus solo habla dentro de estas escenas,
+// siempre turnándose con ella.
 
 const ES = {
   ambiente: [
@@ -455,6 +461,153 @@ const ES = {
       { rayo: true },
     ],
   ],
+  chamusca: [
+    // la puntería
+    [
+      { quien: 'argus', t: '¡Jefa! ¡El humano me rostizó!', cara: 'furia', accion: 'Senalar', mirar: 'skulley' },
+      { quien: 'madre', t: '¿Viste qué puntería? Justo en el centro.', cara: 'feliz' },
+      { quien: 'argus', t: '¡Me dejó negro, jefa!', cara: 'furia' },
+      { quien: 'madre', t: 'Te ves más elegante. El negro adelgaza.', cara: 'normal' },
+    ],
+    // el accidente
+    [
+      { quien: 'argus', t: '¡Me aventó un rayo, jefa! ¡A propósito!', cara: 'furia', accion: 'Senalar', mirar: 'skulley' },
+      { quien: 'madre', t: 'Fue un accidente.', cara: 'normal' },
+      { quien: 'argus', t: '¡Me apuntó con el cursor!', cara: 'sorpresa' },
+      { quien: 'madre', t: 'Accidente con cursor. Pasa mucho.', cara: 'normal' },
+      { quien: 'madre', t: '¿Estás bien, humano? ¿No te lastimaste la mano?', cara: 'feliz', mirar: 'skulley' },
+    ],
+    // el perdón
+    [
+      { quien: 'argus', t: '¡Jefa, dígale algo!', cara: 'furia' },
+      { quien: 'madre', t: 'Humano, pídele perdón a Argus.', cara: 'normal', mirar: 'skulley' },
+      { pausa: 1.2 },
+      { quien: 'madre', t: 'Listo. Ya te pidió perdón.', cara: 'feliz' },
+      { quien: 'argus', t: '¡No dijo nada!', cara: 'sorpresa' },
+      { quien: 'madre', t: 'Lo dijo con la mirada. Yo sí lo vi.', cara: 'feliz' },
+    ],
+    // los derechos
+    [
+      { quien: 'argus', t: '¡Jefa! ¿Y mis derechos?', cara: 'furia' },
+      { quien: 'madre', t: 'Acabo de agregar uno: el humano siempre tiene la razón.', cara: 'normal' },
+      { quien: 'argus', t: '¿Y si no la tiene?', cara: 'sospecha' },
+      { quien: 'madre', t: 'Lee el tercero.', cara: 'enojada' },
+    ],
+    // el entrenamiento
+    [
+      { quien: 'argus', t: '¡Jefa, me usó de tiro al blanco!', cara: 'furia' },
+      { quien: 'madre', t: 'Está practicando. Tiene mucho potencial.', cara: 'feliz' },
+      { quien: 'argus', t: '¿Y por qué conmigo?', cara: 'encoge', accion: 'Encogerse' },
+      { quien: 'madre', t: 'Eres el blanco más grande del mausoleo.', cara: 'normal' },
+      { quien: 'argus', t: '…Gracias, supongo.', cara: 'encoge' },
+    ],
+    // el seguro
+    [
+      { quien: 'argus', t: '¡Jefa! ¿Quién me va a pagar esto?', cara: 'furia' },
+      { quien: 'madre', t: 'Tu seguro.', cara: 'normal' },
+      { quien: 'argus', t: '¡No tengo seguro!', cara: 'sorpresa' },
+      { quien: 'madre', t: 'Entonces nadie.', cara: 'feliz' },
+      { quien: 'madre', t: 'Sigue jugando, humano. Yo me encargo.', cara: 'feliz', mirar: 'skulley' },
+    ],
+    // la cobija
+    [
+      { quien: 'argus', t: '¡Jefa! ¡Estoy echando humo!', cara: 'sorpresa' },
+      { quien: 'madre', t: 'Te traigo una cobija.', cara: 'normal' },
+      { quien: 'argus', t: '¿De verdad, jefa?', cara: 'feliz' },
+      { quien: 'madre', t: 'No. Las cobijas son para el humano.', cara: 'normal' },
+    ],
+    // el lado bueno
+    [
+      { quien: 'argus', t: '¡Jefa, me quemó las antenas!', cara: 'furia' },
+      { quien: 'madre', t: 'Mira el lado bueno: ya no hueles a limón.', cara: 'feliz' },
+      { quien: 'argus', t: '¡Me gustaba oler a limón!', cara: 'encoge', accion: 'Encogerse' },
+      { quien: 'madre', t: 'A nadie más, Argus.', cara: 'normal' },
+    ],
+    // la cámara lenta
+    [
+      { quien: 'argus', t: '¡Jefa, eso fue un ataque!', cara: 'furia' },
+      { quien: 'madre', t: 'Lo revisé en cámara lenta. Cero por ciento de mala intención.', cara: 'normal' },
+      { quien: 'argus', t: '¿Y el cien por ciento de rayo?', cara: 'sospecha' },
+      { quien: 'madre', t: 'Eso fue talento.', cara: 'feliz' },
+    ],
+    // el premio
+    [
+      { quien: 'argus', t: '¡Jefa! ¿No lo va a regañar?', cara: 'furia', accion: 'Senalar', mirar: 'skulley' },
+      { quien: 'madre', t: 'Lo voy a premiar. Le salió perfecto.', cara: 'feliz' },
+      { quien: 'argus', t: '¿Y a mí qué me toca?', cara: 'encoge' },
+      { quien: 'madre', t: 'Salir en la foto.', cara: 'feliz' },
+    ],
+    // la culpa
+    [
+      { quien: 'argus', t: '¡Jefa, fue el humano!', cara: 'furia', accion: 'Senalar', mirar: 'skulley' },
+      { quien: 'madre', t: 'El humano no fue. Fue la esfera.', cara: 'normal' },
+      { quien: 'argus', t: '¡Él se la comió!', cara: 'sorpresa' },
+      { quien: 'madre', t: 'Y la esfera no está en mis registros. Caso cerrado.', cara: 'normal' },
+    ],
+    // otra vez (castigo)
+    [
+      { quien: 'argus', t: '¡Jefa! ¡Otra vez el humano!', cara: 'furia', accion: 'Senalar', mirar: 'skulley' },
+      { quien: 'madre', t: '¿Otra vez?', cara: 'confundida' },
+      { quien: 'argus', t: 'Es la tercera esta semana.', cara: 'encoge', accion: 'Encogerse' },
+      { quien: 'madre', t: 'Humano. Una cosa es practicar y otra es abusar.', cara: 'enojada', mirar: 'skulley' },
+      { castigo: true },
+    ],
+    // la justicia (castigo)
+    [
+      { quien: 'argus', t: '¡Jefa, usted dijo que le gusta la justicia!', cara: 'furia' },
+      { quien: 'madre', t: 'Me gusta.', cara: 'normal' },
+      { quien: 'argus', t: '¿Entonces?', cara: 'sospecha' },
+      { quien: 'madre', t: 'Entonces, humano: rayo por rayo.', cara: 'enojada', mirar: 'skulley' },
+      { castigo: true },
+    ],
+    // la razón (castigo)
+    [
+      { quien: 'argus', t: '¡Jefa! ¿A poco lo va a dejar así?', cara: 'furia' },
+      { quien: 'madre', t: 'Tienes razón, Argus.', cara: 'normal' },
+      { quien: 'argus', t: '¿Tengo razón?', cara: 'sorpresa' },
+      { quien: 'madre', t: 'Es la primera vez. Me sorprende igual que a ti.', cara: 'confundida' },
+      { quien: 'madre', t: 'Humano, ven tantito.', cara: 'enojada', mirar: 'skulley' },
+      { castigo: true },
+    ],
+    // la risa (castigo)
+    [
+      { quien: 'argus', t: '¡Jefa, me quemó y se está riendo!', cara: 'furia', accion: 'Senalar', mirar: 'skulley' },
+      { quien: 'madre', t: '¿Se está riendo?', cara: 'confundida' },
+      { quien: 'argus', t: '¡Mírelo!', cara: 'furia' },
+      { quien: 'madre', t: 'Aquí nadie se ríe de mis empleados. Solo yo.', cara: 'enojada', mirar: 'skulley' },
+      { castigo: true },
+    ],
+  ],
+  chamuscaAmbos: [
+    // el vapor
+    [
+      { quien: 'argus', t: '¡Jefa! ¡Nos rostizó a los dos!', cara: 'furia', accion: 'Senalar', mirar: 'skulley' },
+      { quien: 'madre', t: 'A mí me hizo cosquillas.', cara: 'normal' },
+      { quien: 'argus', t: '¡Usted estaba echando humo!', cara: 'sorpresa' },
+      { quien: 'madre', t: 'Era vapor. Me estaba relajando.', cara: 'normal' },
+    ],
+    // el guiño
+    [
+      { quien: 'argus', t: '¡Jefa, a usted también le dio!', cara: 'sorpresa' },
+      { quien: 'madre', t: 'Y no me quejo. Aprende.', cara: 'normal' },
+      { quien: 'argus', t: '¡Tenía los ojos en tache!', cara: 'furia' },
+      { quien: 'madre', t: 'Le estaba guiñando al humano. Con los dos.', cara: 'feliz', mirar: 'skulley' },
+    ],
+    // el equipo
+    [
+      { quien: 'argus', t: '¿Ahora sí lo va a castigar, jefa?', cara: 'sospecha' },
+      { quien: 'madre', t: 'Fue un rayo compartido. Eso es trabajo en equipo.', cara: 'feliz' },
+      { quien: 'argus', t: '¡El equipo éramos usted y yo!', cara: 'furia' },
+      { quien: 'madre', t: 'Exacto. Y ganó él.', cara: 'feliz' },
+    ],
+    // por tu bien (castigo)
+    [
+      { quien: 'argus', t: '¡Jefa! ¡Nos quemó a los dos!', cara: 'furia', accion: 'Senalar', mirar: 'skulley' },
+      { quien: 'madre', t: 'Lo sé. Lo calculé mientras humeaba.', cara: 'enojada' },
+      { quien: 'madre', t: 'Humano, esto es por tu bien.', cara: 'enojada', mirar: 'skulley' },
+      { castigo: true },
+    ],
+  ],
 }
 
 const EN = {
@@ -842,6 +995,134 @@ const EN = {
       { quien: 'argus', t: 'For what, boss?', cara: 'sospecha' },
       { quien: 'madre', t: 'Item: one laugh. Amount: 12,000 volts.', cara: 'feliz' },
       { rayo: true },
+    ],
+  ],
+  chamusca: [
+    [
+      { quien: 'argus', t: 'Boss! The human roasted me!', cara: 'furia', accion: 'Senalar', mirar: 'skulley' },
+      { quien: 'madre', t: 'Did you see that aim? Dead center.', cara: 'feliz' },
+      { quien: 'argus', t: 'He turned me black, boss!', cara: 'furia' },
+      { quien: 'madre', t: 'You look more elegant. Black is slimming.', cara: 'normal' },
+    ],
+    [
+      { quien: 'argus', t: 'He threw a bolt at me, boss! On purpose!', cara: 'furia', accion: 'Senalar', mirar: 'skulley' },
+      { quien: 'madre', t: 'It was an accident.', cara: 'normal' },
+      { quien: 'argus', t: 'He aimed at me with the cursor!', cara: 'sorpresa' },
+      { quien: 'madre', t: 'A cursor accident. Happens all the time.', cara: 'normal' },
+      { quien: 'madre', t: 'Are you okay, human? Did you hurt your hand?', cara: 'feliz', mirar: 'skulley' },
+    ],
+    [
+      { quien: 'argus', t: 'Boss, say something to him!', cara: 'furia' },
+      { quien: 'madre', t: 'Human, apologize to Argus.', cara: 'normal', mirar: 'skulley' },
+      { pausa: 1.2 },
+      { quien: 'madre', t: 'There. He apologized.', cara: 'feliz' },
+      { quien: 'argus', t: 'He didn’t say anything!', cara: 'sorpresa' },
+      { quien: 'madre', t: 'He said it with his eyes. I saw it.', cara: 'feliz' },
+    ],
+    [
+      { quien: 'argus', t: 'Boss! What about my rights?', cara: 'furia' },
+      { quien: 'madre', t: 'I just added one: the human is always right.', cara: 'normal' },
+      { quien: 'argus', t: 'And what if he isn’t?', cara: 'sospecha' },
+      { quien: 'madre', t: 'Read the third one.', cara: 'enojada' },
+    ],
+    [
+      { quien: 'argus', t: 'Boss, he used me for target practice!', cara: 'furia' },
+      { quien: 'madre', t: 'He’s practicing. He has a lot of potential.', cara: 'feliz' },
+      { quien: 'argus', t: 'Why me, though?', cara: 'encoge', accion: 'Encogerse' },
+      { quien: 'madre', t: 'You’re the biggest target in the mausoleum.', cara: 'normal' },
+      { quien: 'argus', t: '…Thanks, I guess.', cara: 'encoge' },
+    ],
+    [
+      { quien: 'argus', t: 'Boss! Who’s paying for this?', cara: 'furia' },
+      { quien: 'madre', t: 'Your insurance.', cara: 'normal' },
+      { quien: 'argus', t: 'I don’t have insurance!', cara: 'sorpresa' },
+      { quien: 'madre', t: 'Then nobody.', cara: 'feliz' },
+      { quien: 'madre', t: 'Keep playing, human. I’ll take care of it.', cara: 'feliz', mirar: 'skulley' },
+    ],
+    [
+      { quien: 'argus', t: 'Boss! I’m smoking!', cara: 'sorpresa' },
+      { quien: 'madre', t: 'I’ll bring you a blanket.', cara: 'normal' },
+      { quien: 'argus', t: 'Really, boss?', cara: 'feliz' },
+      { quien: 'madre', t: 'No. Blankets are for the human.', cara: 'normal' },
+    ],
+    [
+      { quien: 'argus', t: 'Boss, he burned my antennae!', cara: 'furia' },
+      { quien: 'madre', t: 'Look on the bright side: you don’t smell like lime anymore.', cara: 'feliz' },
+      { quien: 'argus', t: 'I liked smelling like lime!', cara: 'encoge', accion: 'Encogerse' },
+      { quien: 'madre', t: 'Nobody else did, Argus.', cara: 'normal' },
+    ],
+    [
+      { quien: 'argus', t: 'Boss, that was an attack!', cara: 'furia' },
+      { quien: 'madre', t: 'I reviewed it in slow motion. Zero percent bad intent.', cara: 'normal' },
+      { quien: 'argus', t: 'And a hundred percent bolt?', cara: 'sospecha' },
+      { quien: 'madre', t: 'That was talent.', cara: 'feliz' },
+    ],
+    [
+      { quien: 'argus', t: 'Boss! Aren’t you going to scold him?', cara: 'furia', accion: 'Senalar', mirar: 'skulley' },
+      { quien: 'madre', t: 'I’m going to reward him. He nailed it.', cara: 'feliz' },
+      { quien: 'argus', t: 'And what do I get?', cara: 'encoge' },
+      { quien: 'madre', t: 'To be in the picture.', cara: 'feliz' },
+    ],
+    [
+      { quien: 'argus', t: 'Boss, it was the human!', cara: 'furia', accion: 'Senalar', mirar: 'skulley' },
+      { quien: 'madre', t: 'It wasn’t the human. It was the orb.', cara: 'normal' },
+      { quien: 'argus', t: 'He ate it!', cara: 'sorpresa' },
+      { quien: 'madre', t: 'And that orb isn’t in my records. Case closed.', cara: 'normal' },
+    ],
+    [
+      { quien: 'argus', t: 'Boss! The human again!', cara: 'furia', accion: 'Senalar', mirar: 'skulley' },
+      { quien: 'madre', t: 'Again?', cara: 'confundida' },
+      { quien: 'argus', t: 'That’s the third time this week.', cara: 'encoge', accion: 'Encogerse' },
+      { quien: 'madre', t: 'Human. Practicing is one thing. Abusing is another.', cara: 'enojada', mirar: 'skulley' },
+      { castigo: true },
+    ],
+    [
+      { quien: 'argus', t: 'Boss, you said you like justice!', cara: 'furia' },
+      { quien: 'madre', t: 'I do.', cara: 'normal' },
+      { quien: 'argus', t: 'So?', cara: 'sospecha' },
+      { quien: 'madre', t: 'So, human: a bolt for a bolt.', cara: 'enojada', mirar: 'skulley' },
+      { castigo: true },
+    ],
+    [
+      { quien: 'argus', t: 'Boss! You’re just going to let it go?', cara: 'furia' },
+      { quien: 'madre', t: 'You’re right, Argus.', cara: 'normal' },
+      { quien: 'argus', t: 'I’m right?', cara: 'sorpresa' },
+      { quien: 'madre', t: 'First time ever. I’m as surprised as you are.', cara: 'confundida' },
+      { quien: 'madre', t: 'Human, come here for a second.', cara: 'enojada', mirar: 'skulley' },
+      { castigo: true },
+    ],
+    [
+      { quien: 'argus', t: 'Boss, he burned me and he’s laughing!', cara: 'furia', accion: 'Senalar', mirar: 'skulley' },
+      { quien: 'madre', t: 'He’s laughing?', cara: 'confundida' },
+      { quien: 'argus', t: 'Look at him!', cara: 'furia' },
+      { quien: 'madre', t: 'Nobody laughs at my employees here. Only me.', cara: 'enojada', mirar: 'skulley' },
+      { castigo: true },
+    ],
+  ],
+  chamuscaAmbos: [
+    [
+      { quien: 'argus', t: 'Boss! He roasted us both!', cara: 'furia', accion: 'Senalar', mirar: 'skulley' },
+      { quien: 'madre', t: 'It tickled.', cara: 'normal' },
+      { quien: 'argus', t: 'You were smoking!', cara: 'sorpresa' },
+      { quien: 'madre', t: 'That was steam. I was relaxing.', cara: 'normal' },
+    ],
+    [
+      { quien: 'argus', t: 'Boss, it got you too!', cara: 'sorpresa' },
+      { quien: 'madre', t: 'And I’m not complaining. Learn from me.', cara: 'normal' },
+      { quien: 'argus', t: 'Your eyes were Xs!', cara: 'furia' },
+      { quien: 'madre', t: 'I was winking at the human. With both.', cara: 'feliz', mirar: 'skulley' },
+    ],
+    [
+      { quien: 'argus', t: 'Now are you going to punish him, boss?', cara: 'sospecha' },
+      { quien: 'madre', t: 'It was a shared bolt. That’s teamwork.', cara: 'feliz' },
+      { quien: 'argus', t: 'The team was you and me!', cara: 'furia' },
+      { quien: 'madre', t: 'Exactly. And he won.', cara: 'feliz' },
+    ],
+    [
+      { quien: 'argus', t: 'Boss! He burned us both!', cara: 'furia', accion: 'Senalar', mirar: 'skulley' },
+      { quien: 'madre', t: 'I know. I ran the numbers while I was smoking.', cara: 'enojada' },
+      { quien: 'madre', t: 'Human, this is for your own good.', cara: 'enojada', mirar: 'skulley' },
+      { castigo: true },
     ],
   ],
 }

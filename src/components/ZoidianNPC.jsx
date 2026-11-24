@@ -15,7 +15,7 @@ import { playSfx } from '../lib/sfx.js'
 import { escuchar as escucharJuego, juego } from '../lib/juegoEsferas.js'
 import { crearMaterialMochila, crearCaraMochila } from './argus/pantallaMochila.js'
 import { crearRelojHolograma } from './argus/relojHolograma.js'
-import { argus, escucharArgus, picarArgus, picarArgusLejos, argusEnojado, animoArgus } from '../lib/argusNpc.js'
+import { argus, escucharArgus, avisarArgus, picarArgus, picarArgusLejos, argusEnojado, animoArgus } from '../lib/argusNpc.js'
 import { dron, avisarDron } from '../lib/droneNpc.js'
 import HumoDron from './drone/HumoDron.jsx'
 
@@ -1261,12 +1261,35 @@ export default function ZoidianNPC({
       burla(ambos ? 'zoidian.rayo.ambos' : 'zoidian.rayo.skulley')
       if (ambos) avisarDron({ burlaArgus: true })
     }
+    // El rayo que Skulley avienta tras comerse la corrupta también lo chamusca a él
+    // (Oscar, 2026-11-24). Lo que dicen va en una escena con M.A.D.R.E. (DroneNPC,
+    // `chamusca`), siempre turnándose con ella: Argus no dice nada por su lado.
+    const RADIO_TRUENO = 2.8
+    const MISMO_RAYO_MS = 600
+    let chamuscadoEn = -Infinity, madreTruenoEn = -Infinity, chamuscaTimer = 0
+    const onTrueno = (e) => {
+      const pts = e?.detail?.points || []
+      if (!pts.some((q) => Math.hypot(q.x - argus.pos.x, q.z - argus.pos.z) < RADIO_TRUENO)) return
+      chamuscadoEn = performance.now()
+      avisarArgus({ quemar: true })
+      clearTimeout(chamuscaTimer)
+      // con un respiro: si el mismo rayo también la quemó a ella, su escena espera a que se recupere
+      chamuscaTimer = setTimeout(() => {
+        avisarDron({ argusChamuscado: { ambos: Math.abs(chamuscadoEn - madreTruenoEn) < MISMO_RAYO_MS } })
+      }, 300)
+    }
     const onMadreQuemada = (e) => {
       const fuente = e?.detail?.fuente
       if (fuente === 'trueno') {
+        madreTruenoEn = performance.now()
         clearTimeout(madreTimer)
-        // con un respiro: DroneNPC cobra la venganza si la burla llegó después de la quemada
-        madreTimer = setTimeout(() => { burla('zoidian.rayo.madreSkulley'); avisarDron({ burlaArgus: true }) }, 250)
+        // con un respiro: DroneNPC cobra la venganza si la burla llegó después de la
+        // quemada; si el mismo rayo lo chamuscó a él, no se burla (lo dicen en su escena)
+        madreTimer = setTimeout(() => {
+          if (Math.abs(madreTruenoEn - chamuscadoEn) < MISMO_RAYO_MS) return
+          burla('zoidian.rayo.madreSkulley')
+          avisarDron({ burlaArgus: true })
+        }, 250)
         return
       }
       if (fuente !== 'portal') return
@@ -1282,6 +1305,7 @@ export default function ZoidianNPC({
     window.addEventListener('character-disassembled-by-madre', onRayoSkulley)
     window.addEventListener('character-disassembled-by-egg', onRayoSkulley)
     window.addEventListener('madre-quemada', onMadreQuemada)
+    window.addEventListener('thunder-strike', onTrueno)
     window.addEventListener('character-disassembled-by-argus', onPushShatter)
 
     // El juego de esferas: Argus comenta la partida. Las grandes interrumpen; las
@@ -1313,8 +1337,10 @@ export default function ZoidianNPC({
       window.removeEventListener('character-disassembled-by-madre', onRayoSkulley)
       window.removeEventListener('character-disassembled-by-egg', onRayoSkulley)
       window.removeEventListener('madre-quemada', onMadreQuemada)
+      window.removeEventListener('thunder-strike', onTrueno)
       window.removeEventListener('character-disassembled-by-argus', onPushShatter)
       clearTimeout(madreTimer)
+      clearTimeout(chamuscaTimer)
       quitarJuego()
       clearTimers()
       decirRef.current = null

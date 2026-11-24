@@ -53,6 +53,30 @@ Los ids en código: `ipad`, `leica`, `album`, `teclado`, `cerillos`, `almohada` 
 8. Decidir si la canción sigue sonando dentro de la sección 6. Hoy, al entrar, regresa la música del reproductor.
 9. Medir en el Brave de Oscar lo que cuestan los rayos y la oscuridad (en el navegador integrado la resolución adaptable cambiaba de escalón y no se pudo comparar).
 
+## La prisión de M.A.D.R.E. (idea, sin construir)
+
+Pedido de Oscar, 2026-11-24, para trabajarlo después en la oficina. Hoy M.A.D.R.E. castiga a Skulley solo con su rayo; la prisión sería su otro castigo.
+
+### La idea
+
+- Cuando Skulley se porta mal, a veces M.A.D.R.E. no lo parte con su rayo: lo manda a una prisión, otra instancia o mapa aparte de la home, donde el objetivo es escapar.
+- El primer lugar para usarla son las escenas de cuando Skulley chamusca a Argus con el rayo de la esfera corrupta (`chamusca` en `lib/escenasArgusMadre.js`). Hoy casi siempre lo defiende y a veces termina en `{ castigo: true }`, su rayo. La prisión sería otro final, por ejemplo `{ prision: true }`. Otros candidatos: las trampas del juego de esferas, patearla o romperle el escudo tres veces.
+- No prometerla en ningún texto del sitio hasta que exista: hoy ninguna escena la menciona.
+
+### Lo que ya existe y sirve
+
+- El paso de castigo de las escenas (`correrEscena` en `DroneNPC.jsx`): deja a Argus y va por Skulley. Un paso de prisión iría ahí.
+- El iris y los puntos de las transiciones (`lib/irisTransition.js`, `irisCubrir`) para llevarse a Skulley y traerlo de regreso.
+- El despiece y el rearme del rayo, por si lo manda en piezas.
+
+### Por decidir con Oscar
+
+1. Cómo se ve la prisión: una celda en el código crudo del borde del mundo, un rincón del data center, otra cosa.
+2. Qué hay que hacer para escapar: un acertijo, esquivar, juntar algo, convencer a Argus (que podría ser el guardia).
+3. Cuánto dura y qué pasa si no escapa: regresa solo después de un rato o hay que lograrlo.
+4. Si cuenta para algo: un logro, un prop, una skin de presidiario.
+5. Qué dice M.A.D.R.E. al mandarlo y al verlo regresar, en su voz maternal (lo manda por su bien, nunca como a un niño).
+
 ## Láser de la esfera (reemplazó la explosión de la E)
 
 Pedido de Oscar, 2026-11-05. Las cuatro fases están hechas. Queda probarlo en una tablet real, y que Oscar afine la pose en el estudio cuando quiera.
