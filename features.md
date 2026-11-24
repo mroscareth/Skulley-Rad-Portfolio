@@ -2,7 +2,7 @@
 
 ## La ofrenda del Día de los Skulleys (en construcción)
 
-Pedido de Oscar, 2026-11-24. Hecho hasta hoy: la canción rota que se recompone, el cruce con la música al acercarse al portal y el estado de las ofrendas. Lo demás está abajo, en orden.
+Pedido de Oscar, 2026-11-24. Hecho hasta hoy: la canción rota que se recompone, el cruce con la música al acercarse al portal, el estado de las ofrendas y la plaza (pétalos, antorchas, estelas, oscuridad, rayos de luz y el portal apagado). Lo demás está abajo, en orden.
 
 ### La historia
 
@@ -25,29 +25,33 @@ Pedido de Oscar, 2026-11-24. Hecho hasta hoy: la canción rota que se recompone,
 
 Los ids en código: `ipad`, `leica`, `album`, `teclado`, `cerillos`, `almohada` (`OFRENDAS` en `src/lib/ofrendas.js`).
 
-### La plaza del portal
+### La plaza del portal (hecha)
 
-- Muchos pétalos de cempasúchil, como los del camino (`home/PetalosCamino.jsx`).
-- Lugares para colocar las ofrendas alrededor del portal.
-- Antorchas clavadas en el piso, con el fuego toon que ya existe (`fx/LlamaMano.jsx`, `lib/fuegoToon.js`).
-- Atrás del portal, junto a las barricadas (`home/BordeDelMundo.jsx`): el lugar de la almohada, donde se duerme Skulley.
+- Más oscura que el resto: al acercarse bajan las luces y la niebla de la escena.
+- Unos 920 pétalos de cempasúchil: un camino que entra al portal, un anillo alrededor, rayos a cada lugar, una corona en cada lugar y el contorno de la cama, más sueltos.
+- Cinco lugares para las ofrendas en pentágono (como los portales del claro). Los objetos van en el piso, dentro de su corona, sin pedestal: Oscar rechazó pedestales de cantera, del color de la escena y tocones. Detrás de cada uno, una estela con su nombre en SKULLEYGLYPH que se prende en naranja cuando la ofrenda está puesta.
+- Al poner una ofrenda, un rayo de luz baja del cielo sobre ella. Uno baja siempre sobre el portal.
+- Seis antorchas clavadas en el piso, con el fuego toon de la turbina del drone.
+- Atrás del portal, junto a las barricadas: el lugar de la almohada, marcado con pétalos y dos antorchas.
+- El portal se ve apagado (como descompuesto, con intentos de prender) hasta que se activa; entonces prende como lámpara.
 
 ### Hecho
 
 - La canción rota y su cruce con la música: `lib/cancionOfrenda.js`, `lib/zonaOfrenda.js`, `home/ZonaOfrenda.jsx` y el modo ofrenda de `MusicPlayer.jsx` (detalle en CLAUDE.md, Audio).
 - El estado: `lib/ofrendas.js` (en el navegador, `skulley_ofrendas`). En desarrollo, `window.__ofrendas.nivel(n)` y `window.__zonaOfrenda(d)` para oírla en cada nivel sin caminar.
+- La plaza: `lib/plazaOfrenda.js` (el plano), `home/PlazaOfrenda.jsx` (oscuridad, rayos y antorchas), las estelas en `BosquePintado`, los pétalos en `PetalosCamino` y el portal apagado en `Portal.jsx` (detalle en CLAUDE.md). `window.__ofrendas.poner('album')` prende el rayo y la estela de esa ofrenda; `window.__portalGlifo = 'prendido'` prende el portal.
 
 ### Por hacer
 
 1. Modelos 3D de los seis objetos.
-2. La plaza: pétalos, lugares de ofrenda, antorchas y el lugar de la almohada.
-3. Las misiones (con M.A.D.R.E. y con Argus) y los caminos nuevos.
-4. Poner una ofrenda en su lugar llama a `ponerOfrenda(id)`; la canción se recompone sola.
-5. Dormir con la almohada: cinemática y soliloquio, con voz pregrabada como la historia.
-6. M.A.D.R.E. activa el portal con la esfera corrupta y aparecen las memorias.
-7. Sección 6 → Goodies / Freebies.
-8. Al abrir las misiones: `MISIONES_ABIERTAS = true` (el reproductor enseña cuántas ofrendas van en lugar de "??") y guardar las ofrendas en la cuenta, no solo en el navegador.
-9. Decidir si la canción sigue sonando dentro de la sección 6. Hoy, al entrar, regresa la música del reproductor.
+2. Las misiones (con M.A.D.R.E. y con Argus) y los caminos nuevos.
+3. Poner una ofrenda en su lugar llama a `ponerOfrenda(id)`: la canción se recompone, su estela se prende y le cae su rayo de luz. Falta dibujar el objeto en su lugar (`LUGARES[i].mesa` en `lib/plazaOfrenda.js`, en el piso; la almohada en `CAMA`).
+4. Dormir con la almohada: cinemática y soliloquio, con voz pregrabada como la historia.
+5. M.A.D.R.E. activa el portal con la esfera corrupta y aparecen las memorias. Hoy el portal prende cuando se desbloquea la sección 6 (la esfera corrupta que mete el jugador); en la historia lo hará ella.
+6. Sección 6 → Goodies / Freebies.
+7. Al abrir las misiones: `MISIONES_ABIERTAS = true` (el reproductor enseña cuántas ofrendas van en lugar de "??") y guardar las ofrendas en la cuenta, no solo en el navegador.
+8. Decidir si la canción sigue sonando dentro de la sección 6. Hoy, al entrar, regresa la música del reproductor.
+9. Medir en el Brave de Oscar lo que cuestan los rayos y la oscuridad (en el navegador integrado la resolución adaptable cambiaba de escalón y no se pudo comparar).
 
 ## Láser de la esfera (reemplazó la explosión de la E)
 

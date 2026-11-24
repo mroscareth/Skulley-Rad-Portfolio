@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
+import { CAMPO_MAX as MAX, VERT_CAMPO as VERT, FRAG_CAMPO as FRAG, VERT_CHISPA, FRAG_CHISPA } from '../../lib/fuegoToon.js'
 
 // El fuego de la turbinita de atrás del drone (Oscar, 2026-11-19: "debe expulsar
 // fuego y partículas cuando avanza"). Misma receta que la llama de la mano de
@@ -20,7 +21,6 @@ import * as THREE from 'three'
 // el mundo sin heredar nada de su padre (matrixWorld a mano), así da igual
 // dónde se monte.
 
-const MAX = 40
 const FUEGO = { porSegundo: 100, vida: [0.22, 0.4], velocidad: 5.4, abre: 0.6, aire: 2.8, hereda: 0.85, tam: [0.24, 0.36] }
 const CHISPAS = { max: 80, porSegundo: 34, vida: [0.35, 0.75], velocidad: [3.5, 6.5], abre: 1.6, gravedad: 2.5, aire: 1.5 }
 const BANDAS = { orilla: 0.32, medio: 0.7, claro: 1.25, centro: 2.4 }
@@ -28,71 +28,6 @@ const PALETA = {
   frio: ['#0a2fc4', '#1683ff', '#3fdcff', '#8ff6ff'],
   rojo: ['#7a0600', '#ff2a1c', '#ff8a3a', '#ffe0a8'],
 }
-
-const VERT = /* glsl */`
-varying vec2 vQ;
-void main() {
-  vQ = position.xy;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}
-`
-const FRAG = /* glsl */`
-#define MAX ${MAX}
-uniform vec4 uBolas[MAX];
-uniform int uN;
-uniform float uTiempo;
-uniform vec3 uC0, uC1, uC2, uC3;
-uniform vec4 uBandas;
-varying vec2 vQ;
-float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-float ruido(vec2 p) {
-  vec2 i = floor(p), f = fract(p);
-  f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);
-}
-void main() {
-  // el campo se deforma con ruido que corre, para que la orilla no sea de burbujas
-  vec2 q = vQ + (vec2(ruido(vQ * 9.0 + uTiempo * 7.0), ruido(vQ * 9.0 - uTiempo * 6.0)) - 0.5) * 0.05;
-  float campo = 0.0;
-  for (int i = 0; i < MAX; i++) {
-    if (i >= uN) break;
-    vec4 b = uBolas[i];
-    vec2 d = q - b.xy;
-    float k = 1.0 - dot(d, d) / (b.z * b.z);
-    if (k > 0.0) campo += b.w * k * k;
-  }
-  if (campo < uBandas.x) discard;
-  vec3 col = uC0;
-  if (campo > uBandas.y) col = uC1;
-  if (campo > uBandas.z) col = uC2;
-  if (campo > uBandas.w) col = uC3;
-  gl_FragColor = vec4(col, 1.0);
-  #include <colorspace_fragment>
-}
-`
-const VERT_CHISPA = /* glsl */`
-attribute float aTam;
-attribute vec3 aColor;
-varying vec3 vColor;
-uniform float uEscalaPx;
-void main() {
-  vColor = aColor;
-  vec4 mv = modelViewMatrix * vec4(position, 1.0);
-  gl_Position = projectionMatrix * mv;
-  gl_PointSize = aTam * uEscalaPx / max(-mv.z, 0.1);
-}
-`
-const FRAG_CHISPA = /* glsl */`
-varying vec3 vColor;
-void main() {
-  // rombo de orilla dura con tinta
-  vec2 p = abs(gl_PointCoord - 0.5);
-  float d = p.x + p.y;
-  if (d > 0.5) discard;
-  gl_FragColor = vec4(d > 0.36 ? vec3(0.0) : vColor, 1.0);
-  #include <colorspace_fragment>
-}
-`
 
 const azar = (a, b) => a + Math.random() * (b - a)
 const _p = new THREE.Vector3()

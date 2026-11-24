@@ -2,13 +2,17 @@ import React, { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { caminoEnPiso, zonasPiso } from '../../lib/pisoPintado.js'
+import { CENTRO as CENTRO_PLAZA, densidadPetalosPlaza, PETALOS_PLAZA_TOPE } from '../../lib/plazaOfrenda.js'
 import { escucharExplosiones } from '../../lib/explosionesHome.js'
 import { ubicarSonido } from '../../lib/homeSounds.js'
 import { sonarBrota, sonarFuego, sonarPolvo, sonarPrenden } from '../../lib/petalosSonidos.js'
 
 // Pétalos de cempasúchil en el camino escondido de Work a SKULLEYGLYPH (2026-11-22):
 // donde la tierra tapa las lozas, los pétalos siguen el camino, como el de Día de
-// Muertos que guía a los muertos a casa (nadie lo dice en el sitio). Se siembran
+// Muertos que guía a los muertos a casa (nadie lo dice en el sitio). Desde el
+// 2026-11-24 también llenan la plaza de la ofrenda alrededor del portal del glifo
+// (lib/plazaOfrenda.js: un camino que entra al portal, un anillo, rayos a cada
+// mesa, coronas y el contorno de la cama, más sueltos por toda la plaza). Se siembran
 // con la misma cuenta del shader del piso (`caminoEnPiso`): tupidos al centro de la
 // tira tapada, ralos a los lados y casi nada sobre las lozas que se ven.
 // El atlas lo pinta scripts/petalos/pintar_petalos.py (gris 0.5 = el naranja, abajo
@@ -117,6 +121,26 @@ function sembrar() {
     p *= suaveEntre(-1, 1.5, c.s) * (1 - suaveEntre(largo - 7, largo, c.s))
     if (filtro >= p) continue
     const flor = azar() < PETALOS.flor
+    const [t0, t1] = flor ? PETALOS.tamFlor : PETALOS.tam
+    lista.push({
+      x, z,
+      yaw: azar() * Math.PI * 2,
+      tam: t0 + (t1 - t0) * azar(),
+      celda: flor ? 15 : Math.floor(azar() * 15),
+      alto: PETALOS.alto[0] + (PETALOS.alto[1] - PETALOS.alto[0]) * azar(),
+      fase: azar() * 6.283,
+      flor,
+    })
+  }
+  // La plaza de la ofrenda: la densidad la da su plano.
+  const R = 16.5
+  const cajaP = [CENTRO_PLAZA[0] - R, CENTRO_PLAZA[1] - R, CENTRO_PLAZA[0] + R, CENTRO_PLAZA[1] + R]
+  const candP = Math.round((cajaP[2] - cajaP[0]) * (cajaP[3] - cajaP[1]) * PETALOS_PLAZA_TOPE)
+  for (let i = 0; i < candP; i++) {
+    const x = cajaP[0] + azar() * (cajaP[2] - cajaP[0])
+    const z = cajaP[1] + azar() * (cajaP[3] - cajaP[1])
+    if (azar() >= densidadPetalosPlaza(x, z) / PETALOS_PLAZA_TOPE) continue
+    const flor = azar() < PETALOS.flor * 1.6
     const [t0, t1] = flor ? PETALOS.tamFlor : PETALOS.tam
     lista.push({
       x, z,

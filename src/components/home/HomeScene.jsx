@@ -249,6 +249,7 @@ import BosquePintado from './BosquePintado.jsx'
 import PetalosCamino from './PetalosCamino.jsx'
 import BordeDelMundo from './BordeDelMundo.jsx'
 import ZonaOfrenda from './ZonaOfrenda.jsx'
+import PlazaOfrenda from './PlazaOfrenda.jsx'
 import { PrecalentarGlobo } from '../SpeechBubble3D.jsx'
 import FloatingExclamation from '../FloatingExclamation.jsx'
 import ZoidianNPC from '../ZoidianNPC.jsx'
@@ -684,6 +685,10 @@ export default function HomeScene({
         {/* La ofrenda del Día de los Skulleys: qué tan cerca va Skulley del portal del
             glifo, para cruzar la música con la canción rota (lib/cancionOfrenda.js). */}
         <ZonaOfrenda playerRef={playerRef} activa={section === 'home' && !bootLoading} />
+        {/* La plaza de la ofrenda: su oscuridad, sus rayos de luz y sus antorchas
+            (home/PlazaOfrenda.jsx; las estelas y los pétalos van con el bosque y con
+            PetalosCamino). Montada siempre. */}
+        <PlazaOfrenda playerRef={playerRef} activo={section === 'home'} />
         {/* God Rays anchor (hidden when inactive and no depth write) */}
         {fx.godEnabled && (
           <mesh ref={sunRef} position={[0, 8, 0]}>
@@ -1006,6 +1011,7 @@ export default function HomeScene({
                 sectionName={p.name}
                 antimatter={p.antimatter}
                 juegoId={p.id}
+                apagado={Boolean(p.antimatter && !section6Unlocked)}
               />
               {/* Cristal: se arma con el hover del item de menú de ESTA sección
                   o cuando el personaje pisa el portal, y se desarma al salir de
@@ -1014,7 +1020,7 @@ export default function HomeScene({
               <PortalCrystal
                 sectionId={p.id}
                 color={targetColor}
-                enabled={comoHome}
+                enabled={Boolean(comoHome && !(p.antimatter && !section6Unlocked))}
                 near={nearPortalId === p.id}
               />
               {/* Click en el portal = su botón de la nav. El de antimateria
@@ -1038,6 +1044,7 @@ export default function HomeScene({
                   mix={mix}
                   playerRef={playerRef}
                   frenzyRadius={10}
+                  apagado={Boolean(p.antimatter && !section6Unlocked)}
                 />
               )}
             </FrustumCulledGroup>

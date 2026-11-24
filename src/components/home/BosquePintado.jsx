@@ -10,6 +10,8 @@ import { setObstaculos, setClaro } from '../../lib/obstaculosHome.js'
 import { zonasPiso } from '../../lib/pisoPintado.js'
 import { sectionColors } from '../../lib/appHelpers.js'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
+import { LUGARES, PLAZA as PLAZA_OFRENDA, ANTORCHAS, SOLIDO_ANTORCHA } from '../../lib/plazaOfrenda.js'
+import { ofrendaPuesta } from '../../lib/ofrendas.js'
 
 // El bosque del home (Oscar, 2026-11-22): la home es un claro en el bosque que
 // M.A.D.R.E. hizo con los recuerdos de Skulley. Pinos como la referencia de Oscar
@@ -17,6 +19,9 @@ import { useLanguage } from '../../i18n/LanguageContext.jsx'
 // tres sólidos perfectos medio enterrados (la naturaleza no hace icosaedros) y dos
 // menhires por portal con el nombre de la sección en SKULLEYGLYPH, que se prenden
 // del color del portal al acercarse: la barra dice WORK y la piedra lo dice en runas.
+// En la plaza de la ofrenda (lib/plazaOfrenda.js, 2026-11-24), detrás del lugar de
+// cada objeto, una estela (un menhir chico) con el nombre de su ofrenda en runas,
+// que se prende en naranja cempasúchil cuando la ofrenda está puesta.
 //
 // Los modelos y el atlas los arma scripts/bosque/armar_bosque.py (Blender). Todo
 // va pintado en grises como el piso: el 0.5 es el color de la escena (`colorPiso`),
@@ -147,6 +152,11 @@ function sembrar(portales) {
       menhires.push({ v, x, z, s: 1, rot: Math.atan2(-x, -z) + (azar() - 0.5) * 0.18, portal: p.id })
     }
   })
+  // La plaza de la ofrenda: la estela con el nombre de cada una.
+  for (const l of LUGARES) {
+    menhires.push({ v: l.estela.v, x: l.estela.x, z: l.estela.z, s: PLAZA_OFRENDA.estelaEscala, rot: l.estela.rot, ofrenda: l.id, nombre: { es: l.es, en: l.en } })
+    ocupado.push({ x: l.mesa.x, z: l.mesa.z, rad: 1.2 })
+  }
   // Peñascos: en la orilla del bosque, entre los pinos, y unos por el camino.
   for (let i = 0, puestos = 0; i < 4000 && puestos < 30; i++) {
     let x, z
@@ -343,6 +353,9 @@ function crearMaterial(tipo, uniforms, color) {
 
 // ---------------------------------------------------------------- piezas
 
+// Las runas de las estelas de la ofrenda: el naranja de los pétalos.
+const COLOR_OFRENDA = '#ff7a1a'
+
 const PIEZAS_PINO = ['Pino_A', 'Pino_B', 'Pino_C', 'Pino_D']
 const PIEZAS_PIEDRA = ['Penasco_A', 'Penasco_B', 'Penasco_C', 'Solido_Ico', 'Solido_Dodeca', 'Solido_Octa']
 const PIEZAS_MENHIR = ['Menhir_A', 'Menhir_B', 'Menhir_C']
@@ -421,7 +434,7 @@ export default function BosquePintado({ playerRef, portales, colorPiso = '#20458
   const gl = useThree((s) => s.gl)
   const scene = useThree((s) => s.scene)
   const camera = useThree((s) => s.camera)
-  const { t } = useLanguage()
+  const { t, lang } = useLanguage()
   const [listo, setListo] = useState(null)
 
   const uniforms = useMemo(() => {
@@ -479,6 +492,8 @@ export default function BosquePintado({ playerRef, portales, colorPiso = '#20458
         armarInstancias(grupo, pz.geo, matBosque, items)
         for (const it of items) obstaculos.push({ x: it.x, z: it.z, r: pz.choque * it.s })
       })
+      // Lo sólido de la plaza de la ofrenda: las antorchas (PlazaOfrenda).
+      for (const a of ANTORCHAS) obstaculos.push({ x: a.x, z: a.z, r: SOLIDO_ANTORCHA })
       const menhires = []
       menhir.forEach((pz, v) => {
         if (!pz) return
@@ -550,7 +565,7 @@ export default function BosquePintado({ playerRef, portales, colorPiso = '#20458
       const g = im.geometry
       const r0 = g.getAttribute('aRuna0'), r1 = g.getAttribute('aRuna1'), info = g.getAttribute('aRunaInfo')
       im.userData.items.forEach((it, i) => {
-        const letras = letrasDe(t?.(`nav.${it.portal}`) || it.portal)
+        const letras = letrasDe(it.nombre ? (lang === 'es' ? it.nombre.es : it.nombre.en) : t?.(`nav.${it.portal}`) || it.portal)
         for (let k = 0; k < 8; k++) {
           const arr = k < 4 ? r0.array : r1.array
           arr[i * 4 + (k % 4)] = k < letras.length ? letras[k] : -1
@@ -564,7 +579,7 @@ export default function BosquePintado({ playerRef, portales, colorPiso = '#20458
       })
       r0.needsUpdate = true; r1.needsUpdate = true; info.needsUpdate = true
     }
-  }, [listo, t])
+  }, [listo, t, lang])
 
   // En desarrollo: el plan, los materiales y los uniforms.
   useEffect(() => { if (import.meta.env.DEV && listo) window.__bosque = { ...listo, uniforms, BOSQUE } }, [listo, uniforms])
@@ -587,15 +602,24 @@ export default function BosquePintado({ playerRef, portales, colorPiso = '#20458
     }
     state.gl.getDrawingBufferSize(v.current.tam)
     u.uBosqueAspecto.value = v.current.tam.x / Math.max(1, v.current.tam.y)
-    // La cercanía de cada portal enciende sus dos menhires.
+    // La cercanía de cada portal enciende sus dos menhires; la ofrenda puesta, su
+    // estela (sube en un segundo y medio).
+    const dt = Math.min(delta, 0.05)
     for (const im of listo.menhires) {
       const attr = im.geometry.getAttribute('aBrillo')
       let cambio = false
       im.userData.items.forEach((it, i) => {
-        const m = Math.min(1, portalMixMap?.[it.portal] || 0)
+        let m
+        if (it.ofrenda) {
+          const meta = ofrendaPuesta(it.ofrenda) ? 1 : 0
+          it.brillo = (it.brillo || 0) + Math.max(-dt / 0.6, Math.min(dt / 1.5, meta - (it.brillo || 0)))
+          m = it.brillo
+        } else {
+          m = Math.min(1, portalMixMap?.[it.portal] || 0)
+        }
         const o = i * 4
         if (!it.color) {
-          it.color = new THREE.Color(sectionColors[it.portal] || '#ffffff')
+          it.color = new THREE.Color(it.ofrenda ? COLOR_OFRENDA : sectionColors[it.portal] || '#ffffff')
           attr.array.set([it.color.r, it.color.g, it.color.b, m], o)
           cambio = true
         } else if (Math.abs(attr.array[o + 3] - m) > 1e-3) {

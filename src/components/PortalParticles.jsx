@@ -3,7 +3,9 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
 // Count reduced from 240 to 150 for better performance
-export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, count = 150, color = '#c7d2fe', targetColor = '#ffffff', mix = 0, playerRef, frenzyRadius = 10 }) {
+// `apagado`: el portal no funciona (el de SKULLEYGLYPH hasta que se activa):
+// quedan unas pocas, chiquitas.
+export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, count = 150, color = '#c7d2fe', targetColor = '#ffffff', mix = 0, playerRef, frenzyRadius = 10, apagado = false }) {
   const MAX_BONES = 32
   // Per-particle base parameters
   const aBaseAngle = useMemo(() => new Float32Array(count), [count])
@@ -53,6 +55,7 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
     uColor: { value: new THREE.Color(color) },
     uTargetColor: { value: new THREE.Color(targetColor) },
     uMix: { value: mix },
+    uLuz: { value: apagado ? 0.15 : 1 },
     uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2) },
     uRadius: { value: radius },
     uBoneCount: { value: 0 },
@@ -120,9 +123,11 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
     return () => clearInterval(id)
   }, [playerRef])
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     const uniforms = uniformsRef.current
     uniforms.uMix.value = mix
+    const meta = apagado ? 0.15 : 1
+    uniforms.uLuz.value += (meta - uniforms.uLuz.value) * Math.min(1, Math.min(delta, 0.1) * (apagado ? 1.2 : 0.5))
     uniforms.uTargetColor.value.set(targetColor)
     uniforms.uTime.value = state.clock.getElapsedTime()
     // Sync real renderer DPR in case it changes via mobile heuristics
@@ -199,6 +204,7 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
           uniform float uRadius;
           uniform float uFrenzy;
           uniform float uPixelRatio;
+          uniform float uLuz;
           uniform vec3 uCenter;
           uniform vec3 uPlayer;
           uniform float uBoneCount;
@@ -314,7 +320,7 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
             vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
             gl_Position = projectionMatrix * mvPosition;
             float perspectiveSize = aSize * (0.6 + 0.7 * vLife) * (1.0 + 0.1 * uFrenzy);
-            gl_PointSize = perspectiveSize * (180.0 / max(1.0, -mvPosition.z)) * uPixelRatio;
+            gl_PointSize = perspectiveSize * (180.0 / max(1.0, -mvPosition.z)) * uPixelRatio * uLuz;
           }
         `}
         fragmentShader={`

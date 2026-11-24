@@ -584,6 +584,7 @@ const GLYPHS_VERT = /* glsl */`
   attribute float aSize;
   uniform float uTime;
   uniform float uPixelRatio;
+  uniform float uLuz;
   varying float vLife;
   varying float vSeed;
   void main() {
@@ -604,7 +605,7 @@ const GLYPHS_VERT = /* glsl */`
     // Size: multiplier bajo (40 vs 220 original) + cap a 48px para que las
     // cards nunca ocupen la pantalla. Antes explotaban cerca del camera.
     float ps = aSize * visLife * (40.0 / max(1.0, -mvPos.z)) * uPixelRatio;
-    gl_PointSize = min(ps, 48.0);
+    gl_PointSize = min(ps, 48.0) * uLuz;
   }
 `
 const GLYPHS_FRAG = /* glsl */`
@@ -653,6 +654,11 @@ const GLYPHS_FRAG = /* glsl */`
   }
 `
 
+// El portal apagado (ver `apagado` en Portal): lo que le queda de luz y lo que
+// tarda en prender cuando se activa.
+const LUZ_APAGADO = 0.05
+const ENCIENDE_S = 2.4
+
 const _runeUp = new THREE.Vector3()
 const _runeQ = new THREE.Quaternion()
 
@@ -673,6 +679,10 @@ export default function Portal({
   antimatter = false,
   // Id de la sección: con él sabe si el juego de esferas lo prendió en llamas.
   juegoId = null,
+  // Apagado, como si no funcionara (Oscar, 2026-11-24: el de SKULLEYGLYPH hasta
+  // que se activa). Todo casi en nada, el anillo sin girar, sin tarjetas, y de vez
+  // en cuando un intento de prender que no llega. Al activarse prende como lámpara.
+  apagado = false,
 }) {
   const groupRef = useRef()
   const torusRef = useRef()
@@ -735,6 +745,7 @@ export default function Portal({
     ...uniforms,
     uRuneAtlas: { value: getRuneAtlas() },
     uPixelRatio: { value: Math.min(typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1, 2) },
+    uLuz: { value: 1 },
   }), [uniforms])
 
   // Atributos estáticos de glyph cards — 16 cards orbitando con radio/seed únicos
@@ -774,10 +785,40 @@ export default function Portal({
     st.nextAt = -1
   }, [flickerKey, flicker])
 
+  // Cuánta luz tiene (ver `apagado`): `vida` va de 0 (apagado) a 1 (prendido).
+  const luzRef = useRef({ vida: apagado ? 0 : 1, prev: null, falla: 0, siguiente: 2 + Math.random() * 3 })
+
   useFrame((state) => {
     const t = state?.clock ? state.clock.getElapsedTime() : 0
     // Avanza tiempo en uniforms
     uniforms.uTime.value = t
+    const L = luzRef.current
+    const dt = L.prev == null ? 0 : Math.min(0.1, Math.max(0, t - L.prev))
+    L.prev = t
+    // En desarrollo, window.__portalGlifo = 'apagado' | 'prendido' lo fuerza.
+    const forzado = import.meta.env.DEV && antimatter && typeof window !== 'undefined' ? window.__portalGlifo : undefined
+    const apagar = forzado === 'apagado' ? true : forzado === 'prendido' ? false : apagado
+    L.vida = apagar ? Math.max(0, L.vida - dt / 0.8) : Math.min(1, L.vida + dt / ENCIENDE_S)
+    // Parpadeo a saltos (18 por segundo), igual a cualquier cuadro por segundo.
+    const tic = Math.floor(t * 18)
+    const azarTic = (k) => { const x = Math.sin(tic * 12.9898 + k * 78.233 + (juegoId ? 3.1 : 0)) * 43758.5453; return x - Math.floor(x) }
+    let luz = 1
+    if (L.vida < 1) {
+      if (!apagar) {
+        // Prendiendo: lámpara que parpadea cada vez menos hasta quedarse.
+        luz = azarTic(1) < 0.2 + 0.8 * L.vida ? 0.35 + 0.65 * L.vida : LUZ_APAGADO
+      } else {
+        // Apagado: cada tanto intenta prender, chisporrotea y se cae.
+        L.siguiente -= dt
+        if (L.siguiente <= 0) { L.falla = 0.45 + Math.random() * 0.35; L.siguiente = 4 + Math.random() * 5 }
+        luz = LUZ_APAGADO
+        if (L.falla > 0) {
+          L.falla -= dt
+          if (azarTic(2) < 0.5) luz = 0.22 + 0.3 * azarTic(3)
+        }
+        luz = Math.max(luz, L.vida)
+      }
+    }
     // Actualiza colores del lerp (por si los props cambiaron sin remount). En la
     // fiebre del juego de esferas todos los portales se ven del color de la
     // fiebre (lib/juegoEsferas.js); son uniforms, no recompila nada.
@@ -790,8 +831,11 @@ export default function Portal({
     // no se lee de qué color es el portal, que es lo que importa para acertar.
     const enLlamas = juegoId && portalEnLlamas() === juegoId
     const arde = enLlamas ? 0.5 + 0.5 * Math.sin(t * 13) : 0
-    torusUniforms.uIntensity.value = 1.5 + arde * 0.8
-    discUniforms.uIntensity.value = 1.4 + arde * 0.6
+    torusUniforms.uIntensity.value = (1.5 + arde * 0.8) * luz
+    discUniforms.uIntensity.value = (1.4 + arde * 0.6) * luz
+    groundUniforms.uIntensity.value = luz
+    sonarUniforms.uIntensity.value = 1.3 * luz
+    glyphUniforms.uLuz.value = THREE.MathUtils.smoothstep(luz, 0.25, 1)
     // Cicla la runa central por las letras del nombre. Período de 1.2s por
     // letra. El offset por-portal (uRuneSeed * 0.7) evita que 2 portales
     // muestren la misma letra a la vez aunque tengan la misma longitud.
@@ -809,12 +853,12 @@ export default function Portal({
 
     // Rotación del torus con respiración (no-lineal → lectura "viva")
     if (torusRef.current) {
-      torusRef.current.rotation.z += 0.008 + Math.sin(t * 0.3) * 0.0035
+      torusRef.current.rotation.z += (0.008 + Math.sin(t * 0.3) * 0.0035) * luz * luz
     }
 
     // Pulso de escala sutil — apenas perceptible pero rompe el look mecánico
     if (groupRef.current) {
-      const s = 1 + Math.sin(t * 0.7) * 0.015 + arde * 0.07
+      const s = 1 + Math.sin(t * 0.7) * 0.015 * luz + arde * 0.07
       groupRef.current.scale.setScalar(s)
     }
 

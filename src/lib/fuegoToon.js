@@ -32,3 +32,73 @@ void main(){
   gl_FragColor = vec4(d < 0.45 ? uClaro : (d < 0.75 ? uMedio : uHondo), 1.0);
 }
 `
+
+// El campo de bocanadas (metaballs en bandas duras sobre un cuadro de frente a la
+// cámara) y las chispas de rombo con tinta: los de la turbina del drone
+// (drone/TurbinaDrone.jsx) y las antorchas de la plaza de la ofrenda
+// (home/PlazaOfrenda.jsx). El mismo texto: un solo programa para los dos.
+export const CAMPO_MAX = 40
+export const VERT_CAMPO = /* glsl */`
+varying vec2 vQ;
+void main() {
+  vQ = position.xy;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`
+export const FRAG_CAMPO = /* glsl */`
+#define MAX ${CAMPO_MAX}
+uniform vec4 uBolas[MAX];
+uniform int uN;
+uniform float uTiempo;
+uniform vec3 uC0, uC1, uC2, uC3;
+uniform vec4 uBandas;
+varying vec2 vQ;
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float ruido(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);
+}
+void main() {
+  // el campo se deforma con ruido que corre, para que la orilla no sea de burbujas
+  vec2 q = vQ + (vec2(ruido(vQ * 9.0 + uTiempo * 7.0), ruido(vQ * 9.0 - uTiempo * 6.0)) - 0.5) * 0.05;
+  float campo = 0.0;
+  for (int i = 0; i < MAX; i++) {
+    if (i >= uN) break;
+    vec4 b = uBolas[i];
+    vec2 d = q - b.xy;
+    float k = 1.0 - dot(d, d) / (b.z * b.z);
+    if (k > 0.0) campo += b.w * k * k;
+  }
+  if (campo < uBandas.x) discard;
+  vec3 col = uC0;
+  if (campo > uBandas.y) col = uC1;
+  if (campo > uBandas.z) col = uC2;
+  if (campo > uBandas.w) col = uC3;
+  gl_FragColor = vec4(col, 1.0);
+  #include <colorspace_fragment>
+}
+`
+export const VERT_CHISPA = /* glsl */`
+attribute float aTam;
+attribute vec3 aColor;
+varying vec3 vColor;
+uniform float uEscalaPx;
+void main() {
+  vColor = aColor;
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  gl_Position = projectionMatrix * mv;
+  gl_PointSize = aTam * uEscalaPx / max(-mv.z, 0.1);
+}
+`
+export const FRAG_CHISPA = /* glsl */`
+varying vec3 vColor;
+void main() {
+  // rombo de orilla dura con tinta
+  vec2 p = abs(gl_PointCoord - 0.5);
+  float d = p.x + p.y;
+  if (d > 0.5) discard;
+  gl_FragColor = vec4(d > 0.36 ? vec3(0.0) : vColor, 1.0);
+  #include <colorspace_fragment>
+}
+`
