@@ -144,71 +144,119 @@ function silba(ctx, out, t) {
   soplo(ctx, out, t, { de: 1800, a: 2400, q: 2, dur: 0.6, pico: 0.06, ataque: 0.1 })
 }
 
-// El rasgueo de la Flying V del solo: un acorde de quinta (fundamental, quinta y octava, más la quinta de arriba)
-// de dientes de sierra, cuerda por cuerda con un respiro (hacia abajo de la grave a la aguda, hacia arriba al
-// revés), por una distorsión suave y un pasabanda, con el clic de la púa. `corto`: apagado con la palma (el rasgueo
-// rápido); `largo`: lo que vibra el ¡zas! y el último acorde. Nada debajo de ~200 Hz (A3 y G3 de fundamental).
-const ACORDES = { a: [220.0, 329.63, 440.0, 659.26], b: [196.0, 293.66, 392.0, 587.33], c: [246.94, 369.99, 493.88, 739.99] }
-let curvaDist = null
-function distorsion(ctx) {
-  if (!curvaDist) {
-    curvaDist = new Float32Array(1024)
-    for (let i = 0; i < 1024; i++) {
-      const x = i / 512 - 1
-      curvaDist[i] = Math.tanh(4.5 * x) / Math.tanh(4.5)
+// El rasgueo de la Flying V del solo (Oscar, 2026-11-23: "más de guitarra eléctrica, punk rock!"): power chords
+// de tres cuerdas (raíz, quinta y octava, en la segunda octava como en el punk), una cuerda tras otra como un
+// rasgueo de verdad (hacia abajo de la grave a la aguda; hacia arriba solo las dos agudas, más suave). Cada cuerda es
+// una cuerda pulsada (Karplus-Strong, calculada al tocar: ~1 ms) y todas entran a un ampli saturado: graves
+// recortados para que no retumbe, medios empujados, recorte duro con un poco de asimetría (como de bulbo) y un
+// gabinete que se come la arenilla de arriba de 5 kHz; el clic de la púa entra también al ampli. `corto`: muteado
+// con la palma (el "chug" del rasgueo rápido); `largo`: lo que sostienen el ¡zas! y el último acorde. La fundamental
+// queda abajo de 250 Hz, pero la saturación la llena de armónicos de 300 Hz a 4 kHz: se oye en una laptop.
+const POWER = { a: [110.0, 164.81, 220.0], b: [98.0, 146.83, 196.0], c: [123.47, 185.0, 246.94] }
+// medido con ponderación K contra la música (-23.6 LUFS, regla de lib/mezcla.js): ver la nota de sonarRasgueo
+const NIVEL_RASGUEO = 0.083
+const MUTE_EXTRA = 1.32
+
+function cuerda(ctx, f, dur, { brillo = 1, mute = false }) {
+  const sr = ctx.sampleRate
+  const n = Math.ceil(sr * dur)
+  const buf = ctx.createBuffer(1, n, sr)
+  const y = buf.getChannelData(0)
+  const N = Math.max(2, Math.round(sr / f))
+  // el ataque: ruido, más filoso entre más fuerte
+  const a = 0.25 + 0.55 * Math.min(1, brillo)
+  let p = 0
+  for (let i = 0; i < N && i < n; i++) { p += (Math.random() * 2 - 1 - p) * a; y[i] = p }
+  // la cuerda: cada vuelta se promedia (se opaca) y pierde un poco; muteada, se apaga en una décima de segundo
+  const d = mute ? 0.93 : 0.9992
+  const k = mute ? 0.35 : 0.5
+  for (let i = N; i < n; i++) y[i] = d * ((1 - k) * y[i - N] + k * y[i - N - 1 < 0 ? 0 : i - N - 1])
+  return buf
+}
+
+let curvaAmp = null
+function ampli(ctx) {
+  if (!curvaAmp) {
+    curvaAmp = new Float32Array(2048)
+    const G = 9
+    for (let i = 0; i < 2048; i++) {
+      const x = i / 1024 - 1
+      curvaAmp[i] = (Math.tanh(G * x + 0.25) - Math.tanh(0.25)) / (1 + Math.tanh(0.25))
     }
   }
   const w = ctx.createWaveShaper()
-  w.curve = curvaDist
-  w.oversample = '2x'
+  w.curve = curvaAmp
+  w.oversample = '4x'
   return w
 }
 
-function rasgueo(ctx, out, t, { acorde = 'a', abajo = true, fuerza = 1, corto = false, largo = 0 }) {
-  const notas = ACORDES[acorde] || ACORDES.a
-  const dura = corto ? 0.14 : 0.42 + largo
-  const dist = distorsion(ctx)
-  const pre = ctx.createGain()
-  pre.gain.value = 0.55
-  const banda = ctx.createBiquadFilter()
-  banda.type = 'lowpass'
-  banda.frequency.setValueAtTime(corto ? 1800 : 3400, t)
-  banda.frequency.exponentialRampToValueAtTime(corto ? 900 : 1500, t + dura)
-  const graves = ctx.createBiquadFilter()
-  graves.type = 'highpass'
-  graves.frequency.value = 170
-  const g = ctx.createGain()
-  const pico = 0.32 * Math.min(1.3, fuerza) * (abajo ? 1 : 0.8)
-  g.gain.setValueAtTime(0.0001, t)
-  g.gain.exponentialRampToValueAtTime(pico, t + 0.006)
-  g.gain.exponentialRampToValueAtTime(pico * (corto ? 0.15 : 0.45), t + (corto ? 0.07 : 0.18))
-  g.gain.exponentialRampToValueAtTime(0.0001, t + dura)
-  pre.connect(dist)
-  dist.connect(banda)
-  banda.connect(graves)
-  graves.connect(g)
-  g.connect(out)
-  const orden = abajo ? notas : [...notas].reverse()
-  const oscs = []
-  orden.forEach((f, k) => {
-    const o = ctx.createOscillator()
-    o.type = 'sawtooth'
-    o.frequency.value = f * (1 + (Math.random() - 0.5) * 0.004)
-    const og = ctx.createGain()
-    const t0 = t + k * (abajo ? 0.009 : 0.007)
-    og.gain.setValueAtTime(0.0001, t0)
-    og.gain.exponentialRampToValueAtTime(0.25, t0 + 0.004)
-    o.connect(og)
-    og.connect(pre)
-    o.start(t0)
-    o.stop(t + dura + 0.05)
-    oscs.push(o, og)
-  })
-  // el clic de la púa
-  soplo(ctx, out, t, { de: 4200, a: 2600, q: 1.4, dur: 0.03, pico: 0.12 * fuerza, ataque: 0.002 })
-  const soltar = () => { for (const n of [...oscs, pre, dist, banda, graves, g]) { try { n.disconnect() } catch { } } }
-  setTimeout(soltar, (dura + 0.2) * 1000)
+function filtro(ctx, tipo, f, q = 0.707, ganancia = 0) {
+  const b = ctx.createBiquadFilter()
+  b.type = tipo
+  b.frequency.value = f
+  b.Q.value = q
+  b.gain.value = ganancia
+  return b
 }
+
+// el rasgueo que suena: al rasguear otra vez, las cuerdas dejan de sonar (encimados, tres o cuatro amplis sumaban
+// 10 dB y saturaban el bus)
+const sonando = new WeakMap()
+
+function rasgueo(ctx, out, t, { acorde = 'a', abajo = true, fuerza = 1, corto = false, largo = 0 }) {
+  const notas = POWER[acorde] || POWER.a
+  const previo = sonando.get(ctx)
+  if (previo) {
+    previo.gain.cancelScheduledValues(t)
+    previo.gain.setTargetAtTime(0.0001, t, 0.015)
+  }
+  const dura = corto ? 0.2 : 0.7 + largo
+  const mezcla = ctx.createGain()
+  mezcla.gain.value = 0.42
+  const cadena = [
+    filtro(ctx, 'highpass', 95, 0.7),
+    filtro(ctx, 'peaking', 850, 0.8, 7),
+    ampli(ctx),
+    filtro(ctx, 'highpass', 85, 0.7),
+    filtro(ctx, 'peaking', 2400, 1.1, 3),
+    filtro(ctx, 'lowpass', corto ? 3200 : 4800, 0.9),
+    filtro(ctx, 'lowpass', 6500, 0.7),
+  ]
+  const g = ctx.createGain()
+  sonando.set(ctx, g)
+  const pico = NIVEL_RASGUEO * (corto ? MUTE_EXTRA : 1) * Math.min(1.3, fuerza) * (abajo ? 1 : 0.75)
+  g.gain.setValueAtTime(pico, t)
+  g.gain.setValueAtTime(pico, t + dura * 0.6)
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dura)
+  let antes = mezcla
+  for (const nodo of cadena) { antes.connect(nodo); antes = nodo }
+  antes.connect(g)
+  g.connect(out)
+  const cuerdas = abajo ? notas : notas.slice(1).reverse()
+  const fuentes = []
+  cuerdas.forEach((f, i) => {
+    const src = ctx.createBufferSource()
+    src.buffer = cuerda(ctx, f * (1 + (Math.random() - 0.5) * 0.003), dura + 0.05, { brillo: fuerza, mute: corto })
+    const t0 = t + i * (abajo ? 0.011 : 0.008)
+    src.connect(mezcla)
+    src.start(t0)
+    fuentes.push(src)
+  })
+  // el clic de la púa, también por el ampli (raspa)
+  const pua = ctx.createBufferSource()
+  pua.buffer = getNoiseBuffer(ctx)
+  const bp = filtro(ctx, 'bandpass', 2600, 1.2)
+  const pg = ctx.createGain()
+  env(pg.gain, t, 0.5 * Math.min(1.2, fuerza), 0.002, 0.025)
+  pua.connect(bp)
+  bp.connect(pg)
+  pg.connect(mezcla)
+  pua.start(t, Math.random() * 0.5)
+  pua.stop(t + 0.05)
+  const soltar = () => { for (const nodo of [...fuentes, pua, bp, pg, mezcla, ...cadena, g]) { try { nodo.disconnect() } catch { } } }
+  setTimeout(soltar, (dura + 0.25) * 1000)
+}
+if (import.meta.env.DEV && typeof window !== 'undefined') window.__rasgueo = rasgueo
 
 // la guitarra cae del cielo: un silbido que baja (lo que tarda en caer, ~0.53 s) y, al cacharla, un golpe sordo
 // con las cuerdas que zumban
@@ -233,7 +281,7 @@ export const sonarRasgueo = (r) => {
     g.gain.value = VOLUMEN.rasgueo
     g.connect(b.out)
     rasgueo(b.ctx, g, b.ctx.currentTime + 0.002, r || {})
-    setTimeout(() => { try { g.disconnect() } catch { } }, 2600)
+    setTimeout(() => { try { g.disconnect() } catch { } }, 3200)
   } catch { }
 }
 

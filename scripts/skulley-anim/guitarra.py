@@ -1,7 +1,7 @@
 """
 La guitarra del solo de Skulley (Oscar, 2026-11-23: "¿y si le ponemos una guitarra de verdad?"; escogió una
-Flying V, en azul). Procedural y en el toon del sitio: cuerpo en V biselado con el canto más claro, golpeador
-negro, dos pastillas, puente y cordal, tres perillas y el selector, mástil con diapasón, trastes y puntos,
+Flying V, primero azul y luego amarilla, #eca323, de su muestra). Procedural y en el toon del sitio: cuerpo en V
+biselado con el canto más claro, dos pastillas, puente y cordal, tres perillas y el selector, mástil con diapasón, trastes y puntos,
 cejuela, clavijero en flecha con seis clavijas y seis cuerdas.
 
 Se corre en Blender sobre Character/SkulleyRad.blend:
@@ -27,8 +27,8 @@ TAPA_Z = -1.4                   # la cara del cuerpo (las cuerdas van en z = 0)
 FONDO_Z = -5.0                  # la espalda
 DIAP_Z = -0.55                  # la cara del diapasón
 MATS = {  # colores para verla en Blender; el sitio pone los suyos por nombre (accesorios.js)
-    "Guitarra_Cuerpo": (0.10, 0.36, 1.0, 1),
-    "Guitarra_Canto": (0.45, 0.72, 1.0, 1),
+    "Guitarra_Cuerpo": (0.838, 0.366, 0.017, 1),   # #eca323, la muestra de Oscar (primero era azul)
+    "Guitarra_Canto": (0.930, 0.647, 0.195, 1),    # #f7d27a
     "Guitarra_Negro": (0.02, 0.02, 0.02, 1),
     "Guitarra_Madera": (0.33, 0.16, 0.07, 1),
     "Guitarra_Diapason": (0.11, 0.05, 0.03, 1),

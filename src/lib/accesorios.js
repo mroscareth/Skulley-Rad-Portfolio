@@ -35,11 +35,12 @@ const MATERIALES_LENTES3D = {
 }
 const LENTES3D = { id: 'lentes3d', malla: 'Egg_Lentes3D', materiales: MATERIALES_LENTES3D, base: 'Lentes3D_Armazon' }
 
-// La Flying V azul del solo de guitarra (Oscar, 2026-11-23; scripts/skulley-anim/guitarra.py): no es un prop de
+// La Flying V amarilla del solo de guitarra (Oscar, 2026-11-23, primero azul; el amarillo, de su muestra;
+// scripts/skulley-anim/guitarra.py): no es un prop de
 // Customize, la saca el idle (lib/siestaSkulley.js). Entra como los lentes, colgada de un hueso (el pecho).
 const MATERIALES_GUITARRA = {
-  Guitarra_Cuerpo: { color: 0x2f7dff, roughness: 0.45, metalness: 0 },
-  Guitarra_Canto: { color: 0x9ccdff, roughness: 0.45, metalness: 0 },
+  Guitarra_Cuerpo: { color: 0xeca323, roughness: 0.45, metalness: 0 },
+  Guitarra_Canto: { color: 0xf7d27a, roughness: 0.45, metalness: 0 },
   Guitarra_Negro: { color: 0x121212, roughness: 0.4, metalness: 0 },
   Guitarra_Madera: { color: 0x8a5a35, roughness: 0.7, metalness: 0 },
   Guitarra_Diapason: { color: 0x3a1f17, roughness: 0.7, metalness: 0 },

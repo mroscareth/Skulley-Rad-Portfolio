@@ -605,6 +605,13 @@ def dedos(idle_dedos, izq="relajada", der="relajada", ajuste=None):
         for n, q in MANO_PUA["dedos"].items():
             if n in out:
                 out[n] = Quaternion(q)
+    if izq in ("acorde_a", "acorde_b") and "MANO_TRASTE" in globals():   # los acordes: los dedos de Oscar
+        for n, q in MANO_TRASTE["dedos"].items():
+            if n in out:
+                out[n] = Quaternion(q)
+        a2, a3 = MANO_TRASTE["abre_pulgar"]
+        out["thumb2.l"] = out["thumb2.l"] @ Quaternion((1, 0, 0), math.radians(a2))
+        out["thumb3.l"] = out["thumb3.l"] @ Quaternion((1, 0, 0), math.radians(a3))
     return out
 
 
@@ -1164,6 +1171,33 @@ MANO_PUA = {
         "thumb3.r": (0.93969, -0.34202, 0.0, 0.0),
     },
 }
+# La mano de los acordes como la dejó Oscar en Blender (2026-11-23, cuadro 48, traste 5: "el brazo debe descansar
+# entre el pulgar y el índice"): el control de la mano y el polo del codo en los ejes de la guitarra y cada dedo de la
+# izquierda. Para otro traste se desliza por el mástil con la misma forma. `abre_pulgar`: grados que se abren las
+# falanges 2 y 3 del pulgar (apretaba el mástil 4.6 mm: el pellizco medía 4.1 cm y el mástil 4.3)
+MANO_TRASTE = {
+    "mano": ((0.96168, -0.08228, 0.26152, 47.34273), (0.27127, 0.4237, -0.86423, -12.92552), (-0.0397, 0.90206, 0.42979, -6.15483), (0.0, 0.0, 0.0, 1.0)),
+    "codo": (42.68899, -29.22383, -49.28076),
+    "abre_pulgar": (3.0, 6.0),
+    "dedos": {
+        "index1_base.l": (1.0, 0.0, 0.0, 0.0),
+        "index1.l": (0.96593, -0.25882, 0.0, 0.0),
+        "index2.l": (0.9205, -0.39073, 0.0, 0.0),
+        "index3.l": (0.96593, -0.25882, 0.0, 0.0),
+        "middle1_base.l": (1.0, 0.0, 0.0, 0.0),
+        "middle1.l": (0.9985, -0.0547, 0.0, 0.0),
+        "middle2.l": (0.88295, -0.46947, 0.0, 0.0),
+        "middle3.l": (0.95106, -0.30902, 0.0, 0.0),
+        "pinky1_base.l": (1.0, 0.0, 0.0, 0.0),
+        "pinky1.l": (0.97815, -0.20791, 0.0, 0.0),
+        "pinky2.l": (0.96593, -0.25882, 0.0, 0.0),
+        "pinky3.l": (0.98481, -0.17365, 0.0, 0.0),
+        "thumb1.l": (0.61921, 0.62886, 0.39012, 0.26253),
+        "thumb2.l": (0.98769, -0.15643, 0.0, 0.0),
+        "thumb3.l": (0.99756, -0.06976, 0.0, 0.0),
+    },
+}
+
 
 
 def _g():
@@ -1207,8 +1241,9 @@ def _a_orilla(x, y, pts):
     return m
 
 
-def mete_guitarra(v):
-    """Lo más que se mete un punto (cm, en los ejes de la guitarra) en ella; negativo: afuera."""
+def mete_guitarra(v, cuerdas=True):
+    """Lo más que se mete un punto (cm, en los ejes de la guitarra) en ella; negativo: afuera. Sin `cuerdas`, el
+    espacio entre las cuerdas y el diapasón queda libre (la mano de los acordes las pisa)."""
     g = _g()
     E = g["ESCALA"]
     x, y, z = v.x / E, v.y / E, v.z / E   # en las medidas sin escalar
@@ -1231,7 +1266,7 @@ def mete_guitarra(v):
     # las cuerdas: de lo ancho del puente a lo de la cejuela; debajo de ellas, hasta la tapa o el diapasón, no cabe
     # un dedo (sin esto los dedos pasaban entre las cuerdas)
     P0, C0 = g["PUENTE"], g["CEJUELA"]
-    if P0 <= x <= C0:
+    if cuerdas and P0 <= x <= C0:
         hw = 2.6 + (1.85 - 2.6) * (x - P0) / (C0 - P0) + 0.25
         if abs(y) <= hw and (g["TAPA_Z"] if x < 13.0 else g["DIAP_Z"]) <= z <= 0.15:
             peor = max(peor, min(0.15 - z, hw - abs(y)) * E)
@@ -1261,7 +1296,7 @@ def mete_mano(pose, lado, G, con_antebrazo=False):
     ad.action = antes
     if antes is not None and len(antes.slots):
         ad.action_slot = antes.slots[0]
-    return max(mete_guitarra(Gi @ vs[i]) for i in idx)
+    return max(mete_guitarra(Gi @ vs[i], cuerdas=(lado != "l")) for i in idx)
 
 
 GUITARRA_DESHACE = (206, 214)  # = GUITARRA.deshace en siestaSkulley.js
@@ -1295,7 +1330,7 @@ def medir_guitarra(cuadros):
             peor = -9.0
             for pieza in piezas:
                 vs, _ = _malla(bpy.data.objects[pieza], dg)
-                peor = max(peor, max(mete_guitarra(c + (Gi @ v - c) / k) * k for v in vs[::2]))
+                peor = max(peor, max(mete_guitarra(c + (Gi @ v - c) / k, cuerdas=(lado != "l")) * k for v in vs[::2]))
             fila[lado] = round(peor, 2)
         out.append(fila)
     return out
@@ -1384,12 +1419,13 @@ def guitarra(fin=216):
     # diapasón por la orilla de abajo y el pulgar queda detrás
     E = g["ESCALA"]
 
-    def M_traste0(G, n, wz=1.8):
-        R3 = G.to_3x3()
-        x = g["traste_x"](n)
-        # los nudillos ADELANTE del diapasón (Oscar: con la muñeca atrás del mástil los dedos lo atravesaban): las
-        # yemas bajan a las cuerdas por enfrente; `wz` (×ESCALA) es cuánto va la muñeca adelante de las cuerdas
-        return mano_mat(G @ Vector((x - 2.0 * E, -7.0 * E, wz * E)), R3 @ Vector((0.2, 0.75, 0.62)), R3 @ Vector((0.05, -0.62, 0.75)))
+    # la izquierda, como la dejó Oscar (MANO_TRASTE, en el traste 5): para otro traste se desliza por el mástil
+    MANO_T = Matrix(MANO_TRASTE["mano"])
+    X5 = g["traste_x"](5)
+    codos_tocar["l"] = tuple(Gb @ Vector(MANO_TRASTE["codo"]))
+
+    def M_traste(G, n):
+        return G @ (Matrix.Translation((g["traste_x"](n) - X5, 0, 0)) @ MANO_T)
 
     # la derecha con la púa, como la dejó Oscar (MANO_PUA): su pose es la de arriba del rasgueo (la punta de la púa
     # junto a la cuerda gruesa) y para bajar se desliza a lo ancho de las cuerdas `CORRE_PUA` cm, sin girar
@@ -1452,31 +1488,9 @@ def guitarra(fin=216):
         AJUSTE_MANOS[f"pua_{donde}"] = {"muneca": [round(c, 2) for c in w], "sube": round(w.z - z_oscar, 2),
                                         "punta": [round(c, 2) for c in punta_pua(pose_pua(w))]}
     ACORDES_G = {"a": ("acorde_a", 5), "b": ("acorde_b", 3), "c": ("acorde_a", 7)}
-    adelante = {}
-    for n, acorde in ((5, "acorde_a"), (3, "acorde_b"), (7, "acorde_a")):
-        mete = lambda wz: mete_mano(variar(base, manos={"l": {"mat": M_traste0(Gb, n, wz)}}, dedos_=dedos(Id, acorde, "relajada")), "l", Gb)
-        lo, hi = -1.0, 7.0
-        if mete(lo) <= 0:
-            hi = lo
-        else:
-            for _ in range(9):
-                m = (lo + hi) / 2
-                if mete(m) > 0:
-                    lo = m
-                else:
-                    hi = m
-        adelante[n] = hi + HOLGURA_TRASTE / E
-    AJUSTE_MANOS.update({f"traste_{n}": round(v, 2) for n, v in adelante.items()})
-
-    def M_traste(G, n):
-        if n in adelante:
-            return M_traste0(G, n, adelante[n])
-        # entre dos acordes (a media corrida del mástil): lo que se adelanta, entre el de los trastes vecinos
-        ks = sorted(adelante)
-        a = max([k for k in ks if k <= n] or ks[:1])
-        b = min([k for k in ks if k >= n] or ks[-1:])
-        t = 0.0 if a == b else (n - a) / (b - a)
-        return M_traste0(G, n, adelante[a] + (adelante[b] - adelante[a]) * t)
+    AJUSTE_MANOS.update({f"traste_{n}": round(mete_mano(variar(base, codos={"l": codos_tocar["l"], "r": codos_tocar["r"]}, manos={"l": {"mat": M_traste(Gb, n)}},
+                                                             dedos_=dedos(Id, a, "relajada")), "l", Gb), 2)
+                         for a, n in ACORDES_G.values()})
 
     def M_pua(G, donde, gira=0.0, mas=(0, 0, 0)):
         return M_pua0(G, aleja[("r", donde)] + Vector(mas), gira)
@@ -1596,7 +1610,7 @@ def guitarra(fin=216):
     c = cuerpo_tocar(cad=1, bang=0, quij=18, columna=((0, 0, 2), (-2, 0, 1), (-2, 0, 0)))
     G = marco_en(c)
     izq = M_traste(G, 5)
-    izq.translation = izq.translation + G.to_3x3() @ Vector((0, -8, 10))
+    izq.translation = izq.translation + G.to_3x3() @ Vector((0, -11, 1))  # baja del mástil (el pulgar va detrás)
     poses.append((197, variar(c, codos={"l": codos_tocar["l"], "r": (-62, -80, 82)},
                               manos={"l": {"mat": izq}, "r": {"mat": M_pua(G, "abajo", mas=(0, 2, 10))}},
                               dedos_=dedos(Id, "abierta", "abierta")), True))
