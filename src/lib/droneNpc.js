@@ -101,6 +101,23 @@ export function listaProyectos(textos) {
   if (proyectos) return proyectos
   return Object.entries(textos || {}).map(([slug, p]) => ({ slug, titulo: p.titulo }))
 }
+// El siguiente de una bolsa revuelta, sin repetir hasta acabarlos. La comparten su
+// viñeta (DroneNPC) y "Cuéntame de sus proyectos" de su charla (DialogoMadre): lo
+// que te contó en una no te lo repite en la otra.
+let bolsaProyectos = []
+export function siguienteProyecto(textos) {
+  const lista = listaProyectos(textos)
+  if (!lista.length) return null
+  for (let i = 0; i < 2; i++) {
+    if (!bolsaProyectos.length) bolsaProyectos = lista.map((x) => x.slug).sort(() => Math.random() - 0.5)
+    while (bolsaProyectos.length) {
+      const slug = bolsaProyectos.pop()
+      const p = lista.find((x) => x.slug === slug)
+      if (p) return p
+    }
+  }
+  return null
+}
 // Ya lo dijo en su viñeta: por un rato, picarla abre la charla de ese proyecto.
 export function recomendo(proyecto) {
   animoMadre.recomendo = proyecto ? { ...proyecto, hasta: performance.now() / 1000 + RECOMENDO_S } : null

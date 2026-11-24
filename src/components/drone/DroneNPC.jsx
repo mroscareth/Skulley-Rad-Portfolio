@@ -6,7 +6,7 @@ import SpeechBubble3D from '../SpeechBubble3D.jsx'
 import SilhouetteShadow from '../SilhouetteShadow.jsx'
 import DomeShield from '../fx/DomeShield.jsx'
 import HumoDron from './HumoDron.jsx'
-import { dron, escucharDron, juntoArgus, picarMadre, madreEnojada, salioDeHome, volvioAHome, cargarProyectos, listaProyectos, recomendo } from '../../lib/droneNpc.js'
+import { dron, escucharDron, juntoArgus, picarMadre, madreEnojada, salioDeHome, volvioAHome, cargarProyectos, siguienteProyecto, recomendo } from '../../lib/droneNpc.js'
 import { dialogoMadre, escoger } from '../../lib/dialogoMadre.js'
 import { escuchar as escucharJuego } from '../../lib/juegoEsferas.js'
 import scoreStore from '../../lib/scoreStore.js'
@@ -228,7 +228,6 @@ export default function DroneNPC({
       huyeHasta: 0,             // ofendida, se va: hasta entonces no se detiene a verlo
       reclamoHasta: 0,          // reclamando: la cara no cambia sola
       recomiendaEn: Infinity,   // cuándo recomienda un proyecto (lo pone la primera llegada)
-      bolsaProyectos: [],       // slugs revueltos: no repite hasta acabarlos
       diceCola: [],             // las viñetas que siguen al acabar la que dice (una recomendación larga va en trozos)
       escena: null,             // la escena con Argus: { pasos, i, t, hasta, rayoEn, tipo }
       charlaEn: Infinity,       // cuándo toca la siguiente (lo pone la primera llegada)
@@ -523,21 +522,13 @@ export default function DroneNPC({
     return new THREE.Vector3(e.pos.x * 0.5, ALTO, e.pos.z * 0.5)
   }
 
-  // le cuenta de un proyecto al azar, sin repetir hasta acabarlos; luego la pista de
-  // que si la pica lo lleva (lib/droneNpc.js `recomendo`)
+  // le cuenta de un proyecto al azar, sin repetir hasta acabarlos (la bolsa de
+  // `siguienteProyecto`, la misma de "Cuéntame de sus proyectos" en su charla); luego
+  // la pista de que si la pica lo lleva (lib/droneNpc.js `recomendo`)
   const recomendar = (ahora) => {
     const e = est.current
     const T = textosRef.current
-    const lista = listaProyectos(T.proyectos)
-    if (!lista.length) { e.recomiendaEn = ahora + 60; return }
-    let p = null
-    for (let i = 0; i < 2 && !p; i++) {
-      if (!e.bolsaProyectos.length) e.bolsaProyectos = lista.map((x) => x.slug).sort(() => Math.random() - 0.5)
-      while (e.bolsaProyectos.length && !p) {
-        const slug = e.bolsaProyectos.pop()
-        p = lista.find((x) => x.slug === slug) || null
-      }
-    }
+    const p = siguienteProyecto(T.proyectos)
     if (!p) { e.recomiendaEn = ahora + 60; return }
     const propio = T.proyectos?.[p.slug]
     const titulo = propio?.titulo || p.titulo

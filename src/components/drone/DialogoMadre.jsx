@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { dialogoMadre, escoger } from '../../lib/dialogoMadre.js'
-import { avisarDron, tomarSaludo, cerrarConMadre } from '../../lib/droneNpc.js'
+import { avisarDron, tomarSaludo, cerrarConMadre, siguienteProyecto } from '../../lib/droneNpc.js'
 import { blipMadre } from '../../lib/blipMadre.js'
 import { useGlitchSolo, textoGlitch } from '../../hooks/useGlitchRunas.js'
 import RenglonRunas from './RenglonRunas.jsx'
@@ -20,12 +20,15 @@ import RenglonRunas from './RenglonRunas.jsx'
 // (lib/droneNpc.js: normal, seguido, de regreso de una sección, regaño, perdón),
 // cada tema tiene dos versiones y la despedida cambia. Si la cortas a media frase
 // o te vas del menú sin despedirte, lo cuenta (`cerrarConMadre`) y te lo reclama
-// en su viñeta. Si la picas justo después de que te recomendó un proyecto en su
-// viñeta (saludo 'proyecto'), te lo ofrece: "Enséñame…" va primero en el menú y, al
-// cerrar, App abre su ficha encima de la home, sin pasar por Trabajo
-// (`onVerProyecto`). Si el proyecto es un enlace a otro sitio (`url`), lo abre en
-// otra pestaña en el mismo clic o Enter que lo elige (el navegador solo deja abrir
-// pestañas en un gesto del usuario) y luego te dice que ahí te espera. Al regresar
+// en su viñeta. Los proyectos cuestan pocos clics (Oscar, 2026-11-24): si la picas
+// justo después de que te recomendó uno en su viñeta (saludo 'proyecto'), te
+// pregunta si quieres verlo y el renglón ya trae Sí / No (menú 'sino'). Sí cierra
+// y App abre su ficha encima de la home, sin pasar por Trabajo (`onVerProyecto`);
+// si el proyecto es un enlace a otro sitio (`url`), lo abre en otra pestaña en el
+// mismo clic o Enter (el navegador solo deja abrir pestañas en un gesto del
+// usuario) y te dice que ahí te espera. No te da su menú, donde "Cuéntame de sus
+// proyectos" hace que te cuente de uno al azar, sin repetir (la bolsa de
+// `siguienteProyecto`, la misma de su viñeta), y te pregunte lo mismo. Al regresar
 // (al cerrar la ficha, o esta charla si fue en otra pestaña) lo comenta en su
 // viñeta: dónde lo usaría una marca (DroneNPC, `comenta`).
 
@@ -44,24 +47,32 @@ export default function DialogoMadre({ onClose, onVerProyecto, modo = 'charla' }
   const { lang } = useLanguage()
   const D = dialogoMadre(lang)
   const [fase, setFase] = useState('entra')      // entra | texto | menu | sale
-  const [cola, setCola] = useState(null)         // { lineas, i, despues: 'menu' | 'salir', n }
+  const [cola, setCola] = useState(null)         // { lineas, i, despues: 'menu' | 'sino' | 'salir', n }
   const [completo, setCompleto] = useState(false)
+  const [menu, setMenu] = useState('temas')      // temas | sino (¿quieres ver el proyecto?)
   const [sel, setSel] = useState(0)
   const [vistos, setVistos] = useState(() => new Set())
   const [pregunta, setPregunta] = useState('')
-  const [proyecto, setProyecto] = useState(null)   // el que acaba de recomendar { slug, titulo, url }
+  const [proyecto, setProyecto] = useState(null)   // el que te ofrece { slug, titulo, url }
   const verRef = useRef(null)                       // el que pediste ver: al cerrar, App te lleva
   const fueraRef = useRef(null)                     // el que te abrió en otra pestaña: al cerrar, lo comenta
+  const selTemasRef = useRef(0)                     // dónde regresa el cursor del menú de temas
   const nombreRef = useRef(null)
   const firma = useGlitchSolo(nombreRef, FIRMA_GLITCH)
   const renglonesRef = useRef(0)
 
   const linea = cola ? cola.lineas[cola.i] : null
-  const opciones = [
-    ...(proyecto ? [{ id: 'verProyecto', label: (proyecto.url ? D.verFuera : D.verProyecto).replace('{titulo}', proyecto.titulo) }] : []),
-    ...D.temas,
-    { id: 'adios', label: D.adios.label },
-  ]
+  // "Cuéntame de sus proyectos" va después de "¿Quién es Skulley Rad?". Sí / No con
+  // la acción principal al final (Sí), que es la que queda marcada.
+  const tras = D.temas.findIndex((x) => x.id === 'skulley') + 1
+  const opciones = menu === 'sino' && proyecto
+    ? [{ id: 'no', label: D.no }, { id: 'si', label: D.si }]
+    : [
+      ...D.temas.slice(0, tras),
+      { id: 'proyectos', label: D.contarProyectos },
+      ...D.temas.slice(tras),
+      { id: 'adios', label: D.adios.label },
+    ]
   const colaRef = useRef(null)
   colaRef.current = cola
 
@@ -71,6 +82,23 @@ export default function DialogoMadre({ onClose, onVerProyecto, modo = 'charla' }
     setCompleto(false)
     setFase('texto')
   }, [])
+
+  // la pregunta llega en runas como cualquier renglón (un renglón nuevo cada vez)
+  const abrirMenu = useCallback((tipo, texto, cual) => {
+    renglonesRef.current += 1
+    setMenu(tipo)
+    setPregunta(texto)
+    setSel(cual)
+    setFase('menu')
+  }, [])
+
+  // "¿Quieres ver…?" con Sí / No en el mismo renglón
+  const ofrecer = useCallback((p) => {
+    setProyecto(p)
+    avisarDron({ cara: 'feliz', accion: 'IdleJugueton' })
+    const t = escoger(p.url ? D.llevarFuera : D.llevar, p.url ? 'llevarFuera' : 'llevar', { lang })
+    abrirMenu('sino', t.replace('{titulo}', p.titulo), 1)
+  }, [D, lang, abrirMenu])
 
   // `como`: 'adios' al despedirse; con Esc o Saltar, 'cortada' si estaba hablando
   // y 'sinAdios' en el menú. La bienvenida no cuenta.
@@ -100,12 +128,7 @@ export default function DialogoMadre({ onClose, onVerProyecto, modo = 'charla' }
     const s = modo === 'bienvenida' ? null : tomarSaludo()
     const id = setTimeout(() => {
       if (modo === 'bienvenida') { empezar(D.bienvenida, 'salir'); return }
-      if (s.tipo === 'proyecto' && s.proyecto) {
-        setProyecto(s.proyecto)
-        const lista = s.proyecto.url ? D.llevarFuera : D.llevar
-        empezar([{ t: escoger(lista, s.proyecto.url ? 'llevarFuera' : 'llevar', { lang }).replace('{titulo}', s.proyecto.titulo), cara: 'feliz', accion: 'IdleJugueton' }], 'menu')
-        return
-      }
+      if (s.tipo === 'proyecto' && s.proyecto) { ofrecer(s.proyecto); return }
       if (primera && s.tipo !== 'regano' && s.tipo !== 'perdon') { empezar(D.saludo, 'menu'); return }
       const lista = { seguido: D.seguido, vuelta: D.vuelta, regano: D.regano, perdon: D.perdon }[s.tipo] || D.otraVez
       empezar(escoger(lista, `saludo-${s.tipo}`, { seg: s.seg, lang }), 'menu')
@@ -130,17 +153,16 @@ export default function DialogoMadre({ onClose, onVerProyecto, modo = 'charla' }
       return
     }
     if (cola.despues === 'salir') { cerrar('adios'); return }
+    if (cola.despues === 'sino' && proyecto) { ofrecer(proyecto); return }
     avisarDron({ cara: 'normal' })
-    setPregunta(escoger(vistos.size ? D.preguntasOtra : D.preguntas, vistos.size ? 'preguntaOtra' : 'pregunta', { lang }))
-    setFase('menu')
-  }, [fase, linea, completo, cola, cerrar, vistos, D, lang])
+    abrirMenu('temas', escoger(vistos.size ? D.preguntasOtra : D.preguntas, vistos.size ? 'preguntaOtra' : 'pregunta', { lang }), selTemasRef.current)
+  }, [fase, linea, completo, cola, cerrar, vistos, D, lang, proyecto, ofrecer, abrirMenu])
 
   const elegir = useCallback((i) => {
     const o = opciones[i]
     if (!o) return
     try { blipMadre(1.4) } catch { }
-    if (o.id === 'adios') { empezar([escoger(D.adios.lineas, 'adios', { lang })], 'salir'); return }
-    if (o.id === 'verProyecto' && proyecto) {
+    if (o.id === 'si' && proyecto) {
       if (proyecto.url) {
         try { window.open(proyecto.url, '_blank', 'noopener,noreferrer') } catch { }
         fueraRef.current = proyecto.slug
@@ -148,26 +170,43 @@ export default function DialogoMadre({ onClose, onVerProyecto, modo = 'charla' }
         return
       }
       verRef.current = proyecto.slug
-      empezar([{ t: escoger(D.vamos, 'vamos', { lang }), cara: 'feliz', accion: 'IdleJugueton' }], 'salir')
+      cerrar('adios')
+      return
+    }
+    if (o.id === 'no') {
+      avisarDron({ cara: 'normal' })
+      abrirMenu('temas', escoger(D.preguntasNo, 'preguntaNo', { lang }), selTemasRef.current)
+      return
+    }
+    selTemasRef.current = i
+    if (o.id === 'adios') { empezar([escoger(D.adios.lineas, 'adios', { lang })], 'salir'); return }
+    if (o.id === 'proyectos') {
+      const p = siguienteProyecto(D.proyectos)
+      if (!p) return
+      const propio = D.proyectos?.[p.slug]
+      const titulo = propio?.titulo || p.titulo
+      setProyecto({ slug: p.slug, titulo, url: p.url || null })
+      empezar([{ t: propio?.t || D.proyectoGenerico.replace('{titulo}', titulo), cara: 'feliz', accion: 'IdleJugueton' }], 'sino')
       return
     }
     setVistos((v) => new Set(v).add(o.id))
-    setSel(i)
     empezar(escoger(o.variantes, `tema-${o.id}`, { lang }), 'menu')
-  }, [opciones, empezar, D, lang, proyecto])
+  }, [opciones, empezar, cerrar, abrirMenu, D, lang, proyecto])
 
   // teclado: va en captura y no deja pasar nada al juego mientras dura
   useEffect(() => {
     const tecla = (e) => {
       const k = e.key
-      if (!['Escape', ' ', 'Enter', 'ArrowUp', 'ArrowDown', 'w', 's', 'W', 'S'].includes(k)) return
+      if (!['Escape', ' ', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 's', 'a', 'd', 'W', 'S', 'A', 'D'].includes(k)) return
       e.preventDefault()
       e.stopImmediatePropagation()
       if (k === 'Escape') { cerrar(); return }
       if (fase === 'texto' && (k === ' ' || k === 'Enter')) { avanzar(); return }
       if (fase === 'menu') {
-        if (k === 'ArrowUp' || k === 'w' || k === 'W') setSel((s) => (s + opciones.length - 1) % opciones.length)
-        else if (k === 'ArrowDown' || k === 's' || k === 'S') setSel((s) => (s + 1) % opciones.length)
+        const n = opciones.length
+        const paso = ['ArrowUp', 'ArrowLeft', 'w', 'W', 'a', 'A'].includes(k) ? -1
+          : ['ArrowDown', 'ArrowRight', 's', 'S', 'd', 'D'].includes(k) ? 1 : 0
+        if (paso) setSel((s) => (s + paso + n) % n)
         else if (k === ' ' || k === 'Enter') elegir(sel)
       }
     }
@@ -189,7 +228,7 @@ export default function DialogoMadre({ onClose, onVerProyecto, modo = 'charla' }
       <div className={`dlg-globo${enojo ? ' is-enojo' : ''}`}>
         <span ref={nombreRef} className={`dlg-nombre${firma?.letras ? ' display-title--runas' : ''}${firma?.tiembla ? ' glitch-runas' : ''}`}>{textoGlitch(D.nombre, firma)}</span>
         {fase === 'menu' ? (
-          <div className="dlg-menu">
+          <div className={`dlg-menu${menu === 'sino' ? ' dlg-menu--sino' : ''}`}>
             <RenglonRunas key={`pregunta-${renglonesRef.current}`} texto={pregunta} completo={false} className="dlg-texto--pregunta" />
             <ul role="listbox" aria-label={pregunta}>
               {opciones.map((o, i) => (

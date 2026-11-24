@@ -7283,6 +7283,8 @@ div:has(> #privy-dialog-backdrop) {
   .dlg-menu ul { grid-template-columns: minmax(0, 1fr); }
   .dlg-globo { padding: 1.8rem 1.3rem 1.5rem; }
 }
+/* ¿Quieres ver el proyecto? No / Sí en un renglón, también en pantalla angosta */
+.dlg-menu.dlg-menu--sino ul { grid-template-columns: repeat(2, minmax(7.5rem, max-content)); }
 /* Los avisos del juego (AvisoMadre): el mismo globo, abajo y sin tomar el
    puntero, arriba del botón de terminar la partida. */
 .aviso-madre {

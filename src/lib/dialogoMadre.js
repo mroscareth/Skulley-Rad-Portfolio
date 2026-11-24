@@ -176,9 +176,11 @@ const ES = {
   // ---- los proyectos que recomienda de vez en cuando en su viñeta (DroneNPC), por
   // slug del CMS: un hecho del proyecto y lo que ella no logra. Uno nuevo sin texto
   // usa `proyectoGenerico`. Después, `pistaProyecto`; si la picas, la charla abre
-  // con `llevar` y la opción `verProyecto` (te abre su ficha encima de la home).
-  // Los que en el CMS son un enlace a otro sitio (Heritage, The Ethereans) usan
-  // `pistaFuera`, `llevarFuera`, `verFuera` y `vamosFuera`: se abren en otra pestaña.
+  // con `llevar` y ahí mismo Sí / No: Sí te abre su ficha encima de la home y No
+  // te da su menú, donde `contarProyectos` hace que te cuente de otro (el mismo
+  // texto) y te vuelva a preguntar. Los que en el CMS son un enlace a otro sitio
+  // (Heritage, The Ethereans) usan `pistaFuera`, `llevarFuera` y `vamosFuera`: Sí
+  // los abre en otra pestaña.
   proyectos: {
     'galactic-conquest': { titulo: 'Galactic Conquest', t: 'Ahh… ¡Galactic Conquest es un proyectazo! Una guerra galáctica en el universo de los Ethereans que puedes jugar en el navegador, ¡con alianzas, traiciones y todo! Yo siempre gano porque soy una gran estratega, por supuesto.', tipo: 'juego' },
     '3d-heads-ii': { titulo: '3D Heads II', t: '¿Ya viste el proyecto de 3D Heads II? Skulley esculpía cabezas de personajes para practicar y luego las imprimía en 3D. Tal vez ponga a la venta algunas: ¡se ven bien como llaveros!', tipo: 'personajes3d' },
@@ -194,11 +196,17 @@ const ES = {
   proyectoGenerico: '¿Ya viste {titulo}? Lo acabo de encontrar en los archivos de Skulley y me encanta.',
   pistaProyecto: ['¿Te muestro el proyecto? Solo avísame.', 'Dame un click y te lo enseño.'],
   llevar: ['¿Quieres ver {titulo}? Te lo enseño aquí mismo.', '¿Te enseño {titulo}? Ni tienes que caminar, humano.'],
-  verProyecto: 'Enséñame {titulo}',
-  vamos: ['¡Ándale! Ahí te va.', 'Míralo con calma. Él le metía horas a cada detalle.'],
+  si: 'Sí',
+  no: 'No',
+  contarProyectos: 'Cuéntame de sus proyectos',
+  // la pregunta del menú cuando le dijiste que no
+  preguntasNo: [
+    'Bueno, te lo guardo para después. ¿Qué quieres saber?',
+    'Como quieras. De todos modos aquí va a estar, para siempre. ¿Qué más quieres saber?',
+    'Está bien, humano. ¿Entonces qué te explico?',
+  ],
   pistaFuera: ['¿Te abro su sitio? Solo avísame.', 'Dame un click y te lo abro.'],
   llevarFuera: ['{titulo} tiene su propio sitio. ¿Te lo abro en otra pestaña?', '¿Quieres ver el sitio de {titulo}? Te lo abro en otra pestaña.'],
-  verFuera: 'Abrir {titulo} en otra pestaña',
   vamosFuera: ['Listo, ya te lo abrí. Aquí te espero, ¿eh?', 'Ya está en otra pestaña. No te tardes, que me preocupo.'],
   // Al regresar del proyecto que te enseñó (al cerrar su ficha, o al cerrar la
   // charla si lo abrió en otra pestaña) lo comenta en su viñeta: dónde lo usaría
@@ -518,11 +526,16 @@ const EN = {
   proyectoGenerico: 'Have you seen {titulo}? I just found it in Skulley’s archives and I love it.',
   pistaProyecto: ['Want me to show you the project? Just let me know.', 'Give me a click and I’ll show you.'],
   llevar: ['Want to see {titulo}? I’ll show you right here.', 'Should I show you {titulo}? You don’t even have to walk, human.'],
-  verProyecto: 'Show me {titulo}',
-  vamos: ['Here you go!', 'Take your time with it. He put hours into every detail.'],
+  si: 'Yes',
+  no: 'No',
+  contarProyectos: 'Tell me about his projects',
+  preguntasNo: [
+    'Okay, I’ll save it for later. What do you want to know?',
+    'Suit yourself. It’ll be here anyway, forever. What else do you want to know?',
+    'Fine, human. So what should I explain?',
+  ],
   pistaFuera: ['Want me to open their site? Just let me know.', 'Give me a click and I’ll open it.'],
-  llevarFuera: ['{titulo} has its own site. Want me to open it in a new tab?', 'Want to see the {titulo} site? I’ll open it in a new tab.'],
-  verFuera: 'Open {titulo} in a new tab',
+  llevarFuera: ['{titulo} has its own site. Want me to open it in a new tab?', 'Want to see the site for {titulo}? I’ll open it in a new tab.'],
   vamosFuera: ['Done, it’s open. I’ll wait right here, okay?', 'It’s in another tab. Don’t take too long, I worry.'],
   usos: {
     personajes3d: [
