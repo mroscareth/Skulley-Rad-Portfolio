@@ -382,7 +382,9 @@ const resources = {
         'Easy there, we’re not that close!',
       ],
       // Cuando un rayo le pega a alguien (ZoidianNPC): a Skulley cualquiera; a
-      // M.A.D.R.E., el de la esfera que cae en un portal; ambos, ese a los dos.
+      // M.A.D.R.E., el de la esfera que cae en un portal (madre) o el que le
+      // avienta Skulley tras comerse la corrupta (madreSkulley); ambos, el del
+      // portal a los dos.
       rayo: {
         skulley: [
           'Hahaha, that’s gotta hurt!',
@@ -400,6 +402,14 @@ const resources = {
           'Somebody reboot her! …anyone know how?',
           'Guess that bolt wasn’t in her calculations.',
           'All that memory and she still got toasted.',
+        ],
+        madreSkulley: [
+          'You zapped the boss! I’d hide if I were you.',
+          'Nice aim, buddy! Right on the boss.',
+          'Ate the weird orb and it went to your head, huh?',
+          'The boss? Not even I would dare, buddy.',
+          'I saw everything. It was you, not me. Just so we’re clear.',
+          'The boss is extra crispy! And it was your bolt, not mine.',
         ],
         ambos: [
           'Two with one bolt! Front-row seats.',
@@ -883,7 +893,9 @@ const resources = {
         '¡Ubícate, no somos tan cuates!',
       ],
       // Cuando un rayo le pega a alguien (ZoidianNPC): a Skulley cualquiera; a
-      // M.A.D.R.E., el de la esfera que cae en un portal; ambos, ese a los dos.
+      // M.A.D.R.E., el de la esfera que cae en un portal (madre) o el que le
+      // avienta Skulley tras comerse la corrupta (madreSkulley); ambos, el del
+      // portal a los dos.
       rayo: {
         skulley: [
           'Jajaja, ¡qué oso, compa!',
@@ -901,6 +913,14 @@ const resources = {
           '¡Reiníciala! …¿alguien sabe cómo?',
           'Ese rayo no venía en sus cálculos, ¿verdad?',
           'Tanta memoria y quedó como pan tostado.',
+        ],
+        madreSkulley: [
+          '¡Le aventaste un rayo a la jefa! Yo de ti me escondo.',
+          '¡Qué puntería, compa! Justito en la jefa.',
+          'Te comiste la esfera rara y se te subió, ¿verdad?',
+          '¿A la jefa? Eso ni yo me atrevo, compa.',
+          'Yo vi todo. Fuiste tú, no yo. Que conste.',
+          '¡La jefa quedó bien doradita! Y fue tu rayo, no el mío.',
         ],
         ambos: [
           '¡Dos de un rayo! Hoy me tocó palco.',

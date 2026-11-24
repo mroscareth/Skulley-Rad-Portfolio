@@ -578,7 +578,7 @@ export default function DroneNPC({
 
   // ---- el rayo de la esfera corrupta: quemada, humeando y con ojos de tache.
   // `fuente`: 'portal' (la esfera que cae en un portal) o 'trueno' (el que lanza
-  // Skulley); Argus solo se burla del de portal.
+  // Skulley); Argus se burla de los dos y ella se las cobra.
   function quemar(fuente) {
     const e = est.current
     if (!dron.montado || e.modo === 'dialogo') return

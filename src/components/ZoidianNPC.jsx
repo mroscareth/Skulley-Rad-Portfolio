@@ -1247,8 +1247,10 @@ export default function ZoidianNPC({
     if (import.meta.env.DEV) window.__argusDice = (texto, dura = 6000) => sayMock(texto, { delay: 0, dura })
     // Los rayos (Oscar, 2026-11-19): solo comenta si le pegan a alguien. A
     // Skulley, cualquiera que lo despiece (la esfera que cae en un portal, el
-    // castigo de M.A.D.R.E., el easter egg); a M.A.D.R.E., solo el de la esfera
-    // del portal; si ese pega a los dos, una para ambos. Antes se burlaba con el
+    // castigo de M.A.D.R.E., el easter egg); a M.A.D.R.E., el de la esfera del
+    // portal y, desde el 2026-11-24, el que le avienta Skulley tras comerse la
+    // corrupta (ese no lo despieza a él: frase propia, `madreSkulley`); si el del
+    // portal pega a los dos, una para ambos. Antes se burlaba con el
     // 'bolt-strike', el destello de cualquier rayo, aunque no le pegara a nadie.
     const RAYO_AMBOS_MS = 1500
     let skulleyEn = -Infinity, madreEn = -Infinity, madreTimer = 0
@@ -1260,7 +1262,14 @@ export default function ZoidianNPC({
       if (ambos) avisarDron({ burlaArgus: true })
     }
     const onMadreQuemada = (e) => {
-      if (e?.detail?.fuente !== 'portal') return
+      const fuente = e?.detail?.fuente
+      if (fuente === 'trueno') {
+        clearTimeout(madreTimer)
+        // con un respiro: DroneNPC cobra la venganza si la burla llegó después de la quemada
+        madreTimer = setTimeout(() => { burla('zoidian.rayo.madreSkulley'); avisarDron({ burlaArgus: true }) }, 250)
+        return
+      }
+      if (fuente !== 'portal') return
       madreEn = performance.now()
       clearTimeout(madreTimer)
       // A Skulley el mismo rayo lo despieza 230 ms después: se espera a ver si
