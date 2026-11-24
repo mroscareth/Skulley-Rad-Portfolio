@@ -230,7 +230,7 @@ const ES = {
       'Cada uno puede ser el avatar de alguien, un juguete o la mascota de una comunidad entera. Ahí cabe un universo: de hecho, ahí vive Galactic Conquest.',
     ],
     estudio: [
-      '¿Ya viste? En ese universo paralelo hacen marcas, sitios y empaques en Monterrey desde 2015. Si tu marca necesita algo, la puerta es la pestaña que te acabo de abrir.',
+      '¿Ya viste? En ese universo paralelo hacen marcas, websites y muchas otras cosas desde la ciudad de Monterrey, para todo el mundo. Si tu marca necesita diseño BRUTAL, la puerta es la pestaña que te acabo de abrir.',
       'Si tienes un proyecto, búscalos en su universo. Yo te lo haría en un segundo, pero ellos lo hacen mejor. No se lo digas a nadie.',
       'En este universo dejé sin chamba a medio planeta. En el suyo siguen trabajando. Si tienes un proyecto, mejor cruza para allá.',
     ],
@@ -549,7 +549,7 @@ const EN = {
       'Each one could be someone’s avatar, a toy or the mascot of a whole community. A universe fits in there: in fact, Galactic Conquest lives there.',
     ],
     estudio: [
-      'See? In that parallel universe they’ve been doing branding, websites and packaging in Monterrey since 2015. If your brand needs something, the door is the tab I just opened.',
+      'See? In that parallel universe they do branding, websites and lots of other things from the city of Monterrey, for the whole world. If your brand needs BRUTAL design, the door is the tab I just opened.',
       'If you have a project, look for them in their universe. I’d do it for you in a second, but they do it better. Don’t tell anyone.',
       'In this universe I put half the planet out of work. In theirs, they’re still working. If you have a project, better cross over.',
     ],
