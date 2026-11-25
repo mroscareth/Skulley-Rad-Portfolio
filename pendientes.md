@@ -1,7 +1,50 @@
 # Pendientes
 
 Hilo de lo que falta, para no perderlo entre sesiones.
-Última revisión: 2026-11-02.
+Última revisión: 2026-11-25.
+
+---
+
+## Letreros de neón en los portales (decidido con Oscar el 2026-11-25, sin terminar)
+
+Hoy cada portal tiene un hito labrado con su nombre en runas (`home/HitosPortales.jsx`, que
+reemplazó a los menhires) y junto a la tienda hay un letrero OPEN (`home/LetreroClaro.jsx`). Oscar
+quiere cambiar los hitos por **letreros de neón**: "se va a ver más cyberpunk".
+
+**Lo decidido:**
+- Uno por portal, donde están los hitos (radio 19.6, de espaldas al portal y de frente al centro), con
+  el nombre de la sección en runas, en el color de su portal.
+- **De doble cara:** la cámara ve por detrás los de Work, About y Memories.
+- En los dos idiomas de la barra: 10 letreros (WORK, ABOUT, STORE, CONTACT, MEMORIES; TRABAJO,
+  SOBREMI, TIENDITA, CONTACTO, MEMORIAS).
+- **Se quita el OPEN de la tienda:** el letrero de la tienda lo reemplaza ("no hay por qué hacer dos").
+- **Que brillen más y tengan bloom:** el bloom de la home empieza en luminancia 0.86 y llega a todo en
+  1.04; el neón de hoy queda en 1.05 y apenas tiene halo.
+- Bajos, para que no tapen a Skulley: nada pasa de 1.6 m reales (3.5 unidades).
+
+**Lo que ya está:** `src/components/home/LetrerosPortales.jsx`, escrito y sin montar.
+- Carga `props_letreros.glb`, pone uno por portal y los hace sólidos (`setObstaculosExtra('letreros')`).
+- Esconde el letrero del otro idioma: comparte programas con el que se ve, así que no compila.
+- Brillo: de lejos luminancia 1.5 con alguna falla de neón viejo. Con Skulley en el portal
+  (`portalMixMap`) corre letra por letra, flashea tres veces y se queda en 3.2.
+
+**Falta:**
+1. **El modelo.** `scripts/estilo/props_letreros.py`, en el estilo del OPEN (`props_claro.py`, que
+   importa de `props_taller.py`), con salida en `Character/Estilo_letreros.blend`,
+   `Character/assets/props_letreros.png` y `public/3dmodels/estilo/props_letreros.glb`.
+   - Nodos `Prop_LetreroPortal_<sección>_<idioma>` (sección1–5, en/es); el neón de cada letra como hijo
+     `Prop_LetreroPortal_<sección>_<idioma>_Neon_<n>`, con los tubos de las dos caras.
+   - Cada letrero en su propio marco: origen en el piso al centro y el plano en y = 0, con caras a ±Y.
+   - Letras de ~0.4 m sobre una base baja con la estructura entre las dos caras, y transformador con su
+     conduit al piso.
+   - ≤ 10 mil triángulos cada uno, con lógica física medida (nada flota, todo conectado).
+   - Se empezó con un agente y se paró antes de escribir nada.
+2. **En la home:** en HomeScene, cambiar `HitosPortales` y `LetreroClaro` por `<LetrerosPortales
+   portales={portals} portalMixMap={portalMixMap} visible={comoHome} />` y borrar esos dos
+   componentes. Sus modelos se quedan guardados: los hitos en `props_hitos.glb` y el OPEN en
+   `props_claro.glb`, que también trae el cable de la Renderbox, que sí se usa.
+3. Medir 0 programas al jugar, cuidar que el amarillo de Contacto no se lave a blanco, enseñarle
+   capturas a Oscar y actualizar CLAUDE.md ("Los props pintados rescatados en el claro").
 
 ---
 
