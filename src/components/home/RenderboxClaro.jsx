@@ -3,7 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { armarPintado } from '../../lib/pintado.js'
 import { compileAsyncSafe } from '../../lib/compileAsyncSafe.js'
-import { cargarGrupoEstilo } from '../../lib/cargarEstilo.js'
+import { cargarGrupoEstilo, copiaLocal } from '../../lib/cargarEstilo.js'
 import { setObstaculosExtra } from '../../lib/obstaculosHome.js'
 import { RENDERBOX } from '../../lib/renderbox.js'
 import { iniciarVentiladores, ajustarVentiladores, pararVentiladores, vibracionRenderbox } from '../../lib/ventiladoresRenderbox.js'
@@ -60,7 +60,7 @@ export default function RenderboxClaro({ playerRef, visible = true, activo = fal
 
   useEffect(() => {
     let vivo = true
-    cargarGrupoEstilo('taller', VERSION).then(async (gltf) => {
+    Promise.all([cargarGrupoEstilo('taller', VERSION), cargarGrupoEstilo('claro', VERSION)]).then(async ([gltf, claro]) => {
       const nodo = gltf?.scene.getObjectByName('Prop_Estudio_Computadora')
       if (!vivo || !nodo) return
       const copia = nodo.clone(true)
@@ -81,6 +81,11 @@ export default function RenderboxClaro({ playerRef, visible = true, activo = fal
       raiz.rotation.y = C.giro
       raiz.scale.setScalar(C.escala)
       raiz.add(p.grupo)
+      // su cable a un registro en el piso, detrás (props_claro.glb, en el marco de la Renderbox): no tiembla
+      // con ella, se queda tendido
+      const nodoCable = claro?.scene.getObjectByName('Prop_RenderboxCable')
+      const cable = nodoCable ? armarPintado(copiaLocal(nodoCable)) : null
+      if (cable) { raiz.add(cable.grupo); p.cable = cable }
       raiz.updateMatrixWorld(true)
       renderboxClaro.radio = Math.hypot(_caja.max.x - _caja.min.x, _caja.max.z - _caja.min.z) / 2 * C.escala * 0.82
       renderboxClaro.alto = (_caja.max.y - _caja.min.y) * C.escala
@@ -120,6 +125,7 @@ export default function RenderboxClaro({ playerRef, visible = true, activo = fal
     const rb = renderboxClaro.rb
     rb.paso(dt)
     p.medir(state)
+    p.cable?.medir(state)
     if (rb.golpes !== golpesVistos.current) {
       golpesVistos.current = rb.golpes
       // las chispas salen del lado por donde llegó la patada, a media altura baja

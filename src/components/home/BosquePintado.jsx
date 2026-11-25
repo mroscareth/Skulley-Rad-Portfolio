@@ -49,8 +49,6 @@ export const BOSQUE = {
   glifo: [18, 40],         // anillo alrededor de la plaza del glifo
   separa: 4.3,             // distancia mínima entre troncos de escala 1
   zona: 30,
-  menhirR: 19.6,           // los menhires, detrás de cada portal
-  menhirAng: 0.235,        // y a los lados (radianes)
   // Color: el de la escena con más luz (con el azul exacto del piso, sobre su
   // albedo tan oscuro, el bosque se perdía en lo negro); tope para el día, que ya
   // es claro. Luego cuánto oscurece lo oscuro del atlas y cuánto aclara lo claro.
@@ -141,17 +139,11 @@ function sembrar(portales) {
     const r = g0 + azar() * (g1 - g0)
     ponerPino(plazaGlifo[0] + Math.cos(a) * r, plazaGlifo[1] + Math.sin(a) * r, (r - g0) / (g1 - g0))
   }
-  // Menhires: dos por portal, detrás y a los lados, de frente al centro.
+  // Los portales ya no llevan menhires: los reemplazó un hito labrado detrás de cada uno
+  // (home/HitosPortales.jsx, Oscar 2026-11-24). Aquí solo quedan las estelas de la ofrenda. Se gasta
+  // el azar que usaban (uno por menhir) para que los peñascos de abajo no cambien de lugar.
   const lista = (portales || []).filter((p) => !p.antimatter)
-  lista.forEach((p, k) => {
-    const ang = Math.atan2(p.position[2], p.position[0])
-    for (const lado of [-1, 1]) {
-      const a = ang + lado * BOSQUE.menhirAng
-      const x = Math.cos(a) * BOSQUE.menhirR, z = Math.sin(a) * BOSQUE.menhirR
-      const v = (k * 2 + (lado > 0 ? 1 : 0)) % 3
-      menhires.push({ v, x, z, s: 1, rot: Math.atan2(-x, -z) + (azar() - 0.5) * 0.18, portal: p.id })
-    }
-  })
+  for (let k = 0; k < lista.length * 2; k++) azar()
   // La plaza de la ofrenda: la estela con el nombre de cada una.
   for (const l of LUGARES) {
     menhires.push({ v: l.estela.v, x: l.estela.x, z: l.estela.z, s: PLAZA_OFRENDA.estelaEscala, rot: l.estela.rot, ofrenda: l.id, nombre: { es: l.es, en: l.en } })

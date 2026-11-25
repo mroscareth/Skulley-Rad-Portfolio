@@ -73,6 +73,7 @@ Se probó crecer la home a un valle con lugares (el Foro, el Estudio de Skulley,
   | senderos | `Estilo_senderos.blend` | Letrero de cruce, banca, farol, tronco y tocón |
 
   Los GLB van en `public/3dmodels/estilo/props_<grupo>.glb` y se ven junto a Skulley en `estilo.html` (solo en desarrollo).
+- **Ya rescatados en la home** (2026-11-24, detalle en CLAUDE.md, Los props pintados rescatados en el claro): la Renderbox viva en la orilla del claro con su cable, un letrero de neón OPEN junto a la tienda y un hito labrado por portal con el nombre en runas en lugar de los menhires.
 - **Para reusar los neones:**
   - Son letras de bloque en runas, armadas con `runas_neon.mjs` desde la fuente.
   - Los tubos van como objetos aparte que se llaman `…_Neon_<Letrero>_<n>`.

@@ -71,7 +71,7 @@ export function crearMaterialContorno(uniform) {
 export const NEON = {
   // colores bien saturados: prendido, el canal fuerte pasa de 1 y los demás no, así el tubo no se
   // lava (con un naranja claro el verde también pasaba de 1 y el pez salía amarillo)
-  colores: { Pesca: '#2ff3e0', Pez: '#ff5a14', Escenario: '#ff3fb4', Estudio: '#f5ff00' },
+  colores: { Pesca: '#2ff3e0', Pez: '#ff5a14', Escenario: '#ff3fb4', Estudio: '#f5ff00', Open: '#e600ff' },
   // prendido, la luminancia del color sube a esto: un poco arriba del umbral del bloom de la home
   // (0.86, PostFX), con cualquier color (con un multiplicador fijo el magenta y el naranja se quedaban abajo)
   brillo: 1.05,
