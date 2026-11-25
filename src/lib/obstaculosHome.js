@@ -12,9 +12,27 @@ let radioMax = 0
 
 const llave = (cx, cz) => cx * 73856093 ^ cz * 19349663
 
-/** Pone la lista de círculos ({ x, z, r }). Reemplaza la anterior. */
+let base = []
+const extras = new Map()
+
+/** Pone la lista de círculos ({ x, z, r }) del bosque. Reemplaza la anterior. */
 export function setObstaculos(lista) {
-  circulos = (lista || []).filter((c) => c && c.r > 0)
+  base = lista || []
+  rearmar()
+}
+
+/** Círculos de otro dueño que se suman a los del bosque (la ofrenda: los objetos
+ * puestos). `clave` es el dueño; una lista vacía los quita. */
+export function setObstaculosExtra(clave, lista) {
+  if (lista && lista.length) extras.set(clave, lista)
+  else extras.delete(clave)
+  rearmar()
+}
+
+function rearmar() {
+  const todos = [...base]
+  for (const l of extras.values()) todos.push(...l)
+  circulos = todos.filter((c) => c && c.r > 0)
   celdas = new Map()
   radioMax = 0
   for (const c of circulos) {

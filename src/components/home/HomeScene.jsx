@@ -248,6 +248,7 @@ import PastoPintado from './PastoPintado.jsx'
 import BosquePintado from './BosquePintado.jsx'
 import PetalosCamino from './PetalosCamino.jsx'
 import BordeDelMundo from './BordeDelMundo.jsx'
+import RenderboxClaro from './RenderboxClaro.jsx'
 import ZonaOfrenda from './ZonaOfrenda.jsx'
 import PlazaOfrenda from './PlazaOfrenda.jsx'
 import { PrecalentarGlobo } from '../SpeechBubble3D.jsx'
@@ -255,6 +256,7 @@ import FloatingExclamation from '../FloatingExclamation.jsx'
 import ZoidianNPC from '../ZoidianNPC.jsx'
 import DroneNPC from '../drone/DroneNPC.jsx'
 import { patadaAlDron } from '../../lib/droneNpc.js'
+import { patadaARenderbox } from '../../lib/renderboxHome.js'
 import PortalParticles from '../PortalParticles.jsx'
 import GoldenFlashOverlay from '../GoldenFlashOverlay.jsx'
 import GoldenDissolveParticles from '../GoldenDissolveParticles.jsx'
@@ -682,6 +684,9 @@ export default function HomeScene({
         {/* Pasando el portal del glifo: barricadas de calle cerrada y, detrás, el código
             crudo del mundo, que se revela al acercarse (home/BordeDelMundo.jsx). */}
         <BordeDelMundo playerRef={playerRef} />
+        {/* La Renderbox de Oscar en la orilla del claro (home/RenderboxClaro.jsx): zumba con Skulley
+            cerca y una patada la apaga o la prende. Su GLB llega aparte y se compila antes de montarse. */}
+        <RenderboxClaro playerRef={playerRef} visible={comoHome} activo={section === 'home' && !customizeActive} />
         {/* La ofrenda del Día de los Skulleys: qué tan cerca va Skulley del portal del
             glifo, para cruzar la música con la canción rota (lib/cancionOfrenda.js). */}
         <ZonaOfrenda playerRef={playerRef} activa={section === 'home' && !bootLoading} />
@@ -936,6 +941,8 @@ export default function HomeScene({
             try { hits = homeOrbsRef.current?.kickImpulse(pos, dir, strength, radius, skip, base, halfAngle) || [] } catch { }
             // el drone de M.A.D.R.E. también se patea (y castiga en el acto)
             try { const d = patadaAlDron(pos, dir, radius, skip, base, halfAngle); if (d) hits = [...hits, d] } catch { }
+            // y la Renderbox del claro (la apaga o la prende)
+            try { const r = patadaARenderbox(pos, dir, radius, skip, base, halfAngle); if (r) hits = [...hits, r] } catch { }
             return hits
           })}
           onActionCooldown={bootLoading ? undefined : ((r) => { try { setActionCooldown(r) } catch { } })}
