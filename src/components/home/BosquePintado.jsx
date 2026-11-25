@@ -139,8 +139,8 @@ function sembrar(portales) {
     const r = g0 + azar() * (g1 - g0)
     ponerPino(plazaGlifo[0] + Math.cos(a) * r, plazaGlifo[1] + Math.sin(a) * r, (r - g0) / (g1 - g0))
   }
-  // Los portales ya no llevan menhires: los reemplazó un hito labrado detrás de cada uno
-  // (home/HitosPortales.jsx, Oscar 2026-11-24). Aquí solo quedan las estelas de la ofrenda. Se gasta
+  // Los portales ya no llevan menhires: los reemplazó un letrero de neón detrás de cada uno
+  // (home/LetrerosPortales.jsx, Oscar 2026-11-25). Aquí solo quedan las estelas de la ofrenda. Se gasta
   // el azar que usaban (uno por menhir) para que los peñascos de abajo no cambien de lugar.
   const lista = (portales || []).filter((p) => !p.antimatter)
   for (let k = 0; k < lista.length * 2; k++) azar()

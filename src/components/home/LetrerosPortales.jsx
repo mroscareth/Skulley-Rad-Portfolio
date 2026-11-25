@@ -17,14 +17,14 @@ import { useLanguage } from '../../i18n/LanguageContext.jsx'
 // bloom (Oscar: "que brillen más y que tengan bloom"). Los letreros de los dos idiomas van montados y
 // el del otro se oculta (mismos programas: no compila). Se arma fuera de la escena y se compila antes.
 
-const VERSION = 1
+const VERSION = 2
 
 export const LETREROS = {
   radio: 19.6,       // detrás de cada portal, donde iban los menhires
-  escala: 2.2,       // la de los props: el GLB está en metros reales
+  escala: 2.2,       // la de los props: el GLB está en metros reales (las letras ya vienen grandes)
   solido: 0.32,      // medio grueso del círculo sólido, en metros reales
-  luz: 1.5,          // luminancia de lejos (el bloom de la home empieza en 0.86 y llega a todo en 1.04)
-  luzCerca: 3.2,     // con Skulley en el portal
+  luz: 2.2,          // luminancia de lejos (el bloom de la home empieza en 0.86 y llega a todo en 1.04)
+  luzCerca: 4.5,     // con Skulley en el portal
   apagado: 0.1,      // lo que queda de una letra que falla o que todavía no prende
   corrida: 0.085,    // s entre letra y letra al prender
   flashes: 3,

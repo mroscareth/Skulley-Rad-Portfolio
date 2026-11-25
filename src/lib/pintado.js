@@ -189,8 +189,9 @@ export function armarPintado(escenaGltf) {
     // si tapa a Skulley, el pase de normales de su tinta lo dibuja solo en profundidad antes que a él
     // (CharacterNormalPass): si no, las líneas del cuerpo salen encima del objeto
     malla.userData.ocluyeTinta = true
-    // al contorno unido no entran lo que gira (su silueta se quedaría quieta) ni las luces de adentro
-    if (!gira && !luz) piezas.push(g)
+    // al contorno unido no entran lo que gira (su silueta se quedaría quieta), las luces de adentro ni
+    // el neón (la tinta alrededor de los tubos delgados los ensuciaba y les comía el brillo)
+    if (!gira && !luz && !neon) piezas.push(g)
   })
   // el contorno: una malla con todas las posiciones y sus normales promediadas
   const unida = new THREE.BufferGeometry()

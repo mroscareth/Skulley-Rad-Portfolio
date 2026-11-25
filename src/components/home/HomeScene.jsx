@@ -249,8 +249,7 @@ import BosquePintado from './BosquePintado.jsx'
 import PetalosCamino from './PetalosCamino.jsx'
 import BordeDelMundo from './BordeDelMundo.jsx'
 import RenderboxClaro from './RenderboxClaro.jsx'
-import HitosPortales from './HitosPortales.jsx'
-import LetreroClaro from './LetreroClaro.jsx'
+import LetrerosPortales from './LetrerosPortales.jsx'
 import ZonaOfrenda from './ZonaOfrenda.jsx'
 import PlazaOfrenda from './PlazaOfrenda.jsx'
 import ObjetosOfrenda from './ObjetosOfrenda.jsx'
@@ -690,11 +689,9 @@ export default function HomeScene({
         {/* La Renderbox de Oscar en la orilla del claro (home/RenderboxClaro.jsx): zumba con Skulley
             cerca y una patada la apaga o la prende. Su GLB llega aparte y se compila antes de montarse. */}
         <RenderboxClaro playerRef={playerRef} visible={comoHome} activo={section === 'home' && !customizeActive} />
-        {/* Un hito labrado detrás de cada portal con el nombre de la sección en runas, que se prende
-            de su color con Skulley cerca (home/HitosPortales.jsx; reemplaza a los menhires). */}
-        <HitosPortales portales={portals} portalMixMap={portalMixMap} visible={comoHome} />
-        {/* Un letrero de neón OPEN en runas junto al portal de la tienda (home/LetreroClaro.jsx). */}
-        <LetreroClaro visible={comoHome} />
+        {/* Un letrero de neón de doble cara detrás de cada portal con el nombre de la sección en runas,
+            que corre y flashea con Skulley cerca (home/LetrerosPortales.jsx; reemplaza a los menhires). */}
+        <LetrerosPortales portales={portals} portalMixMap={portalMixMap} visible={comoHome} />
         {/* La ofrenda del Día de los Skulleys: qué tan cerca va Skulley del portal del
             glifo, para cruzar la música con la canción rota (lib/cancionOfrenda.js). */}
         <ZonaOfrenda playerRef={playerRef} activa={section === 'home' && !bootLoading} />
