@@ -820,6 +820,17 @@ export default function Player({
   const simPrevPosRef = useRef(new THREE.Vector3())
   const simYawRef = useRef(0)
   const simPrevYawRef = useRef(0)
+  // desarrollo: window.__llevarA(x, z) pone a Skulley ahí (el simulador manda la posición: cambiarla en el grupo no dura)
+  useEffect(() => {
+    if (!import.meta.env.DEV) return undefined
+    window.__llevarA = (x, z) => {
+      if (!playerRef.current) return false
+      playerRef.current.position.set(x, 0, z)
+      simInitRef.current = false
+      return true
+    }
+    return () => { delete window.__llevarA }
+  }, [playerRef])
   const simWasOrbRef = useRef(false)
   // Adaptive speed when FPS is very low
   const avgStepsRef = useRef(0)

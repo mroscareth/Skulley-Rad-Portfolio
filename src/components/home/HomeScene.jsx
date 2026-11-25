@@ -251,6 +251,7 @@ import BordeDelMundo from './BordeDelMundo.jsx'
 import RenderboxClaro from './RenderboxClaro.jsx'
 import ZonaOfrenda from './ZonaOfrenda.jsx'
 import PlazaOfrenda from './PlazaOfrenda.jsx'
+import ObjetosOfrenda from './ObjetosOfrenda.jsx'
 import { PrecalentarGlobo } from '../SpeechBubble3D.jsx'
 import FloatingExclamation from '../FloatingExclamation.jsx'
 import ZoidianNPC from '../ZoidianNPC.jsx'
@@ -694,6 +695,15 @@ export default function HomeScene({
             (home/PlazaOfrenda.jsx; las estelas y los pétalos van con el bosque y con
             PetalosCamino). Montada siempre. */}
         <PlazaOfrenda playerRef={playerRef} activo={section === 'home'} />
+        {/* Los objetos de la ofrenda en su lugar al ponerlos (home/ObjetosOfrenda.jsx):
+            su GLB llega aparte; montados siempre, lo no puesto encogido a casi nada.
+            Los que Skulley carga flotan sobre él solo con él a la vista en la home. */}
+        <Suspense fallback={null}>
+          <ObjetosOfrenda
+            playerRef={playerRef}
+            mostrarCarga={Boolean(section === 'home' && homeLanded && !saliendoDeHome && !orbActiveUi && !customizeActive)}
+          />
+        </Suspense>
         {/* God Rays anchor (hidden when inactive and no depth write) */}
         {fx.godEnabled && (
           <mesh ref={sunRef} position={[0, 8, 0]}>

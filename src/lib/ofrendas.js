@@ -6,9 +6,12 @@
 // ella y ahí arranca la cinemática del final. Con las seis la canción queda
 // completa y se desbloquea en el reproductor.
 //
-// Las misiones para conseguir cada objeto todavía no existen, ni sus modelos
-// 3D (lista en features.md). Mientras tanto, en desarrollo:
-// window.__ofrendas.poner('ipad'), .quitar(id), .todas(), .ninguna().
+// Cada objeto pasa por dos estados: se consigue (una misión llama
+// `conseguirOfrenda(id)` y Skulley lo carga flotando sobre la cabeza,
+// home/ObjetosOfrenda.jsx) y se pone (al entrar a su corona en la plaza:
+// `ponerOfrenda(id)`, y cae con su rayo). Las misiones todavía no existen
+// (features.md). En desarrollo: window.__ofrendas.conseguir('ipad'), .poner(id),
+// .quitar(id), .todas(), .ninguna(), .cargarTodas().
 // Sin three: lo leen el reproductor (chunk del modal) y App.
 
 export const OFRENDAS = [
@@ -39,8 +42,22 @@ function leer() {
 
 let puestas = leer()
 
+// Las que ya consiguió y todavía carga, en el orden en que llegaron.
+const LLAVE_MANO = 'skulley_ofrendas_mano'
+function leerMano() {
+  try {
+    const g = JSON.parse(localStorage.getItem(LLAVE_MANO) || '[]')
+    if (Array.isArray(g)) return [...new Set(g)].filter((id) => VALIDAS.has(id) && !puestas.has(id))
+  } catch { /* sin almacenamiento: no carga nada */ }
+  return []
+}
+let enMano = leerMano()
+
 function guardar() {
-  try { localStorage.setItem(LLAVE, JSON.stringify([...puestas])) } catch { /* se queda en memoria */ }
+  try {
+    localStorage.setItem(LLAVE, JSON.stringify([...puestas]))
+    localStorage.setItem(LLAVE_MANO, JSON.stringify(enMano))
+  } catch { /* se queda en memoria */ }
   try { window.dispatchEvent(new CustomEvent(EVENTO_OFRENDAS, { detail: { nivel: puestas.size } })) } catch { /* sin window */ }
 }
 
@@ -48,10 +65,21 @@ export const ofrendasPuestas = () => new Set(puestas)
 export const nivelOfrenda = () => puestas.size
 export const ofrendaCompleta = () => puestas.size >= TOTAL_OFRENDAS
 export const ofrendaPuesta = (id) => puestas.has(id)
+export const ofrendasEnMano = () => enMano.slice()
+export const ofrendaEnMano = (id) => enMano.includes(id)
+
+/** Una misión la entrega: Skulley la carga hasta ponerla en su lugar. */
+export function conseguirOfrenda(id) {
+  if (!VALIDAS.has(id) || puestas.has(id) || enMano.includes(id)) return false
+  enMano.push(id)
+  guardar()
+  return true
+}
 
 export function ponerOfrenda(id) {
   if (!VALIDAS.has(id) || puestas.has(id)) return false
   puestas.add(id)
+  enMano = enMano.filter((x) => x !== id)
   guardar()
   return true
 }
@@ -66,7 +94,12 @@ export function escucharOfrendas(fn) {
   const alCambiar = () => fn(puestas.size)
   window.addEventListener(EVENTO_OFRENDAS, alCambiar)
   // Otra pestaña del mismo sitio.
-  const alGuardar = (e) => { if (e.key === LLAVE) { puestas = leer(); fn(puestas.size) } }
+  const alGuardar = (e) => {
+    if (e.key !== LLAVE && e.key !== LLAVE_MANO) return
+    puestas = leer()
+    enMano = leerMano()
+    fn(puestas.size)
+  }
   window.addEventListener('storage', alGuardar)
   return () => {
     window.removeEventListener(EVENTO_OFRENDAS, alCambiar)
@@ -88,14 +121,18 @@ export function esCancionOfrenda(track) {
 if (import.meta.env.DEV && typeof window !== 'undefined') {
   window.__ofrendas = {
     lista: OFRENDAS.map((o) => o.id),
-    estado: () => ({ nivel: puestas.size, total: TOTAL_OFRENDAS, puestas: [...puestas] }),
+    estado: () => ({ nivel: puestas.size, total: TOTAL_OFRENDAS, puestas: [...puestas], enMano: enMano.slice() }),
+    conseguir: conseguirOfrenda,
     poner: ponerOfrenda,
     quitar: quitarOfrenda,
     nivel(n) {
       puestas = new Set(OFRENDAS.slice(0, Math.max(0, Math.min(TOTAL_OFRENDAS, n))).map((o) => o.id))
+      enMano = enMano.filter((id) => !puestas.has(id))
       guardar()
     },
     todas() { this.nivel(TOTAL_OFRENDAS) },
-    ninguna() { this.nivel(0) },
+    ninguna() { enMano = []; this.nivel(0) },
+    // todas en mano y ninguna puesta: para probar la cargada y el ponerlas
+    cargarTodas() { puestas = new Set(); enMano = OFRENDAS.map((o) => o.id); guardar() },
   }
 }

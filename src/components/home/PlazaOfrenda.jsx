@@ -5,7 +5,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { applyToonBanding } from '../../lib/toonBanding.js'
 import { CAMPO_MAX, VERT_CAMPO, FRAG_CAMPO, VERT_CHISPA, FRAG_CHISPA } from '../../lib/fuegoToon.js'
 import { ANTORCHAS, CENTRO, LUGARES, CAMA } from '../../lib/plazaOfrenda.js'
-import { ofrendaPuesta } from '../../lib/ofrendas.js'
+import { ofrendaPuesta, ofrendaEnMano } from '../../lib/ofrendas.js'
 import { distanciaOfrenda } from '../../lib/zonaOfrenda.js'
 import { wallpaperEstado } from '../../lib/wallpaperEscritorio.js'
 
@@ -82,6 +82,7 @@ const RAYO = {
   radioOfrenda: 1.25,
   radioCama: 1.7,
   prende: 1.8,        // segundos en prender al poner la ofrenda
+  guia: 0.32,         // lo que brilla el rayo del lugar de una ofrenda que Skulley carga
 }
 
 const azar = (a, b) => a + Math.random() * (b - a)
@@ -450,7 +451,9 @@ export default function PlazaOfrenda({ playerRef, activo = true }) {
       const ac = R.conos.geometry.getAttribute('aBrillo'), ah = R.charcos.geometry.getAttribute('aBrillo')
       let cambio = false
       R.lista.forEach((l, i) => {
-        const meta = l.id === 'portal' || ofrendaPuesta(l.id) ? 1 : 0
+        // si Skulley carga esa ofrenda, su lugar lo llama con un rayo tenue que respira
+        const meta = l.id === 'portal' || ofrendaPuesta(l.id) ? 1
+          : ofrendaEnMano(l.id) ? RAYO.guia * (0.8 + 0.2 * Math.sin(e.t * 2.2)) : 0
         const b = R.brillo[i]
         const nb = b + Math.max(-dt / 0.8, Math.min(dt / RAYO.prende, meta - b))
         if (Math.abs(nb - b) > 1e-4 || ac.array[i] !== nb) {

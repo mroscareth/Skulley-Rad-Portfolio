@@ -2,7 +2,7 @@
 
 ## La ofrenda del Día de los Skulleys (en construcción)
 
-Pedido de Oscar, 2026-11-24. Hecho hasta hoy: la canción rota que se recompone, el cruce con la música al acercarse al portal, el estado de las ofrendas y la plaza (pétalos, antorchas, estelas, oscuridad, rayos de luz y el portal apagado). Lo demás está abajo, en orden.
+Pedido de Oscar, 2026-11-24. Hecho hasta hoy: la canción rota que se recompone, el cruce con la música al acercarse al portal, el estado de las ofrendas, la plaza (pétalos, antorchas, estelas, oscuridad, rayos de luz y el portal apagado) y los seis objetos, que caen en su lugar al poner cada ofrenda. Lo demás está abajo, en orden.
 
 ### La historia
 
@@ -12,18 +12,18 @@ Pedido de Oscar, 2026-11-24. Hecho hasta hoy: la canción rota que se recompone,
 - El final: M.A.D.R.E. usa la esfera corrupta en el portal, lo activa y revela memorias que ni ella conocía.
 - La sección 6 (hoy la tipografía, `/skulleyglyph`) se va a llamar Goodies o Freebies: un taller donde se bajan cosas gratis, como la tipografía, un generador de códigos QR y más.
 
-### Los objetos (modelos 3D por hacer)
+### Los objetos
 
 | # | Objeto | Qué representa | Modelo 3D |
 |---|---|---|---|
-| 1 | iPad | Donde dibuja | Pendiente |
-| 2 | Cámara Leica | La fotografía | Pendiente |
-| 3 | Álbum de fotos | Sus personas importantes y cercanas | Pendiente |
-| 4 | Teclado MIDI tipo Arturia MiniLab 3 (25 teclas, 8 perillas, 8 pads de colores, 4 faders, pantallita) | Su lado musical | Pendiente |
-| 5 | Caja de cerillos | Regalo de su novia | Pendiente |
-| 6 | Almohada | Lo deja soñar. Va al último, atrás del portal | Pendiente |
+| 1 | iPad | Donde dibuja | Hecho: en su atril de funda, con Apple Pencil y un boceto de Skulley en la pantalla |
+| 2 | Cámara Leica | La fotografía | Hecho: tipo M, con su punto rojo y la correa |
+| 3 | Álbum de fotos | Sus personas importantes y cercanas | Hecho: abierto, seis fotos y dos sueltas (siluetas pintadas en canvas) |
+| 4 | Teclado MIDI tipo Arturia MiniLab 3 (25 teclas, 8 perillas, 8 pads de colores, 4 faders, pantallita) | Su lado musical | Hecho |
+| 5 | Caja de cerillos | Regalo de su novia | Hecho: abierta, con cerillos y uno quemado; etiqueta con un corazón |
+| 6 | Almohada | Lo deja soñar. Va al último, atrás del portal | Hecho: esponjada, con ribete azul |
 
-Los ids en código: `ipad`, `leica`, `album`, `teclado`, `cerillos`, `almohada` (`OFRENDAS` en `src/lib/ofrendas.js`).
+Los ids en código: `ipad`, `leica`, `album`, `teclado`, `cerillos`, `almohada` (`OFRENDAS` en `src/lib/ofrendas.js`). Lo que tienen pintado (la pantalla del iPad, las fotos, la etiqueta, los pads) son dibujos provisionales en canvas: si Oscar quiere los suyos, se cambian ahí.
 
 ### La plaza del portal (hecha)
 
@@ -40,18 +40,60 @@ Los ids en código: `ipad`, `leica`, `album`, `teclado`, `cerillos`, `almohada` 
 - La canción rota y su cruce con la música: `lib/cancionOfrenda.js`, `lib/zonaOfrenda.js`, `home/ZonaOfrenda.jsx` y el modo ofrenda de `MusicPlayer.jsx` (detalle en CLAUDE.md, Audio).
 - El estado: `lib/ofrendas.js` (en el navegador, `skulley_ofrendas`). En desarrollo, `window.__ofrendas.nivel(n)` y `window.__zonaOfrenda(d)` para oírla en cada nivel sin caminar.
 - La plaza: `lib/plazaOfrenda.js` (el plano), `home/PlazaOfrenda.jsx` (oscuridad, rayos y antorchas), las estelas en `BosquePintado`, los pétalos en `PetalosCamino` y el portal apagado en `Portal.jsx` (detalle en CLAUDE.md). `window.__ofrendas.poner('album')` prende el rayo y la estela de esa ofrenda; `window.__portalGlifo = 'prendido'` prende el portal.
+- Los objetos: `scripts/ofrenda/objetos.py` los modela en Blender (`Character/Ofrendas.blend`) y exporta `public/3dmodels/ofrendas.glb`; `home/ObjetosOfrenda.jsx` los pone en su lugar. Al poner una ofrenda, su objeto cae del cielo con el rayo y rebota; ya puesto es sólido (menos la almohada). Detalle en CLAUDE.md (La plaza de la ofrenda).
+- Conseguir, cargar y poner: una misión llama `conseguirOfrenda(id)` y Skulley carga el objeto flotando sobre la cabeza; en la plaza, su lugar lo llama con un rayo tenue y, al llegar a la orilla de su corona, el objeto vuela a su lugar y cae con el rayo. La almohada se pone al último. En desarrollo, `window.__ofrendas.conseguir('ipad')` o `.cargarTodas()`.
+
+### El mapa grande (descartado el 2026-11-24)
+
+Se probó crecer la home a un valle con lugares (el Foro, el Estudio de Skulley, la laguna con la pesca, el Castillo y el Mirador), relieve, senderos y props pintados, detrás de un interruptor de desarrollo. Al recorrerlo, Oscar se quedó con la home de producción (*"compacto definitivamente. lo que tenemos en producción ya me gusta"*), y de los props: *"no sé dónde encajan, la verdad mi trabajo y todo lo demás ya lo resuelven los portales"*. Quiere rescatar algunos, como los letreros de neón y la Renderbox; dónde, está por decidir.
+
+- **Lo que se quitó de la home:** el relieve, lo caminable nuevo, los senderos de lozas, el bosque resembrado, la laguna con sus peces y los props en su lugar. Fuera del repo, en `D:\Work\mroscar\Website\new\Archivo\mundo-grande-2026-11-24\`, quedó:
+  - el código del mapa, `Terreno.blend` y `terreno.py`;
+  - el plano (`mapaHome.json`, en retícula, más el redondo);
+  - los parches de lo que tocaba en la home;
+  - el diseño completo (`features-mapa-grande.md`: misiones, pesca e inventario de props).
+- **Lo que enseñó:**
+  - Un mapa redondo con caminos curvos mata la experiencia top down: hacen falta líneas rectas en los ejes de la cámara y vueltas a 90°.
+  - La laguna toon de bandas, rayitas y espuma ancha le pareció horrible.
+  - Los senderos de tierra pintada no; si hay caminos, van las lozas del camino escondido.
+  - El bosque tupido cansa, y las alturas, el mirador y los arroyos sobraban.
+  - Los props necesitan lógica física: escaleras que suben a algo y tubos conectados.
+  - Un campo con signo horneado en textura deja líneas finas donde el signo brinca: la distancia se mide en el shader.
+- **Lo que se guardó en git** (commit `63faf0f2`, los .blend y sus texturas por LFS), con `scripts/estilo/pintura.py` como pincel de acuarela compartido para hornear el atlas de cada grupo:
+
+  | Grupo | `.blend` | Lo que trae |
+  |---|---|---|
+  | barriles | `Character/Estilo.blend` | Barril natural y turquesa con el esténcil de Skulley (`public/grungeskullley.png`) |
+  | laguna | `Estilo_laguna.blend` | Muelle, puesto de pesca con su neón PESCA y el pez neón, lancha, cubeta, rack de cañas y letrero |
+  | foro | `Estilo_foro.blend` | Escenario con ESCENARIO en neón, torres de bocinas del concept del hermano de Oscar, micrófono, ampli y pad |
+  | estudio | `Estilo_taller.blend` | El Estudio brutalista con ESTUDIO en neón, grafitis en SKULLEYGLYPH, escalera y tinaco |
+  | taller | (en el mismo .blend) | Los muebles del Estudio: escritorio con la Cintiq, la Renderbox Nano, silla tipo Steelcase, estante, caballete con `prtivyImg.png` y los art toys |
+  | pesca | `Estilo_pesca.blend` | Cuatro peces con el legendario, señuelos, basura y báscula |
+  | rocas | `Estilo_rocas.blend` | Rocas, hito con runa y binoculares |
+  | senderos | `Estilo_senderos.blend` | Letrero de cruce, banca, farol, tronco y tocón |
+
+  Los GLB van en `public/3dmodels/estilo/props_<grupo>.glb` y se ven junto a Skulley en `estilo.html` (solo en desarrollo).
+- **Para reusar los neones:**
+  - Son letras de bloque en runas, armadas con `runas_neon.mjs` desde la fuente.
+  - Los tubos van como objetos aparte que se llaman `…_Neon_<Letrero>_<n>`.
+  - `src/lib/pintado.js` (`NEON`) los prende arriba del umbral del bloom y los hace parpadear letra por letra.
+- **Para reusar la Renderbox:**
+  - Ventiladores que giran (`…_Ventilador_<n>`) y luces fijas (`…_Luz*`).
+  - Temblor y sonido de camión de la basura agudo que escogió Oscar (`lib/ventiladoresRenderbox.js`, por el bus de SFX).
+  - Una patada la apaga y otra la prende, con golpe toon sin moverla y chispas: `lib/renderbox.js` y `fx/ChispasGolpe.jsx`.
+- **Si un prop va en la home:**
+  - Si queda entre la cámara y Skulley, las líneas de tinta de él salen encima, porque el pase de normales solo recorre su grupo. Hace falta un registro de lo que tapa la tinta (los objetos de la ofrenda ya tienen ese problema).
+  - Todo con contorno medido en pantalla, compilado en el warm-up y sin ocultar nada.
 
 ### Por hacer
 
-1. Modelos 3D de los seis objetos.
-2. Las misiones (con M.A.D.R.E. y con Argus) y los caminos nuevos.
-3. Poner una ofrenda en su lugar llama a `ponerOfrenda(id)`: la canción se recompone, su estela se prende y le cae su rayo de luz. Falta dibujar el objeto en su lugar (`LUGARES[i].mesa` en `lib/plazaOfrenda.js`, en el piso; la almohada en `CAMA`).
-4. Dormir con la almohada: cinemática y soliloquio, con voz pregrabada como la historia.
-5. M.A.D.R.E. activa el portal con la esfera corrupta y aparecen las memorias. Hoy el portal prende cuando se desbloquea la sección 6 (la esfera corrupta que mete el jugador); en la historia lo hará ella.
-6. Sección 6 → Goodies / Freebies.
-7. Al abrir las misiones: `MISIONES_ABIERTAS = true` (el reproductor enseña cuántas ofrendas van en lugar de "??") y guardar las ofrendas en la cuenta, no solo en el navegador.
-8. Decidir si la canción sigue sonando dentro de la sección 6. Hoy, al entrar, regresa la música del reproductor.
-9. Medir en el Brave de Oscar lo que cuestan los rayos y la oscuridad (en el navegador integrado la resolución adaptable cambiaba de escalón y no se pudo comparar).
+1. Las misiones (con M.A.D.R.E. y con Argus); cada una llama `conseguirOfrenda(id)` al ganarse. Las que se diseñaron para el mapa grande (la pesca, la tocada, el castillo, el retrato, los recuerdos y el desvelo) dependían de sus lugares: hay que replantearlas en la home de producción, con Oscar (el diseño viejo está en el archivo del mapa grande).
+2. Dormir con la almohada: cinemática y soliloquio, con voz pregrabada como la historia.
+3. M.A.D.R.E. activa el portal con la esfera corrupta y aparecen las memorias. Hoy el portal prende cuando se desbloquea la sección 6 (la esfera corrupta que mete el jugador); en la historia lo hará ella.
+4. Sección 6 → Goodies / Freebies.
+5. Al abrir las misiones: `MISIONES_ABIERTAS = true` (el reproductor enseña cuántas ofrendas van en lugar de "??") y guardar las ofrendas en la cuenta, no solo en el navegador.
+6. Decidir si la canción sigue sonando dentro de la sección 6. Hoy, al entrar, regresa la música del reproductor.
+7. Medir en el Brave de Oscar lo que cuestan los rayos, la oscuridad y los objetos (en el navegador integrado la resolución adaptable cambiaba de escalón y no se pudo comparar).
 
 ## La prisión de M.A.D.R.E. (idea, sin construir)
 
