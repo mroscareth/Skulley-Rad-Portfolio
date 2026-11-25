@@ -15,7 +15,7 @@ export function cargarGrupoEstilo(grupo, version = 1) {
   const loader = new GLTFLoader(manager)
   loader.setDRACOLoader(draco)
   const p = new Promise((res) => {
-    loader.load(`${import.meta.env.BASE_URL}3dmodels/estilo/props_${llave}`,
+    loader.load(`${import.meta.env.BASE_URL}3dmodels/estilo/props_${grupo}.glb?v=${version}`,
       (gltf) => { setTimeout(() => draco.dispose(), 0); res(gltf) },
       undefined,
       () => res(null))
