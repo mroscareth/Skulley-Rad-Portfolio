@@ -138,7 +138,11 @@ export function dialogoArgus(lang, datos) {
         recuerda: 'Aquí sigo escondiendo {cosa}, compa. Te repito el trato.',
         cosa: { cerillos: 'los cerillos', almohada: 'la almohada' },
         fin: [{ t: 'Ya te di lo que le volé… digo, lo que rescaté. Lo demás lo tiene M.A.D.R.E.: pregúntale qué dejó Skulley.', cara: 'feliz', accion: 'Presumir' }],
-        finTodo: [{ t: 'Ya te di todo, compa. Ahora ve y ármale su ofrenda. Yo aquí cuido las esferas. Bueno, me las como, pero las cuido.', cara: 'feliz', accion: 'Presumir' }],
+        // las palabras de Oscar (2026-11-26)
+        finTodo: [
+          { t: 'Ya te di todos los objetos, compa, y ya me regañaron por robar…', cara: 'encoge', accion: 'Encogerse' },
+          { t: 'Pero vuelve de vez en cuando para ganar premios en mi juego y comprar cosas en la tiendita.', cara: 'feliz', accion: 'Presumir' },
+        ],
       },
       como: [
         tactil
@@ -260,7 +264,10 @@ export function dialogoArgus(lang, datos) {
       recuerda: 'Still hiding {cosa} over here, buddy. Here’s the deal again.',
       cosa: { cerillos: 'the matches', almohada: 'the pillow' },
       fin: [{ t: 'I’ve given you what I swiped… I mean, what I rescued. M.A.D.R.E. has the rest: ask her what Skulley left behind.', cara: 'feliz', accion: 'Presumir' }],
-      finTodo: [{ t: 'That’s everything, buddy. Now go set up his ofrenda. I’ll stay here watching the spheres. Well, eating them, but watching them.', cara: 'feliz', accion: 'Presumir' }],
+      finTodo: [
+        { t: 'I already gave you all the objects, buddy, and I already got scolded for stealing…', cara: 'encoge', accion: 'Encogerse' },
+        { t: 'But come back every now and then to win prizes in my game and buy stuff at the shop.', cara: 'feliz', accion: 'Presumir' },
+      ],
     },
     como: [
       tactil

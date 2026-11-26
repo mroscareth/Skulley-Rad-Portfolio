@@ -12,7 +12,8 @@ import {
   MADRE_HABLA, MADRE_PORTAL, MADRE_SE_VA, MADRE_ESPERA, PORTAL, CABEZA,
 } from '../lib/cinematicaOfrenda.js'
 
-// la música se va al empezar (Oscar: con Skulley acostándose no debe sonar nada) y regresa con el título
+// la música se va al empezar (Oscar: con Skulley acostándose no debe sonar nada) y regresa ya tapado, con
+// "Dia de los Skulley" desde el principio
 const musica = (on, segundos) => {
   try { window.dispatchEvent(new CustomEvent('musica-silencio', { detail: { on, segundos } })) } catch { }
 }
@@ -157,6 +158,10 @@ export default function CinematicaOfrenda({ lang = 'es', onPortal, onFin }) {
       if (!vivo.current) return
       toma(TOMAS.tapa)
       await esperarQue(() => siesta.cobija.fase === 'puesta', 16000)
+      if (!vivo.current) return
+      // ya tapado entra "Dia de los Skulley", desde el principio (Oscar, 2026-11-26)
+      try { window.dispatchEvent(new CustomEvent('cancion-ofrenda-desde-cero')) } catch { }
+      regresaMusica(1.2)
       await esperar(2200)
       if (!vivo.current) return
       // 3. el soliloquio, sobre su cabeza, con close ups a ella y a él

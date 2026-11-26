@@ -308,6 +308,13 @@ export class CancionOfrenda {
     if (!si) this.callar(0.25)
   }
 
+  // Desde el principio (la cinemática del final la arranca cuando M.A.D.R.E. termina de tapar a Skulley).
+  desdeCero() {
+    this.tBase = 0
+    this.ctxBase = this.ctx.currentTime
+    if (this.sonando) this.callar(0.15)
+  }
+
   ponerVelocidad(v) {
     if (v === this.velocidad) return
     const ahora = this.ctx.currentTime

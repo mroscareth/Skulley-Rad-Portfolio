@@ -612,6 +612,82 @@ export default function ObjetosOfrenda({ playerRef, activo = true, mostrarCarga 
         ? <primitive key={o.id} object={o.raiz} onClick={picarAlmohada} onPointerOver={sobreAlmohada} onPointerOut={fueraAlmohada} />
         : <primitive key={o.id} object={o.raiz} />))}
       {Object.values(armado.objetos).map((o) => <primitive key={`${o.id}-carga`} object={o.carga} />)}
+      <ZzzAlmohada activo={activo} onPicar={picarAlmohada} onSobre={sobreAlmohada} onFuera={fueraAlmohada} />
+    </group>
+  )
+}
+
+// Las "Zzz" sobre la almohada (Oscar, 2026-11-26: "un indicador en la almohada para que los players sepan que
+// pueden repetir la cinemática"): tres zetas de barras en 3D, en el amarillo del sitio y con contorno de tinta,
+// que suben meciéndose y respiran. Salen con la ofrenda completa, el final ya visto y fuera de la cinemática
+// (también desde lejos: se ven desde la plaza); picarlas es como picar la almohada. Montadas siempre: ocultas
+// se encogen a casi nada (como los objetos), así no compilan al aparecer.
+const ZZZ = {
+  alto: 1.05,            // la primera, sobre la almohada
+  zetas: [{ tam: 0.42, dx: -0.55, dy: 0.0 }, { tam: 0.55, dx: 0.0, dy: 0.65 }, { tam: 0.72, dx: 0.62, dy: 1.45 }],
+  grueso: 0.075,         // grosor de cada barra
+  fondo: 0.07,
+  tinta: 0.035,          // lo que sobresale el contorno
+  color: '#f5ff00',
+  entra: 0.6,            // s en aparecer / irse
+}
+function ZzzAlmohada({ activo, onPicar, onSobre, onFuera }) {
+  const recursos = useMemo(() => {
+    const barra = new THREE.BoxGeometry(1, 1, 1)
+    const amarillo = new THREE.MeshBasicMaterial({ color: ZZZ.color, toneMapped: false })
+    const tinta = new THREE.MeshBasicMaterial({ color: '#0a0510', side: THREE.BackSide })
+    return { barra, amarillo, tinta }
+  }, [])
+  useEffect(() => () => { recursos.barra.dispose(); recursos.amarillo.dispose(); recursos.tinta.dispose() }, [recursos])
+  const grupo = React.useRef(null)
+  const zetas = React.useRef([])
+  const est = React.useRef({ k: 0, t: 0 })
+
+  useFrame((state, delta) => {
+    const g = grupo.current
+    if (!g) return
+    const dt = Math.min(delta, 0.1)
+    const e = est.current
+    e.t += dt
+    // voltea hacia la cámara solo de lado (de espaldas se leían al revés); siguen siendo barras en 3D
+    const c = state.camera.position
+    g.rotation.y = Math.atan2(c.x - g.position.x, c.z - g.position.z)
+    const meta = activo && !cine.activo && nivelOfrenda() >= TOTAL_OFRENDAS && finalVisto() && ofrendaPuesta(CAMA.id)
+      && !['entra', 'dormido', 'sale'].includes(siesta.estado) ? 1 : 0
+    e.k = meta ? Math.min(1, e.k + dt / ZZZ.entra) : Math.max(0, e.k - dt / ZZZ.entra)
+    const s = e.k <= 0 ? NADA : e.k * e.k * (3 - 2 * e.k)
+    g.scale.setScalar(Math.max(NADA, s))
+    zetas.current.forEach((z, i) => {
+      if (!z) return
+      const f = e.t * 1.6 - i * 0.7
+      z.position.y = ZZZ.zetas[i].dy + Math.sin(f) * 0.06
+      z.rotation.y = Math.sin(e.t * 0.7 + i) * 0.35
+      z.rotation.z = Math.sin(f * 0.8) * 0.12
+      z.scale.setScalar(ZZZ.zetas[i].tam * (1 + 0.08 * Math.sin(f * 1.3)))
+    })
+  })
+
+  // una zeta de lado 1: barra de arriba, de abajo y la diagonal, cada una con su contorno
+  const g = ZZZ.grueso, d = ZZZ.fondo, ti = ZZZ.tinta
+  const diag = Math.hypot(1, 1 - g)
+  const barras = [
+    { p: [0, 0.5 - g / 2, 0], r: 0, l: 1 },
+    { p: [0, -0.5 + g / 2, 0], r: 0, l: 1 },
+    { p: [0, 0, 0], r: Math.atan2(1 - g, 1), l: diag },
+  ]
+  return (
+    <group ref={grupo} position={[CAMA.x, ZZZ.alto, CAMA.z]} scale={NADA}
+      onClick={onPicar} onPointerOver={onSobre} onPointerOut={onFuera}>
+      {ZZZ.zetas.map((zt, i) => (
+        <group key={i} ref={(el) => { zetas.current[i] = el }} position={[zt.dx, zt.dy, 0]} scale={zt.tam}>
+          {barras.map((b, j) => (
+            <group key={j} position={b.p} rotation-z={b.r}>
+              <mesh geometry={recursos.barra} material={recursos.tinta} scale={[b.l + ti * 2, g + ti * 2, d + ti * 2]} frustumCulled={false} renderOrder={1} />
+              <mesh geometry={recursos.barra} material={recursos.amarillo} scale={[b.l, g, d]} frustumCulled={false} renderOrder={2} />
+            </group>
+          ))}
+        </group>
+      ))}
     </group>
   )
 }

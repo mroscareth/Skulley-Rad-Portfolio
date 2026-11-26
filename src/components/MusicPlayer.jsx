@@ -482,6 +482,13 @@ export default function MusicPlayer({
     window.addEventListener('musica-silencio', onSilencio)
     return () => window.removeEventListener('musica-silencio', onSilencio)
   }, [])
+  // La cinemática del final arranca "Dia de los Skulley" desde el principio cuando M.A.D.R.E. termina de
+  // tapar a Skulley (CinematicaOfrenda, Oscar 2026-11-26); en la plaza la toca el motor de la ofrenda.
+  useEffect(() => {
+    const desdeCero = () => { try { ofrendaRef.current?.desdeCero() } catch { } }
+    window.addEventListener('cancion-ofrenda-desde-cero', desdeCero)
+    return () => window.removeEventListener('cancion-ofrenda-desde-cero', desdeCero)
+  }, [])
 
   // ─── TTS ducking: fade music when text-to-speech is active ───
   useEffect(() => {
