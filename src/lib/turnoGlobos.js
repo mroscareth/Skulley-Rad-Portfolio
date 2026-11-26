@@ -5,7 +5,11 @@
 //   · hablan uno a la vez: el siguiente hace fila y entra `entre` después de que se va el globo;
 //   · la fila es corta y caduca: cada frase dice cuánto puede esperar (`espera`) y lo viejo se tira, para
 //     que nada salga fuera de contexto; si alguien ya tenía frase en la fila, la nueva la reemplaza;
-//   · mientras hay una charla abierta (las barras de cine) la fila se pausa y se vacía.
+//   · mientras hay una charla abierta (las barras de cine) la fila se pausa y se vacía;
+//   · un susto sí corta (Oscar, 2026-11-25: "eso sí debería ser un shock moment que corte los
+//     diálogos"): un rayo que le pega a alguien sin guion o el despiece de Skulley llaman `choque()`:
+//     todos se callan de golpe, la fila se vacía y hay un respiro (`silencioChoque`) antes de que
+//     alguien reaccione (las burlas y las escenas que provoca el susto se piden después y sí salen).
 // El tiempo de cada globo sale de una sola fórmula (`tiempoLinea`): se escribe a `letras` por segundo y,
 // ya completo, se queda lo que se tarda en leerlo. Sin three: lo usan Player, ZoidianNPC y DroneNPC.
 
@@ -19,6 +23,7 @@ export const TURNO = {
   esperaDef: 8,      // cuánto puede esperar en la fila una frase (s); lo que dura una frase larga
   abreTras: 0.9,     // si picas a alguien para platicar con otro a media frase: la frase se completa
                      // de golpe y la charla abre después de esto (s)
+  silencioChoque: 0.6, // después de un susto, nadie habla en este rato (s)
 }
 
 export function tiempoLinea(texto) {
@@ -39,6 +44,8 @@ const st = {
   vigia: 0,
 }
 const completadores = new Set()
+const calladores = new Map()
+const oyentesChoque = new Set()
 
 function puede() {
   const t = ahora()
@@ -113,6 +120,41 @@ export function alCompletar(fn) {
   return () => completadores.delete(fn)
 }
 
+/** Cada quien registra cómo se calla de golpe (esconder su globo ya) para los sustos. */
+export function registrarCallar(quien, fn) {
+  calladores.set(quien, fn)
+  return () => { if (calladores.get(quien) === fn) calladores.delete(quien) }
+}
+
+/** Lo que tiene que soltar algo más al susto (p. ej. la escena de Argus y M.A.D.R.E.). */
+export function escucharChoque(fn) {
+  oyentesChoque.add(fn)
+  return () => oyentesChoque.delete(fn)
+}
+
+/**
+ * Un susto: un rayo que le pega a alguien sin guion, el despiece de Skulley. Todos se callan de golpe,
+ * la fila se vacía y nadie habla en `silencio` segundos. `quien` es a quien le pegó (para los oyentes).
+ */
+export function choque({ quien = null, silencio = TURNO.silencioChoque } = {}) {
+  for (const fn of calladores.values()) { try { fn() } catch { } }
+  st.habla = null
+  st.fila = []
+  st.libreEn = ahora() + silencio
+  for (const fn of oyentesChoque) { try { fn({ quien }) } catch { } }
+}
+
+// Los sustos que avisan por ventana: el despiece de Skulley (rayo, castigo, easter egg, empujón de
+// Argus) y el rayo que quema a M.A.D.R.E. (DroneNPC). El de Argus lo llama ZoidianNPC al chamuscarlo.
+// Este archivo se carga antes que los personajes, así que el susto calla antes de que reaccionen.
+if (typeof window !== 'undefined') {
+  for (const [evento, quien] of [
+    ['character-disassembled-by-bolt', 'skulley'], ['character-disassembled-by-madre', 'skulley'],
+    ['character-disassembled-by-egg', 'skulley'], ['character-disassembled-by-argus', 'skulley'],
+    ['madre-quemada', 'madre'],
+  ]) window.addEventListener(evento, () => choque({ quien }))
+}
+
 /**
  * Abre algo (una charla) sin cortarle la frase a quien está hablando: si alguien está a media frase,
  * se completa de golpe y `abrir` corre `abreTras` después, para que alcance a leerse. Si nadie habla,
@@ -127,4 +169,4 @@ export function abrirTrasTurno(abrir) {
   return false
 }
 
-if (typeof window !== 'undefined' && import.meta.env?.DEV) window.__turnoGlobos = { st, TURNO, tiempoLinea }
+if (typeof window !== 'undefined' && import.meta.env?.DEV) window.__turnoGlobos = { st, TURNO, tiempoLinea, choque }

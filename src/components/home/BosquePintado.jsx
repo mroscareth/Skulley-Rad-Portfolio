@@ -10,18 +10,16 @@ import { setObstaculos, setClaro } from '../../lib/obstaculosHome.js'
 import { zonasPiso } from '../../lib/pisoPintado.js'
 import { sectionColors } from '../../lib/appHelpers.js'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
-import { LUGARES, PLAZA as PLAZA_OFRENDA, ANTORCHAS, SOLIDO_ANTORCHA } from '../../lib/plazaOfrenda.js'
+import { LUGARES, ANTORCHAS, SOLIDO_ANTORCHA } from '../../lib/plazaOfrenda.js'
 import { ofrendaPuesta } from '../../lib/ofrendas.js'
 
 // El bosque del home (Oscar, 2026-11-22): la home es un claro en el bosque que
 // M.A.D.R.E. hizo con los recuerdos de Skulley. Pinos como la referencia de Oscar
 // (pisos de copa con la orilla en ondas, varios tamaños), peñascos de cara plana,
-// tres sólidos perfectos medio enterrados (la naturaleza no hace icosaedros) y dos
-// menhires por portal con el nombre de la sección en SKULLEYGLYPH, que se prenden
-// del color del portal al acercarse: la barra dice WORK y la piedra lo dice en runas.
-// En la plaza de la ofrenda (lib/plazaOfrenda.js, 2026-11-24), detrás del lugar de
-// cada objeto, una estela (un menhir chico) con el nombre de su ofrenda en runas,
-// que se prende en naranja cempasúchil cuando la ofrenda está puesta.
+// tres sólidos perfectos medio enterrados (la naturaleza no hace icosaedros). Los
+// menhires con runas ya no se siembran: los de los portales los reemplazaron los
+// letreros de neón (LetrerosPortales) y las estelas de la plaza de la ofrenda, los
+// hitos labrados (HitosOfrenda, 2026-11-25); su código queda por si vuelven.
 //
 // Los modelos y el atlas los arma scripts/bosque/armar_bosque.py (Blender). Todo
 // va pintado en grises como el piso: el 0.5 es el color de la escena (`colorPiso`),
@@ -140,15 +138,13 @@ function sembrar(portales) {
     ponerPino(plazaGlifo[0] + Math.cos(a) * r, plazaGlifo[1] + Math.sin(a) * r, (r - g0) / (g1 - g0))
   }
   // Los portales ya no llevan menhires: los reemplazó un letrero de neón detrás de cada uno
-  // (home/LetrerosPortales.jsx, Oscar 2026-11-25). Aquí solo quedan las estelas de la ofrenda. Se gasta
-  // el azar que usaban (uno por menhir) para que los peñascos de abajo no cambien de lugar.
+  // (home/LetrerosPortales.jsx, Oscar 2026-11-25). Se gasta el azar que usaban (uno por menhir) para
+  // que los peñascos de abajo no cambien de lugar.
   const lista = (portales || []).filter((p) => !p.antimatter)
   for (let k = 0; k < lista.length * 2; k++) azar()
-  // La plaza de la ofrenda: la estela con el nombre de cada una.
-  for (const l of LUGARES) {
-    menhires.push({ v: l.estela.v, x: l.estela.x, z: l.estela.z, s: PLAZA_OFRENDA.estelaEscala, rot: l.estela.rot, ofrenda: l.id, nombre: { es: l.es, en: l.en } })
-    ocupado.push({ x: l.mesa.x, z: l.mesa.z, rad: 1.2 })
-  }
+  // La plaza de la ofrenda: las estelas también se fueron (las reemplazan los hitos labrados de
+  // home/HitosOfrenda.jsx, Oscar 2026-11-25). Que nada crezca donde va cada objeto.
+  for (const l of LUGARES) ocupado.push({ x: l.mesa.x, z: l.mesa.z, rad: 1.2 })
   // Peñascos: en la orilla del bosque, entre los pinos, y unos por el camino.
   for (let i = 0, puestos = 0; i < 4000 && puestos < 30; i++) {
     let x, z

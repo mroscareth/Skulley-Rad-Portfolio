@@ -527,8 +527,8 @@ export default function ShopCart({
         <button
           type="button"
           onClick={() => { try { onCustomizeToggle?.() } catch { } }}
-          aria-label={lang === 'es' ? 'Personalizar personaje' : 'Customize character'}
-          data-tip={lang === 'es' ? 'Personalizar personaje' : 'Customize character'}
+          aria-label={lang === 'es' ? 'Inventario' : 'Inventory'}
+          data-tip={lang === 'es' ? 'Inventario' : 'Inventory'}
           className={`fixed w-12 h-12 grid place-items-center burbuja-vidrio ${customizeOpen ? 'tecla-amarilla' : ''}`}
           style={{
             top: `${buttonPos?.top ?? 16}px`,
@@ -539,7 +539,7 @@ export default function ShopCart({
             transition: 'opacity 200ms ease-out, background-color 120ms, transform 160ms var(--ease-spring), box-shadow 160ms var(--ease-spring)',
           }}
         >
-          <IconoTinta nombre="playera" tam={34} />
+          <IconoTinta nombre="mochila" tam={34} />
         </button>
       )}
 

@@ -219,6 +219,8 @@ const resources = {
     customizer: {
       open: 'Customize character',
       title: 'Customize',
+      inventory: 'Inventory',
+      openInventory: 'Open inventory',
       hint: 'Repaint Skulley. Changes apply everywhere instantly.',
       eyes: 'Eyes',
       skeleton: 'Skeleton',
@@ -523,7 +525,7 @@ const resources = {
       },
       portrait: {
         title: 'Next to your portrait',
-        desc: 'The brush opens Customize (colors, skins and a 4K wallpaper), the note opens the music and the camera switches to third person.',
+        desc: 'The backpack opens the Inventory (colors, skins, props and a 4K wallpaper), the note opens the music and the camera switches to third person.',
       },
     },
   },
@@ -745,6 +747,8 @@ const resources = {
     customizer: {
       open: 'Personalizar personaje',
       title: 'Personalizar',
+      inventory: 'Inventario',
+      openInventory: 'Abrir inventario',
       hint: 'Repinta a Skulley. Los cambios se aplican al instante en todo el sitio.',
       eyes: 'Ojos',
       skeleton: 'Esqueleto',
@@ -1050,7 +1054,7 @@ const resources = {
       },
       portrait: {
         title: 'Junto a tu retrato',
-        desc: 'El pincel abre Personalizar (colores, skins y un wallpaper 4K), la nota abre la música y la cámara cambia a tercera persona.',
+        desc: 'La mochila abre el Inventario (colores, skins, props y un wallpaper 4K), la nota abre la música y la cámara cambia a tercera persona.',
       },
     },
   },

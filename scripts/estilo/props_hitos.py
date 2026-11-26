@@ -30,6 +30,13 @@ piedra y la columna que toque con una sola matriz):
                                          piedra: el sitio les prende el emisivo del color de su portal.
     en: section1 WORK, section2 ABOUT, section3 STORE, section4 CONTACT, section5 MEMORIES
     es: section1 TRABAJO, section2 SOBREMI, section3 TIENDITA, section4 CONTACTO, section5 MEMORIAS
+    y los de la plaza de la ofrenda, uno por objeto (Prop_HitoPortal_Runas_<objeto>_<idioma>):
+    en: album ALBUM, ipad IPAD, leica CAMERA, teclado KEYBOARD, cerillos MATCHES
+    es: album ALBUM, ipad IPAD, leica CÁMARA, teclado TECLADO, cerillos CERILLOS
+    (la cámara no se llama Leica en el sitio: Oscar, 2026-11-25)
+    (la LL de CERILLOS es una sola runa, la ligadura de la fuente: scripts/estilo/runas_hito.mjs)
+    y lo que dicen hoy los hitos de esa plaza: Prop_HitoPortal_Runas_freebies_en / _es, FREEBIES en los
+    dos (separados para que el de español pueda cambiar)
 Todas las runas a la misma escala y con el mismo espacio entre una y otra (de caja a caja); la cartela
 mide para 8 runas de alto nominal y los nombres más cortos van centrados.
 
@@ -70,6 +77,19 @@ NOMBRES = {
     'en': {'section1': 'WORK', 'section2': 'ABOUT', 'section3': 'STORE', 'section4': 'CONTACT', 'section5': 'MEMORIES'},
     'es': {'section1': 'TRABAJO', 'section2': 'SOBREMI', 'section3': 'TIENDITA', 'section4': 'CONTACTO', 'section5': 'MEMORIAS'},
 }
+# Los mismos hitos en la plaza de la ofrenda, uno por objeto (Oscar, 2026-11-25). La LL va como la
+# escribe la fuente: una sola runa (runas_hito.mjs).
+OFRENDA = {
+    'en': {'album': 'ALBUM', 'ipad': 'IPAD', 'leica': 'CAMERA', 'teclado': 'KEYBOARD', 'cerillos': 'MATCHES'},
+    'es': {'album': 'ALBUM', 'ipad': 'IPAD', 'leica': 'CÁMARA', 'teclado': 'TECLADO', 'cerillos': 'CERILLOS'},
+}
+# Lo que dicen los hitos de la plaza de la ofrenda en el sitio (Oscar, 2026-11-25). Van separados por
+# idioma aunque hoy digan lo mismo, para que el de español cambie sin tocar el sitio.
+FREEBIES = {
+    'en': {'freebies': 'FREEBIES'},
+    'es': {'freebies': 'FREEBIES'},
+}
+LIGADURA = '#'   # la LL en la palabra que se le pasa a runas_hito.mjs
 
 # La piedra (las proporciones del Prop_Hito, estirado): pie W0 x D0, hombro W1 x D1 a la altura H1, punta
 # de pirámide hasta H con una cara plana chiquita (`tope`). La cartela va en la cara de enfrente: `pie` es
@@ -98,12 +118,19 @@ def anotar(texto):
 
 
 def nombres():
-    """(sección, idioma, palabra, nombre del objeto) en orden."""
+    """(grupo, clave, idioma, palabra, nombre del objeto) en orden: primero los de los portales (su
+    lugar en la fila del horneado no cambia) y luego los de la ofrenda."""
     out = []
-    for lang in ('en', 'es'):
-        for sec, palabra in NOMBRES[lang].items():
-            out.append((sec, lang, palabra, f'{PIEDRA}_Runas_{sec}_{lang}'))
+    for grupo, tabla in (('portal', NOMBRES), ('ofrenda', OFRENDA), ('freebies', FREEBIES)):
+        for lang in ('en', 'es'):
+            for clave, palabra in tabla[lang].items():
+                out.append((grupo, clave, lang, palabra, f'{PIEDRA}_Runas_{clave}_{lang}'))
     return out
+
+
+def runas_de(palabra):
+    """La palabra en runas: una por letra, la LL una sola."""
+    return list(palabra.replace('LL', LIGADURA))
 
 
 # ---------------------------------------------------------------- la cara de enfrente
@@ -267,9 +294,11 @@ def piedra():
 # ---------------------------------------------------------------- las runas
 
 def leer_glifos(letras):
-    """Los contornos de cada letra (block letters de grosor parejo, runas_neon.mjs)."""
+    """Los contornos de cada letra (block letters de grosor parejo de runas_neon.mjs, por
+    runas_hito.mjs, que añade la LL)."""
     node = shutil.which('node') or 'C:/Program Files/nodejs/node.exe'
-    r = subprocess.run([node, os.path.join(AQUI, 'runas_neon.mjs'), letras], cwd=REPO, capture_output=True, text=True, check=True)
+    r = subprocess.run([node, os.path.join(AQUI, 'runas_hito.mjs'), letras], cwd=REPO, capture_output=True,
+                       text=True, encoding='utf-8', check=True)
     return {l['letra']: l['contornos'] for l in json.loads(r.stdout)['letras']}
 
 
@@ -345,7 +374,7 @@ def glifo(contornos):
 def columna(palabra, glifos):
     """Las figuras de un nombre en coordenadas de la cartela (u, v; v = 0 en su centro), de arriba
     abajo, con `separa` entre las cajas de dos runas seguidas y la columna centrada."""
-    gs = [glifos[c] for c in palabra]
+    gs = [glifos[c] for c in runas_de(palabra)]
     total = sum(g['alto'] for g in gs) + (len(gs) - 1) * RUNAS['separa']
     v = total / 2
     figuras = []
@@ -471,6 +500,25 @@ def escalar_islas(o, peso, oculta, abajo=ABAJO):
     bm.free()
 
 
+def densidad_px(objs, tam=TAM):
+    """Pixeles del atlas por centímetro (raíz de área UV entre área 3D), sin lo que no se ve."""
+    caras = []
+    for o in objs:
+        bm = bmesh.new()
+        bm.from_mesh(o.data)
+        uv = bm.loops.layers.uv.active
+        for f in bm.faces:
+            a3 = f.calc_area()
+            pts = [lp[uv].uv for lp in f.loops]
+            a2 = abs(sum(p.x * q.y - q.x * p.y for p, q in zip(pts, pts[1:] + pts[:1]))) / 2
+            if a3 > 1e-9:
+                caras.append((a2, a3))
+        bm.free()
+    mediana = float(np.median([a2 / a3 for a2, a3 in caras]))
+    vistas = [(a2, a3) for a2, a3 in caras if a2 / a3 > mediana * 0.2]
+    return math.sqrt(sum(a2 for a2, _ in vistas) * tam * tam / sum(a3 for _, a3 in vistas)) / 100
+
+
 def uv_atlas(roca, columnas, margen=0.004):
     objs = [roca] + columnas
     bpy.ops.object.select_all(action='DESELECT')
@@ -523,7 +571,7 @@ def armar():
            f'{P.triangulos([roca])} triángulos, {abiertas(roca)} aristas abiertas tras la booleana')
     anotar(f'cartela {H["panel_ancho"] * 100:.1f} x {ph * 100:.1f} cm, {H["hondo"] * 1000:.0f} mm de hondo, del {H["pie"] * 100:.0f} '
            f'al {(H["pie"] + ph) * 100:.1f} cm sobre la cara (hombro a {H["H1"] * 100:.0f} cm); {fondo} vértices en el fondo')
-    letras = ''.join(sorted({c for lang in NOMBRES.values() for p in lang.values() for c in p}))
+    letras = ''.join(sorted({c for *_, palabra, _ in nombres() for c in runas_de(palabra)}))
     glifos = {k: glifo(v) for k, v in leer_glifos(letras).items()}
     altos = {k: g['alto'] for k, g in glifos.items()}
     anotar(f'runas a {RUNAS["escala"] * 1000:.1f} mm por unidad: nominal {RUNAS["alto"] * RUNAS["escala"] * 100:.1f} cm; '
@@ -532,10 +580,11 @@ def armar():
            f'relieve {(H["hondo"] - RUNAS["cara"]) * 1000:.0f} mm')
     columnas = []
     todo_ok = True
-    for k, (sec, lang, palabra, nombre) in enumerate(nombres()):
+    for k, (grupo, clave, lang, palabra, nombre) in enumerate(nombres()):
         o, total, malos = runas(palabra, nombre, glifos)
         o['palabra'] = palabra
-        o['seccion'] = sec
+        o['grupo'] = grupo
+        o['seccion'] = clave
         o['idioma'] = lang
         todo_ok &= revisar(o, roca, total, malos)
         x = (k + 1) * SEPARACION
@@ -545,6 +594,7 @@ def armar():
         columnas.append(o)
     anotar('revisión de las columnas: ' + ('todas OK' if todo_ok else 'HAY QUE REVISAR'))
     uv_atlas(roca, columnas)
+    anotar(f'atlas: la piedra a {densidad_px([roca]):.1f} px/cm, las runas a {densidad_px(columnas):.1f} px/cm')
     os.makedirs(os.path.dirname(BLEND), exist_ok=True)
     bpy.context.preferences.filepaths.save_version = 0
     bpy.ops.wm.save_as_mainfile(filepath=BLEND)
@@ -719,14 +769,17 @@ def _tomas(carpeta, roca, columnas, ext, sc, cam, piso=None, brillo=None):
         ejemplo.data.materials.clear()
         for mat in antes:
             ejemplo.data.materials.append(mat)
-    frentes = []
+    frentes = {}
     for o in columnas:
         solo([roca, o])
         R._encuadrar(cam, [roca], az=0, el=4, margen=1.08)
-        frentes.append(_foto(sc, os.path.join(carpeta, f'nombre_{o["seccion"]}_{o["idioma"]}.{ext}'), (420, 1000)))
+        ruta = _foto(sc, os.path.join(carpeta, f'nombre_{o["seccion"]}_{o["idioma"]}.{ext}'), (420, 1000))
+        frentes.setdefault(o.get('grupo', 'portal'), []).append(ruta)
     for o in todos:
         o.hide_render = False
-    rutas.append(hoja(carpeta, frentes, f'hitos_hoja.{ext}', columnas=5))
+    for grupo, rs in frentes.items():
+        rutas.append(hoja(carpeta, rs, f'hitos_hoja.{ext}' if grupo == 'portal' else f'hitos_hoja_{grupo}.{ext}',
+                          columnas=min(5, len(rs))))
     return rutas
 
 

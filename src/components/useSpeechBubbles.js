@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
-import { pedirTurno, soltarTurno, tiempoLinea, alCompletar, hablando, TURNO } from '../lib/turnoGlobos.js'
+import { pedirTurno, soltarTurno, tiempoLinea, alCompletar, hablando, registrarCallar, TURNO } from '../lib/turnoGlobos.js'
 
 // Lo que dura un globo sale del turno de palabra (lib/turnoGlobos.js): se escribe a TURNO.letras y,
 // ya completo, se queda lo que se tarda en leerlo. Las frases de Skulley piden turno como las de
@@ -313,6 +313,17 @@ export default function useSpeechBubbles({
     try { clearInterval(typingTimerRef.current) } catch {}
     typingTimerRef.current = null
     setDisplayText(fullTextRef.current)
+  }), [])
+  // un susto (el rayo que lo despieza): se calla a media frase (turnoGlobos `choque`)
+  useEffect(() => registrarCallar('skulley', () => {
+    epochRef.current += 1
+    clearAllTimers()
+    overrideRef.current = null
+    pendienteRef.current = 0
+    setVisible(false)
+    setFullText('')
+    setDisplayText('')
+    try { setTheme('normal') } catch {}
   }), [])
   const enabledRef = useRef(enabled)
   enabledRef.current = enabled

@@ -7908,3 +7908,76 @@ div:has(> #privy-dialog-backdrop) {
   .chip-tinta, .shop-btn--primary, .shop-btn--ghost, .dwp-h, .dwp-chip { transition: background-color 120ms linear, color 120ms linear; }
   .dsp-idioma-burbuja.burbuja-vidrio, .mobile-close.burbuja-vidrio, .dsp-pausa-centro { animation: none; }
 }
+
+/* Ofrenda ganada (ToastOfrenda.jsx, Oscar 2026-11-25): tarjeta chica en el paspartú oscuro de los
+   premios (tinta y sombra dura del globo), con la banda amarilla de Argus y sus rayos detrás del
+   objeto que gira, el titular en Luckiest Guy y el botón de siempre. Entra de golpe con rebote. */
+.ofr-toast {
+  position: relative;
+  width: min(25rem, 100%);
+  overflow: hidden;
+  background: #150a1d;
+  color: #fff;
+  border: 3px solid #000;
+  border-radius: 1.4rem;
+  box-shadow: 7px 7px 0 #000;
+  rotate: -1.5deg;
+  animation: ofr-toast-entra 560ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.ofr-toast-raiz__fondo { animation: ofr-toast-fondo 260ms ease-out both; }
+.ofr-toast-raiz.is-sale .ofr-toast { animation: ofr-toast-sale 220ms cubic-bezier(0.36, 0, 0.66, -0.56) both; }
+.ofr-toast-raiz.is-sale .ofr-toast-raiz__fondo { animation: ofr-toast-fondo 220ms ease-in reverse both; }
+@keyframes ofr-toast-entra {
+  from { opacity: 0; transform: translateY(18%) scale(0.6) rotate(-7deg); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes ofr-toast-sale {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(12%) scale(0.75) rotate(5deg); }
+}
+@keyframes ofr-toast-fondo { from { opacity: 0; } to { opacity: 1; } }
+.ofr-toast__escena {
+  position: relative;
+  height: 15rem;
+  margin: 0.9rem 0.9rem 0;
+  border-radius: 1rem;
+  background: #f5ff00;
+  overflow: hidden;
+}
+.ofr-toast__escena .argus-prize-rays { left: 50%; top: 50%; width: 46rem; }
+.ofr-toast__canvas { position: absolute !important; inset: 0; pointer-events: none; }
+.ofr-toast__cuerpo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 1.2rem 1.4rem 1.4rem;
+  text-align: center;
+}
+.ofr-toast__titulo {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.7rem, 6vw, 2.25rem);
+  line-height: 1;
+  letter-spacing: 0.01em;
+  color: #fff;
+}
+.ofr-toast__titulo--runas {
+  font-family: 'Skulley Glyph Variable Bold', 'Skulley Glyph Variable', var(--font-display);
+  letter-spacing: 0;
+}
+.ofr-toast__pista {
+  margin: 0;
+  max-width: 21rem;
+  font-family: var(--font-body);
+  font-size: 0.98rem;
+  line-height: 1.4;
+  color: rgb(255 255 255 / 0.8);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ofr-toast, .ofr-toast-raiz.is-sale .ofr-toast { animation-name: ofr-toast-fondo; }
+  .ofr-toast-raiz.is-sale .ofr-toast { animation-direction: reverse; }
+  .ofr-toast__escena .argus-prize-rays { animation: none; }
+}
+/* Inventario → Objetos (ObjetosInventario.jsx): la banda del toast de la ofrenda, del ancho de la columna. */
+.ofr-toast__escena.inv-escena { width: 14rem; height: 11rem; margin: 0; }

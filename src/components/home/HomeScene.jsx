@@ -253,6 +253,22 @@ import LetrerosPortales from './LetrerosPortales.jsx'
 import ZonaOfrenda from './ZonaOfrenda.jsx'
 import PlazaOfrenda from './PlazaOfrenda.jsx'
 import ObjetosOfrenda from './ObjetosOfrenda.jsx'
+import HitosOfrenda from './HitosOfrenda.jsx'
+import SiluetasOfrenda from './SiluetasOfrenda.jsx'
+import { skulleyOculto, pideOculto, ponerOculto } from '../../lib/inventarioEscena.js'
+
+// Inventario → Objetos: Skulley se quita de en medio y en su lugar gira el objeto (lib/inventarioEscena.js).
+// En Customize ya cubierto lo deshace y lo rearma WallpaperEscena; fuera de ahí va de inmediato.
+function OcultaSkulley({ playerRef }) {
+  useFrame(() => {
+    const g = playerRef?.current
+    if (!g) return
+    if (wallpaperEstado.fase !== 'lista' && skulleyOculto() !== pideOculto()) ponerOculto(pideOculto())
+    const ver = !skulleyOculto()
+    if (g.visible !== ver) g.visible = ver
+  })
+  return null
+}
 import { PrecalentarGlobo } from '../SpeechBubble3D.jsx'
 import FloatingExclamation from '../FloatingExclamation.jsx'
 import ZoidianNPC from '../ZoidianNPC.jsx'
@@ -696,9 +712,12 @@ export default function HomeScene({
             glifo, para cruzar la música con la canción rota (lib/cancionOfrenda.js). */}
         <ZonaOfrenda playerRef={playerRef} activa={section === 'home' && !bootLoading} />
         {/* La plaza de la ofrenda: su oscuridad, sus rayos de luz y sus antorchas
-            (home/PlazaOfrenda.jsx; las estelas y los pétalos van con el bosque y con
-            PetalosCamino). Montada siempre. */}
+            (home/PlazaOfrenda.jsx; los pétalos van con PetalosCamino). Montada siempre. */}
         <PlazaOfrenda playerRef={playerRef} activo={section === 'home'} />
+        {/* Detrás de cada lugar de la plaza, un hito labrado con el nombre de su ofrenda en runas que se
+            prende en naranja al ponerla (home/HitosOfrenda.jsx; reemplaza a las estelas). */}
+        <HitosOfrenda visible={comoHome} playerRef={playerRef} />
+        <OcultaSkulley playerRef={playerRef} />
         {/* Los objetos de la ofrenda en su lugar al ponerlos (home/ObjetosOfrenda.jsx):
             su GLB llega aparte; montados siempre, lo no puesto encogido a casi nada.
             Los que Skulley carga flotan sobre él solo con él a la vista en la home. */}
@@ -707,6 +726,8 @@ export default function HomeScene({
             playerRef={playerRef}
             mostrarCarga={Boolean(section === 'home' && homeLanded && !saliendoDeHome && !orbActiveUi && !customizeActive)}
           />
+          {/* La silueta de cada ofrenda que falta, en su lugar (home/SiluetasOfrenda.jsx; con las misiones abiertas). */}
+          <SiluetasOfrenda visible={comoHome} />
         </Suspense>
         {/* God Rays anchor (hidden when inactive and no depth write) */}
         {fx.godEnabled && (

@@ -43,8 +43,8 @@ COLORES = {
     'Ipad_Funda': (0.10, 0.14, 0.30), 'Ipad_Lente': (0.05, 0.05, 0.06),
     'Lapiz_Blanco': (0.95, 0.95, 0.94), 'Lapiz_Punta': (0.55, 0.55, 0.57),
     'Leica_Piel': (0.04, 0.04, 0.045), 'Leica_Metal': (0.78, 0.79, 0.80), 'Leica_Lente': (0.05, 0.05, 0.055),
-    'Leica_Vidrio': (0.10, 0.14, 0.22), 'Leica_Rojo': (0.85, 0.05, 0.06), 'Leica_Ventana': (0.20, 0.24, 0.30),
-    'Leica_Correa': (0.35, 0.18, 0.08),
+    'Leica_Vidrio': (0.10, 0.14, 0.22), 'Leica_Ventana': (0.20, 0.24, 0.30), 'Leica_Tapa': (0.13, 0.135, 0.15),
+    'Leica_Rojo': (0.75, 0.007, 0.013), 'Leica_Pantalla': (0.10, 0.12, 0.15),
     'Album_Piel': (0.38, 0.12, 0.08), 'Album_Hojas': (0.93, 0.89, 0.78), 'Album_Marco': (0.98, 0.98, 0.96),
     'Album_Fotos': (0.60, 0.70, 0.80), 'Album_Esquina': (0.08, 0.08, 0.08),
     'Teclado_Cuerpo': (0.10, 0.10, 0.11), 'Teclado_Blanca': (0.96, 0.96, 0.95), 'Teclado_Negra': (0.03, 0.03, 0.03),
@@ -261,78 +261,344 @@ def ipad():
     return asentar(unir('Ofrenda_ipad', partes))
 
 
-# ---------------------------------------------------------------- 2. su cámara Leica
+# ---------------------------------------------------------------- 2. su cámara (la compacta que usa, sin marcas)
 
 def leica():
-    W, D = 0.138, 0.034          # cuerpo de M: de lado a lado y de fondo (puntas redondas)
-    h_cuerpo, h_tapa = 0.058, 0.018
+    """La compacta que usa Oscar (una Leica D-Lux 8: 130 × 73 × 62 mm con el lente), sin marcas ni correa.
+    Cuerpo negro mate; tapa plana gris oscuro con dos perillas moleteadas, el disparador plateado, un botón
+    chico y la zapata con sus dos rieles; la joroba del visor en la esquina de atrás del otro lado, con el
+    ocular de hule abajo; el lente grande con anillo estriado, anillo de diafragma con rayitas blancas y el
+    vidrio oscuro; el punto rojo liso (sin letras) y el foco de enfoque. Atrás, la pantalla con su marco,
+    PLAY, la cruceta, MENU, dos botones arriba, la rueda del visor y el descanso del pulgar. Donde la de
+    verdad trae letras van runas de SKULLEYGLYPH (Oscar, 2026-11-25), planas para que no lleven tinta."""
+    import json
+    import shutil
+    import subprocess
+    from mathutils.geometry import tessellate_polygon
+
+    W, D = 0.127, 0.036              # cuerpo de lado a lado (x) y de fondo (y), sin el lente ni el ocular
+    h_cuerpo, h_tapa = 0.0575, 0.0085
+    top = h_cuerpo + h_tapa
+    atras = D / 2                    # la cara de atrás del cuerpo (+y)
+    sobre = 0.00015                  # lo que flotan las runas y los planos sobre su cara
     partes = []
-    # el cuerpo: el contorno visto desde arriba es un rectángulo de puntas redondas; de pie (z arriba)
-    base = losa('leica_base', W, D, 0.004, D / 2 - 0.0005, 0.0012, mat_canto='Leica_Metal')
-    cuerpo = poner(losa('leica_cuerpo', W - 0.002, D - 0.002, h_cuerpo, D / 2 - 0.0015, 0.0, mat_canto='Leica_Piel'), (0, 0, 0.004))
-    tapa = poner(losa('leica_tapa', W, D, h_tapa, D / 2 - 0.0005, 0.0018, mat_canto='Leica_Metal'), (0, 0, 0.004 + h_cuerpo))
-    partes += [base, cuerpo, tapa]
-    top = 0.004 + h_cuerpo + h_tapa
-    # arriba: perilla de velocidades con disparador, palanca de avance, perilla de rebobinado y zapata
-    partes.append(poner(cilindro('leica_dial', 0.0105, 0.006, 'Leica_Metal', 28, bisel=0.0008), (0.034, 0.002, top)))
-    partes.append(poner(cilindro('leica_disparo', 0.0045, 0.006, 'Leica_Metal', 16, bisel=0.0008), (0.046, -0.006, top)))
-    partes.append(poner(cilindro('leica_disparo2', 0.0026, 0.002, 'Leica_Piel', 12), (0.046, -0.006, top + 0.006)))
-    palanca = poner(caja('leica_palanca', (0.024, 0.004, 0.002), 'Leica_Metal', 0.0006), (0.058, 0.006, top + 0.0035), (0, 0, 25))
-    partes.append(palanca)
-    partes.append(poner(cilindro('leica_rebobina', 0.0085, 0.009, 'Leica_Metal', 24, bisel=0.0008), (-0.045, 0.002, top)))
-    partes.append(poner(caja('leica_zapata', (0.018, 0.017, 0.003), 'Leica_Metal', 0.0005), (-0.005, 0.002, top)))
-    # enfrente (-Y): ventanas del telémetro y del visor, la de luz y el punto rojo
-    frente = -D / 2 - 0.0004
-    zv = 0.004 + h_cuerpo + h_tapa / 2
-    for nombre, x, w, h, mat in (('leica_telemetro', -0.042, 0.011, 0.008, 'Leica_Ventana'),
-                                 ('leica_luz', -0.012, 0.012, 0.0075, 'Album_Marco'),
-                                 ('leica_visor', 0.041, 0.017, 0.0105, 'Leica_Ventana')):
-        partes.append(poner(plano(nombre, w, h, mat), (x, frente, zv), (90, 0, 0)))
-    partes.append(poner(cilindro('leica_punto', 0.0052, 0.0012, 'Leica_Rojo', 20), (0.016, frente + 0.0002, zv), (90, 0, 0)))
-    # el lente de 50 mm: montura, anillo de enfoque con su uña, anillo de diafragma y el vidrio
-    zl = 0.004 + h_cuerpo * 0.52
-    x_l = 0.004
-    capas = (('leica_montura', 0.025, 0.004, 'Leica_Metal'), ('leica_enfoque', 0.0235, 0.011, 'Leica_Lente'),
-             ('leica_diafragma', 0.0225, 0.010, 'Leica_Metal'), ('leica_frente', 0.0215, 0.011, 'Leica_Lente'))
-    y = -D / 2
-    for nombre, r, largo, mat in capas:
-        c = cilindro(nombre, r, largo, mat, 32, bisel=0.0008)
-        poner(c, (0, 0, 0), (90, 0, 0))
-        poner(c, (x_l, y, zl))
-        y -= largo
-        partes.append(c)
-    vidrio = poner(cilindro('leica_vidrio', 0.017, 0.002, 'Leica_Vidrio', 32), (0, 0, 0), (90, 0, 0))
-    poner(vidrio, (x_l, y + 0.0018, zl))
-    partes.append(vidrio)
-    una = poner(caja('leica_una', (0.008, 0.006, 0.006), 'Leica_Metal', 0.0012), (x_l, -D / 2 - 0.008, zl - 0.026))
-    partes.append(una)
-    # los ojillos de la correa en las puntas
+
+    def estriado(nombre, r, alto, n, prof, mat):
+        """Anillo moleteado en z de 0 a alto: n estrías de `prof` sobre el radio r, con tapas."""
+        fr, sube = (0.0, 0.15, 0.5, 0.65), (0, prof, prof, 0)
+        bm = bmesh.new()
+        anillos = []
+        for z in (0, alto):
+            vs = []
+            for k in range(n):
+                for f, d in zip(fr, sube):
+                    a = 2 * math.pi * (k + f) / n
+                    vs.append(bm.verts.new(((r + d) * math.cos(a), (r + d) * math.sin(a), z)))
+            anillos.append(vs)
+        A, B = anillos
+        m = len(A)
+        for k in range(m):
+            bm.faces.new((A[k], A[(k + 1) % m], B[(k + 1) % m], B[k]))
+        for vs, z in ((A, 0), (B, alto)):
+            c = bm.verts.new((0, 0, z))
+            for k in range(m):
+                bm.faces.new((c, vs[k], vs[(k + 1) % m]))
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+        return _con_material(_objeto(nombre, bm), mat)
+
+    def torno(nombre, perfil, mats, segs=48):
+        """Sólido de revolución alrededor de z: perfil [(radio, z)] cerrado en el eje, un material por tramo."""
+        nombres = list(dict.fromkeys(mats))
+        bm = bmesh.new()
+        anillos = []
+        for r, z in perfil:
+            if r < 1e-7:
+                anillos.append([bm.verts.new((0, 0, z))])
+            else:
+                anillos.append([bm.verts.new((r * math.cos(2 * math.pi * k / segs), r * math.sin(2 * math.pi * k / segs), z))
+                                for k in range(segs)])
+        for i, mat in enumerate(mats):
+            A, B = anillos[i], anillos[i + 1]
+            for k in range(segs):
+                k2 = (k + 1) % segs
+                if len(A) == 1:
+                    vs = (A[0], B[k], B[k2])
+                elif len(B) == 1:
+                    vs = (A[k], A[k2], B[0])
+                else:
+                    vs = (A[k], A[k2], B[k2], B[k])
+                bm.faces.new(vs).material_index = nombres.index(mat)
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+        o = _objeto(nombre, bm)
+        for n in nombres:
+            o.data.materials.append(material(n))
+        return o
+
+    def caja_redonda(nombre, ancho, fondo, alto, radio, abajo, arriba, mat, segs=8, pasos=4):
+        """Caja de esquinas redondas (vista desde arriba) con la orilla de abajo y la de arriba redondeadas cada
+        una con su radio. Se arma con anillos (cada uno es el contorno metido hacia adentro), no con bevel: con
+        esquinas chicas el bevel se recorta en los tramos cortos y deja muescas."""
+        perfil = []                                  # (cuánto se mete, z) de abajo hacia arriba
+        if abajo > 0:
+            perfil += [(abajo * (1 - math.sin(math.pi / 2 * i / pasos)), abajo * (1 - math.cos(math.pi / 2 * i / pasos)))
+                       for i in range(pasos + 1)]
+        else:
+            perfil.append((0.0, 0.0))
+        if arriba > 0:
+            perfil += [(arriba * (1 - math.cos(math.pi / 2 * i / pasos)), alto - arriba + arriba * math.sin(math.pi / 2 * i / pasos))
+                       for i in range(pasos + 1)]
+        else:
+            perfil.append((0.0, alto))
+        bm = bmesh.new()
+        anillos = [[bm.verts.new((x, y, z)) for x, y in _redondo(segs, ancho - 2 * m, fondo - 2 * m, radio - m)]
+                   for m, z in perfil]
+        n = len(anillos[0])
+        for A, B in zip(anillos, anillos[1:]):
+            for k in range(n):
+                bm.faces.new((A[k], A[(k + 1) % n], B[(k + 1) % n], B[k]))
+        bm.faces.new(list(reversed(anillos[0])))
+        bm.faces.new(anillos[-1])
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+        return _con_material(_objeto(nombre, bm), mat)
+
+    def plano_redondo(nombre, ancho, alto, radio, mat, segs=6):
+        """Una sola cara de esquinas redondas en xy (normal +z): sin grueso, así no lleva tinta."""
+        bm = bmesh.new()
+        bm.faces.new([bm.verts.new((x, y, 0)) for x, y in _redondo(segs, ancho, alto, radio)])
+        return _con_material(_objeto(nombre, bm), mat)
+
+    def atras_de(o, x, z, sale=0.0):
+        """Gira lo que se armó mirando a +z para que mire hacia atrás (+y) y lo pone en (x, z), con su base
+        `sale` detrás de la cara de atrás (negativo: metido en el cuerpo)."""
+        return poner(o, (x, atras + sale, z), (-90, 0, 0))
+
+    # ---- las runas: las block letters de scripts/estilo/runas_hito.mjs (las de los hitos; la LL es una runa)
+    ALTO_RUNA = 7.2                  # alto nominal de una runa en sus unidades (y de -0.6 a 6.6)
+    ESPACIO = 2.2                    # un espacio entre palabras, en las mismas unidades
+    SIMPLIFICA = 0.03                # tolerancia de Douglas-Peucker en unidades de la runa (a 4 mm de alto, 0.02 mm)
+    node = shutil.which('node') or 'C:/Program Files/nodejs/node.exe'
+
+    def simplificar(pts):
+        """Douglas-Peucker de un lazo cerrado, partido en el punto más lejano del primero."""
+        def dp(a):
+            guarda = [True] + [False] * (len(a) - 2) + [True]
+            pila = [(0, len(a) - 1)]
+            while pila:
+                i, j = pila.pop()
+                (x1, y1), (x2, y2) = a[i], a[j]
+                L = math.hypot(x2 - x1, y2 - y1) or 1e-12
+                d, q = max(((abs((x2 - x1) * (y1 - a[k][1]) - (x1 - a[k][0]) * (y2 - y1)) / L, k) for k in range(i + 1, j)),
+                           default=(0.0, -1))
+                if q >= 0 and d > SIMPLIFICA:
+                    guarda[q] = True
+                    pila += [(i, q), (q, j)]
+            return [p for p, g in zip(a, guarda) if g]
+        if len(pts) < 6:
+            return pts
+        x0, y0 = pts[0]
+        k = max(range(len(pts)), key=lambda i: (pts[i][0] - x0) ** 2 + (pts[i][1] - y0) ** 2)
+        return dp(pts[:k + 1])[:-1] + dp(pts[k:] + [pts[0]])[:-1]
+
+    def leer_runas(texto):
+        """Un renglón en runas: cada glifo con su centro en x (el renglón centrado en 0) y sus figuras
+        (exterior + huecos) alrededor de ese centro, con la y hacia arriba. Devuelve (glifos, ancho)."""
+        glifos, cursor = [], 0.0
+        for palabra in texto.split():
+            r = subprocess.run([node, os.path.join(REPO, 'scripts', 'estilo', 'runas_hito.mjs'), palabra.replace('LL', '#')],
+                               cwd=REPO, capture_output=True, text=True, encoding='utf-8', check=True)
+            d = json.loads(r.stdout)
+            for l in d['letras']:
+                lazos = []
+                for c in l['contornos']:
+                    pts = []
+                    for x, y in c['pts']:
+                        if not pts or abs(pts[-1][0] - x) + abs(pts[-1][1] - y) > 1e-6:
+                            pts.append((x, y))
+                    if len(pts) > 2 and abs(pts[0][0] - pts[-1][0]) + abs(pts[0][1] - pts[-1][1]) < 1e-6:
+                        pts.pop()
+                    pts = simplificar(pts)
+                    if len(pts) >= 3:
+                        lazos.append((pts, c['hueco']))
+                xs = [x for pts, _ in lazos for x, _ in pts]
+                cx = (min(xs) + max(xs)) / 2
+
+                def dentro(p, lazo):
+                    c = False
+                    for i in range(len(lazo)):
+                        (xi, yi), (xj, yj) = lazo[i], lazo[i - 1]
+                        if (yi > p[1]) != (yj > p[1]) and p[0] < (xj - xi) * (p[1] - yi) / (yj - yi) + xi:
+                            c = not c
+                    return c
+                figuras = [[pts] for pts, hueco in lazos if not hueco]
+                for pts, hueco in lazos:
+                    if hueco:
+                        for fig in figuras:
+                            if dentro(pts[0], fig[0]):
+                                fig.append(pts)
+                                break
+                # y hacia arriba, centrado en x en su glifo y en y en la caja nominal (3.0 = el medio de 0..6)
+                figuras = [[[(x - cx, 3.0 - y) for x, y in lazo] for lazo in fig] for fig in figuras]
+                glifos.append({'cx': cursor + d['ancho'] / 2 + cx, 'figuras': figuras})
+            cursor += d['ancho'] + ESPACIO
+        ancho = cursor - ESPACIO
+        for g in glifos:
+            g['cx'] -= ancho / 2
+        return glifos, ancho
+
+    def armar_runas(nombre, piezas, s):
+        """piezas: [(glifo, P, R, U)]: cada glifo con su centro en P, su derecha R y su arriba U (la cara mira
+        a R × U), a `s` metros por unidad. Un solo objeto plano de Album_Marco."""
+        bm = bmesh.new()
+        for g, P, R, U in piezas:
+            for fig in g['figuras']:
+                pts = [p for lazo in fig for p in lazo]
+                tris = tessellate_polygon([[Vector((x, y, 0)) for x, y in lazo] for lazo in fig])
+                vs = [bm.verts.new(P + R * (x * s) + U * (y * s)) for x, y in pts]
+                for a, b, c in tris:
+                    (x1, y1), (x2, y2), (x3, y3) = pts[a], pts[b], pts[c]
+                    area = (x2 - x1) * (y3 - y1) - (x3 - x1) * (y2 - y1)
+                    if abs(area) < 1e-9:
+                        continue
+                    if area < 0:
+                        b, c = c, b
+                    try:
+                        bm.faces.new((vs[a], vs[b], vs[c]))
+                    except ValueError:
+                        pass
+        sueltos = [v for v in bm.verts if not v.link_faces]
+        bmesh.ops.delete(bm, geom=sueltos, context='VERTS')
+        return _con_material(_objeto(nombre, bm), 'Album_Marco')
+
+    def renglon_recto(texto, alto, origen, R, U, alinea=0.0):
+        """Un renglón derecho: `origen` es su centro (alinea 0), su orilla de inicio (alinea -1) o la de fin (1)."""
+        s = alto / ALTO_RUNA
+        glifos, ancho = leer_runas(texto)
+        origen = Vector(origen) - R * (alinea * ancho / 2 * s)
+        return [(g, origen + R * (g['cx'] * s), R, U) for g in glifos], s, ancho * s
+
+    def renglon_arco(texto, alto, r, z, abajo):
+        """Un renglón sobre un arco de radio r en el plano z (el de enfrente de un aro que mira a +z), centrado
+        abajo (se lee de izquierda a derecha con la cabeza hacia el centro) o arriba (cabeza hacia afuera)."""
+        s = alto / ALTO_RUNA
+        glifos, ancho = leer_runas(texto)
+        piezas = []
+        for g in glifos:
+            if abajo:
+                th = -math.pi / 2 + g['cx'] * s / r
+                R, U = Vector((-math.sin(th), math.cos(th), 0)), Vector((-math.cos(th), -math.sin(th), 0))
+            else:
+                th = math.pi / 2 - g['cx'] * s / r
+                R, U = Vector((math.sin(th), -math.cos(th), 0)), Vector((math.cos(th), math.sin(th), 0))
+            piezas.append((g, Vector((r * math.cos(th), r * math.sin(th), z)), R, U))
+        return piezas, s, math.degrees(ancho * s / r)
+
+    def perilla(nombre, x, y, r, alto, n):
+        aro = poner(estriado(nombre, r, alto, n, 0.0007, 'Leica_Piel'), (x, y, top))
+        cara = poner(cilindro(nombre + '_cara', r - 0.0003, 0.0009, 'Leica_Piel', 32, bisel=0.0004), (x, y, top + alto))
+        return [aro, cara]
+
+    # ---- el cuerpo de piel negra y la tapa encima, del mismo contorno (la junta queda como una ranura chica)
+    partes.append(caja_redonda('leica_cuerpo', W, D, h_cuerpo, 0.0065, 0.0025, 0.0012, 'Leica_Piel'))
+    partes.append(poner(caja_redonda('leica_tapa', W, D, h_tapa, 0.0065, 0.0012, 0.0028, 'Leica_Tapa'), (0, 0, h_cuerpo)))
+    # la joroba del visor: atrás, del lado contrario a las perillas (+x); llega hasta encima del ocular
+    jw = 0.031
+    jx = W / 2 - jw / 2 - 0.0004
+    j0, j1 = -0.002, atras + 0.0045
+    partes.append(poner(caja_redonda('leica_visor', jw, j1 - j0, top + 0.0075 - 0.058, 0.006, 0.001, 0.003, 'Leica_Tapa'),
+                        (jx, (j0 + j1) / 2, 0.058)))
+    # ---- arriba, del otro lado (-x, a la izquierda vista de frente): la perilla de compensación atrás en la
+    # punta, el disparador plateado en su anillo moleteado adelante, el botón chico en la esquina y la de velocidades
+    partes += perilla('leica_compensa', -0.050, 0.0055, 0.0088, 0.0058, 24)
+    partes += perilla('leica_velocidad', -0.0145, 0.0015, 0.0108, 0.006, 28)
+    partes.append(poner(estriado('leica_disparo_aro', 0.0068, 0.0048, 20, 0.0006, 'Leica_Piel'), (-0.036, -0.008, top)))
+    partes.append(poner(cilindro('leica_disparo', 0.0042, 0.0022, 'Leica_Metal', 24, bisel=0.0006), (-0.036, -0.008, top + 0.0036)))
+    partes.append(poner(cilindro('leica_boton', 0.0034, 0.0014, 'Leica_Piel', 20, bisel=0.0004), (-0.0555, -0.0105, top)))
+    # la zapata al centro, con sus dos rieles plateados de adelante hacia atrás
+    zx = 0.0125
+    partes.append(poner(caja('leica_zapata', (0.020, 0.019, 0.0022), 'Leica_Tapa', 0.0005), (zx, 0, top)))
     for s in (-1, 1):
-        partes.append(poner(cilindro('leica_ojillo', 0.003, 0.004, 'Leica_Metal', 12), (0, 0, 0), (0, 90 * s, 0)))
-        poner(partes[-1], (s * (W / 2 + 0.0015), 0, 0.004 + h_cuerpo + 0.006))
-    # la correa de piel, enroscada en el piso detrás
-    t = bmesh.new()
-    bmesh.ops.create_circle(t, cap_ends=False, segments=48, radius=1)
-    curva = []
-    for k in range(40):
-        a = k / 39 * math.pi * 1.6
-        curva.append(Vector((0.05 * math.cos(a) + 0.01, 0.045 + 0.04 * math.sin(a), 0.0025)))
-    t.free()
-    bmc = bmesh.new()
-    ancho, grueso = 0.012, 0.0025
-    prev = None
-    for i, p in enumerate(curva):
-        d = (curva[min(i + 1, len(curva) - 1)] - curva[max(i - 1, 0)]).normalized()
-        lado = Vector((-d.y, d.x, 0)) * ancho / 2
-        anillo = [bmc.verts.new(p + lado + Vector((0, 0, grueso / 2))), bmc.verts.new(p - lado + Vector((0, 0, grueso / 2))),
-                  bmc.verts.new(p - lado - Vector((0, 0, grueso / 2))), bmc.verts.new(p + lado - Vector((0, 0, grueso / 2)))]
-        if prev:
-            for a in range(4):
-                b = (a + 1) % 4
-                bmc.faces.new((prev[a], prev[b], anillo[b], anillo[a]))
-        prev = anillo
-    correa = _con_material(_objeto('leica_correa', bmc), 'Leica_Correa')
-    partes.append(correa)
+        partes.append(poner(caja('leica_riel', (0.003, 0.0185, 0.0009), 'Leica_Metal', 0.0003), (zx + s * 0.0078, 0, top + 0.0022)))
+    # el nombre del modelo, entre la zapata y la joroba, para leerse desde atrás (como en la de verdad)
+    piezas, s_tapa, ancho_tapa = renglon_recto('SKULLEY', 0.0045, (0.0415, -0.0086, top + sobre), Vector((-1, 0, 0)), Vector((0, -1, 0)))
+    partes.append(armar_runas('leica_runas_tapa', piezas, s_tapa))
+
+    # ---- enfrente: el punto rojo liso (arriba a la derecha, junto a la tapa) y el foco de enfoque
+    frente = -D / 2
+    partes.append(poner(cilindro('leica_punto', 0.005, 0.0013, 'Leica_Rojo', 32, bisel=0.0003), (0.046, frente + 0.0005, 0.0508), (90, 0, 0)))
+    partes.append(poner(plano_redondo('leica_foco', 0.0042, 0.0042, 0.0021, 'Leica_Vidrio', 8), (-0.0235, frente - sobre, 0.061), (90, 0, 0)))
+
+    # ---- el lente: perfil (radio, distancia al frente del cuerpo) en mm, del centro del vidrio hacia afuera y
+    # de regreso. El aro de adentro (donde van las runas) y el aro del frente, con las proporciones de la foto.
+    mm = 0.001
+    perfil = [(0.0, 19.6), (7.0, 19.45), (11.5, 19.1), (14.0, 18.7),                     # vidrio, un poco abombado
+              (14.4, 19.2), (19.9, 19.2),                                                 # el aro de adentro
+              (20.2, 21.4), (20.8, 22.0), (25.0, 22.0), (25.9, 21.6), (26.25, 20.8), (26.25, 16.8),   # el aro del frente
+              (25.75, 16.5), (25.75, 16.1),                                               # ranura
+              (26.5, 15.8), (26.6, 15.3), (26.6, 10.4), (26.3, 9.9), (25.75, 9.7),        # anillo de diafragma
+              (25.75, 3.0), (25.45, 2.8), (25.45, 0.6), (26.1, 0.2), (26.1, -1.0), (0.0, -1.0)]   # base (el estriado va encima)
+    mats = ['Leica_Vidrio'] * 3 + ['Leica_Lente'] * (len(perfil) - 4)
+    lente = [torno('leica_lente', [(r * mm, t * mm) for r, t in perfil], mats)]
+    lente.append(poner(estriado('leica_anillo', 25.85 * mm, 6.3 * mm, 36, 0.75 * mm, 'Leica_Lente'), (0, 0, 3.2 * mm)))
+    # las rayitas blancas del diafragma en el arco de arriba (planos: no meten tinta)
+    for i in range(9):
+        a = math.radians(30 + 15 * i)
+        r = 26.6 * mm + 0.00025
+        lente.append(poner(plano('leica_raya', 3.4 * mm, 1.1 * mm, 'Album_Marco'),
+                           (r * math.cos(a), r * math.sin(a), 12.85 * mm), (0, 90, math.degrees(a))))
+    # las runas del aro de adentro: SKULLEYGLYPH abajo (donde la de verdad dice el nombre del lente) y SKULLEY
+    # arriba (donde dice la marca)
+    r_aro, z_aro, alto_aro = 17.15 * mm, 19.2 * mm + sobre, 0.004
+    abajo, s_aro, grados_abajo = renglon_arco('SKULLEYGLYPH', alto_aro, r_aro, z_aro, True)
+    arriba, _, grados_arriba = renglon_arco('SKULLEY', alto_aro, r_aro, z_aro, False)
+    lente.append(armar_runas('leica_runas_lente', abajo + arriba, s_aro))
+    x_l, z_l = -0.004, h_cuerpo - 26.6 * mm - 0.0008
+    for p in lente:
+        poner(p, (0, 0, 0), (90, 0, 0))
+        poner(p, (x_l, frente, z_l))
+    partes += lente
+
+    # ---- atrás. El ocular: una caja de hule debajo de la joroba que sale un poco más que ella, con su vidrio
+    oc_z = 0.061
+    partes.append(atras_de(caja_redonda('leica_ocular_hule', jw - 0.001, 0.017, 0.0065, 0.004, 0.0, 0.0012, 'Leica_Piel'), jx, oc_z, -0.001))
+    partes.append(atras_de(plano_redondo('leica_ocular', 0.023, 0.011, 0.002, 'Leica_Ventana'), jx, oc_z, 0.0055 + sobre))
+    # la rueda de dioptrías junto al ocular, de canto
+    partes.append(poner(estriado('leica_dioptria', 0.0042, 0.003, 12, 0.0006, 'Leica_Piel'), (jx - jw / 2 - 0.0044, atras + 0.0005, 0.0605), (0, 90, 0)))
+    # la pantalla con su marco (del lado del visor)
+    px, pz = 0.0135, 0.0255
+    partes.append(atras_de(caja_redonda('leica_marco', 0.068, 0.042, 0.0017, 0.003, 0.0, 0.0005, 'Leica_Tapa'), px, pz, -0.0005))
+    partes.append(atras_de(plano_redondo('leica_pantalla', 0.062, 0.036, 0.0015, 'Leica_Pantalla'), px, pz, 0.0012 + sobre))
+    # a la derecha (vista desde atrás, -x): PLAY arriba, la cruceta con su botón al centro y MENU abajo
+    bx = -0.042
+    for nombre, z in (('play', 0.0435), ('menu', 0.0105)):
+        partes.append(atras_de(caja_redonda(f'leica_{nombre}', 0.011, 0.008, 0.0018, 0.0022, 0.0, 0.0006, 'Leica_Tapa'), bx, z, -0.0005))
+    partes.append(atras_de(cilindro('leica_cruceta', 0.0085, 0.0017, 'Leica_Tapa', 40, bisel=0.0005), bx, 0.026, -0.0005))
+    partes.append(atras_de(cilindro('leica_cruceta_centro', 0.0033, 0.0024, 'Leica_Piel', 24, bisel=0.0006), bx, 0.026, -0.0005))
+    # los dos botones redondos de arriba, bajo las perillas, y el descanso del pulgar en la orilla
+    for x in (-0.0145, -0.0265):
+        partes.append(atras_de(cilindro('leica_boton_atras', 0.0025, 0.0018, 'Leica_Piel', 20, bisel=0.0005), x, 0.0607, -0.0005))
+    partes.append(atras_de(caja_redonda('leica_pulgar', 0.0048, 0.026, 0.0019, 0.0024, 0.0, 0.0009, 'Leica_Tapa'), -0.0555, 0.028, -0.0005))
+    # las runas de atrás: dos renglones arriba a la izquierda (junto a la rueda) y las de PLAY y MENU
+    izq, arr = Vector((-1, 0, 0)), Vector((0, 0, 1))      # la derecha y el arriba de quien la ve por detrás
+    x0, alto_atras = jx - jw / 2 - 0.0062, 0.0037
+    r1, s_atras, ancho1 = renglon_recto('SKULLEY CAMERA', alto_atras, (x0, atras + sobre, 0.0540), izq, arr, -1)
+    r2, _, ancho2 = renglon_recto('HECHO EN MEXICO', alto_atras, (x0, atras + sobre, 0.04935), izq, arr, -1)
+    partes.append(armar_runas('leica_runas_atras', r1 + r2, s_atras))
+    cara_boton = atras + 0.0013 + sobre
+    rp, s_boton, ancho_play = renglon_recto('PLAY', 0.0033, (bx, cara_boton, 0.0435), izq, arr)
+    rm, _, ancho_menu = renglon_recto('MENU', 0.0033, (bx, cara_boton, 0.0105), izq, arr)
+    partes.append(armar_runas('leica_runas_botones', rp + rm, s_boton))
+    print('leica, runas (mm):', {'tapa': round(ancho_tapa * 1000, 1), 'lente_abajo_grados': round(grados_abajo),
+                                 'lente_arriba_grados': round(grados_arriba), 'atras': (round(ancho1 * 1000, 1), round(ancho2 * 1000, 1)),
+                                 'play': round(ancho_play * 1000, 1), 'menu': round(ancho_menu * 1000, 1)})
+
+    # ---- los ojillos plateados de la correa a los lados (la correa no va)
+    for s in (-1, 1):
+        poste = cilindro('leica_ojillo', 0.0022, 0.0024, 'Leica_Metal', 16)
+        cabeza = poner(cilindro('leica_ojillo_cabeza', 0.0032, 0.0013, 'Leica_Metal', 20, bisel=0.0004), (0, 0, 0.0022))
+        for p in (poste, cabeza):
+            poner(p, (0, 0, 0), (0, 90 * s, 0))
+            poner(p, (s * (W / 2 - 0.0005), 0, 0.051))
+        partes += [poste, cabeza]
     return asentar(unir('Ofrenda_leica', partes))
 
 

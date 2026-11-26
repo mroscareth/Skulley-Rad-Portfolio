@@ -3,7 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import DroneModel, { INVOCAR_GOLPE_S } from './DroneModel.jsx'
 import SpeechBubble3D from '../SpeechBubble3D.jsx'
-import { pedirTurno, seguirTurno, soltarTurno, quitarDeFila, alCompletar, TURNO } from '../../lib/turnoGlobos.js'
+import { pedirTurno, seguirTurno, soltarTurno, quitarDeFila, alCompletar, registrarCallar, escucharChoque, TURNO } from '../../lib/turnoGlobos.js'
 import SilhouetteShadow from '../SilhouetteShadow.jsx'
 import DomeShield from '../fx/DomeShield.jsx'
 import HumoDron from './HumoDron.jsx'
@@ -316,6 +316,21 @@ export default function DroneNPC({
   }
   // si alguien abre una charla a media frase, se completa de golpe
   useEffect(() => alCompletar(() => { const d = est.current.dice; if (d) d.t = Math.max(d.t, d.texto.length / TURNO.letras) }), [])
+  // un susto (turnoGlobos `choque`: un rayo que le pega a alguien sin guion, el despiece de Skulley):
+  // se calla a media frase y la escena con Argus se acaba ahí (si el susto fue su quemada, esa manda)
+  const callarRef = useRef(callar)
+  callarRef.current = callar
+  const terminarEscenaRef = useRef(null)
+  useEffect(() => {
+    const quitarCallar = registrarCallar('madre', () => callarRef.current())
+    const quitarChoque = escucharChoque(() => {
+      const e = est.current
+      if (!e.escena) return
+      if (e.modo === 'conArgus') terminarEscenaRef.current?.()
+      else { e.escena = null; avisarArgus({ escena: false }) }
+    })
+    return () => { quitarCallar(); quitarChoque() }
+  }, [])
   const reclamoRef = useRef(0)
   useEffect(() => () => clearTimeout(reclamoRef.current), [])
   const comentaRef = useRef(0)
@@ -770,6 +785,7 @@ export default function DroneNPC({
     e.fase = 'viaje'
     pedir(e.pos.distanceTo(meta) > 6 ? 'Arrancar' : 'Avanzar')
   }
+  terminarEscenaRef.current = terminarEscena
   function terminarEscena() {
     const e = est.current
     e.escena = null

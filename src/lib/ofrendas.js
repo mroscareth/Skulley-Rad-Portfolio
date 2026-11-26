@@ -16,7 +16,7 @@
 
 export const OFRENDAS = [
   { id: 'ipad', es: 'El iPad donde dibuja', en: 'The iPad he draws on' },
-  { id: 'leica', es: 'Su cámara Leica', en: 'His Leica camera' },
+  { id: 'leica', es: 'Su cámara', en: 'His camera' },
   { id: 'album', es: 'El álbum de fotos de su gente', en: 'The photo album of his people' },
   { id: 'teclado', es: 'Su teclado MIDI', en: 'His MIDI keyboard' },
   { id: 'cerillos', es: 'La caja de cerillos que le regaló su novia', en: 'The matchbox his girlfriend gave him' },

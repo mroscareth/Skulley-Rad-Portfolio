@@ -258,7 +258,7 @@ function GlifoTeclado({ id, t, encendida }) {
   if (id === 'portrait') {
     return (
       <>
-        <span className="tuto-boton"><IconoTinta nombre="playera" tam={26} /></span>
+        <span className="tuto-boton"><IconoTinta nombre="mochila" tam={26} /></span>
         <span className="tuto-boton tuto-boton--amarillo"><IconoTinta nombre="nota" tam={26} /></span>
         <span className="tuto-boton"><IconoTinta nombre="video" tam={26} /></span>
       </>

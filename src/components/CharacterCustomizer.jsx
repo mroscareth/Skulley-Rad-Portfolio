@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import React, { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import IconoTinta from './ui/IconoTinta.jsx'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import { playSfx } from '../lib/sfx.js'
@@ -17,6 +17,13 @@ import { PALETAS_INFERNO, varianteInferno } from '../lib/paletaFuego.js'
 import { cambiarVarianteInferno } from '../lib/characterSkin.js'
 import { ACCESORIOS, ACCESORIOS_EVENT, LOGRO_DE_PROP, getAccesorios, setAccesorio, propDesbloqueado } from '../lib/accesoriosEstado.js'
 import { ACHIEVEMENTS } from '../lib/achievementsCatalog.js'
+import { misionesAbiertas } from '../lib/misionesOfrenda.js'
+import { ocultarSkulley } from '../lib/inventarioEscena.js'
+
+// Los objetos de la ofrenda traen three: su pestaña llega aparte (ObjetosInventario.jsx).
+const ChipsObjetos = lazy(() => import('./ObjetosInventario.jsx').then((m) => ({ default: m.ChipsObjetos })))
+const TextoObjeto = lazy(() => import('./ObjetosInventario.jsx').then((m) => ({ default: m.TextoObjeto })))
+const EscenaObjeto = lazy(() => import('./ObjetosInventario.jsx').then((m) => ({ default: m.EscenaObjeto })))
 
 // Llamas rojas o azules de Inferno (Oscar, 2026-11-16): dos círculos del tamaño
 // de los de color, cada uno con su fuego (la orilla honda y el centro claro),
@@ -192,16 +199,21 @@ function PropsDeParte({ lang, parte, estado, setEstado, enFila = false }) {
 // Pestañas del guardarropa (Oscar, 2026-11-16): lo que Skulley trae puesto se
 // escoge por partes y cada parte es una pestaña. Para agregar una, va aquí y
 // en el panel de abajo.
+// Objetos (Oscar, 2026-11-25: Customize se llama Inventario) son los de la ofrenda que vas ganando;
+// solo con las misiones abiertas (misionesOfrenda.js).
 const PESTANAS = [
-  { id: 'skins', es: 'Skins', en: 'Skins' },
-  { id: 'props', es: 'Props', en: 'Props' },
+  { id: 'skins', es: 'Skins', en: 'Skins', icono: 'playera' },
+  { id: 'props', es: 'Props', en: 'Props', icono: 'lentes' },
+  { id: 'objetos', es: 'Objetos', en: 'Objects', icono: 'mochila' },
 ]
+const pestanasVisibles = () => PESTANAS.filter((p) => p.id !== 'objetos' || misionesAbiertas())
 
 // `enBarra`: dentro de la barra de abajo de escritorio es un switch en la placa
 // blanca de la barra de secciones (.nav-tinta__placa--tecla), del alto de las
 // teclas de junto; la puesta va hundida en tinta (.nav-tinta__placa--switch,
 // Oscar, 2026-11-24). En compacto sigue en la placa azul.
 function Pestanas({ pestana, onPestana, lang, centradas = false, enBarra = false }) {
+  const PESTANAS = pestanasVisibles()
   const idDe = (id) => `cc-pestana-${id}`
   const onKeyDown = (e) => {
     const i = PESTANAS.findIndex((p) => p.id === pestana)
@@ -216,7 +228,7 @@ function Pestanas({ pestana, onPestana, lang, centradas = false, enBarra = false
     document.getElementById(idDe(PESTANAS[n].id))?.focus()
   }
   return (
-    <div role="tablist" aria-label={lang === 'es' ? 'Guardarropa' : 'Wardrobe'} onKeyDown={onKeyDown} className={`relative flex nav-tinta__placa${enBarra ? ' nav-tinta__placa--tecla nav-tinta__placa--switch' : ''}${centradas ? ' justify-center' : ''}`}>
+    <div role="tablist" aria-label={lang === 'es' ? 'Inventario' : 'Inventory'} onKeyDown={onKeyDown} className={`relative flex nav-tinta__placa${enBarra ? ' nav-tinta__placa--tecla nav-tinta__placa--switch' : ''}${centradas ? ' justify-center' : ''}`}>
       {PESTANAS.map((p) => {
         const activa = p.id === pestana
         return (
@@ -232,7 +244,7 @@ function Pestanas({ pestana, onPestana, lang, centradas = false, enBarra = false
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.6 }) } catch { } }}
             className={`nav-tinta__item font-marquee flex items-center gap-2 whitespace-nowrap${enBarra ? '' : ' nav-tinta__item--chico'}${activa ? ' es-activa' : ''}`}
           >
-            {enBarra && <IconoTinta nombre={p.id === 'skins' ? 'playera' : 'lentes'} tam={28} />}
+            {enBarra && <IconoTinta nombre={p.icono} tam={28} />}
             {lang === 'es' ? p.es : p.en}
           </button>
         )
@@ -293,6 +305,10 @@ export default function CharacterCustomizer({
   const faseRef = useRef(null)
   const tiemposRef = useRef([])
   const [parte, setParte] = useState('cabeza')
+  const [objeto, setObjeto] = useState('ipad')
+  // con la pestaña de objetos Skulley se quita de en medio: ahí gira el objeto (HomeScene lo oculta)
+  const verObjeto = open && mostrada === 'objetos' && !compact
+  useEffect(() => { ocultarSkulley(verObjeto); return () => ocultarSkulley(false) }, [verObjeto])
   const [estadoProps, setEstadoProps] = useAccesorios()
   // Keys de color editables según la skin: registry override (ej. void = [],
   // ninguno) o default (base = las 4; otras = ojos + orb).
@@ -462,6 +478,14 @@ export default function CharacterCustomizer({
               <PropsDeParte lang={lang} parte={parte} estado={estadoProps} setEstado={setEstadoProps} enFila />
               <SelectorPartes lang={lang} parte={parte} onParte={setParte} estado={estadoProps} enFila />
             </div>
+            {mostrada === 'objetos' && (
+              <div id="cc-panel-objetos" role="tabpanel" aria-labelledby="cc-pestana-objetos" className="[grid-area:1/1] self-end pb-1 flex flex-col items-center gap-3">
+                <Suspense fallback={null}>
+                  <TextoObjeto lang={lang} id={objeto} activo={open} compacta />
+                  <ChipsObjetos lang={lang} seleccion={objeto} onSeleccion={setObjeto} enFila />
+                </Suspense>
+              </div>
+            )}
           </div>
         </div>
       ) : (
@@ -476,6 +500,53 @@ export default function CharacterCustomizer({
               <SelectorPartes lang={lang} parte={parte} onParte={setParte} estado={estadoProps} />
             </div>
           </div>
+        </div>
+      )}
+
+      {/* OBJETOS (Oscar, 2026-11-25) — Skulley se quita de en medio; el escogido gira grande sin fondo y a
+          su derecha su nombre de orilla a orilla con glitch y su historia, a proporción con la pantalla
+          (salen del escenario angosto); los objetos van en chips abajo, sobre la barra. */}
+      {!compact && (mostrada === 'objetos' || pestana === 'objetos') && (
+        <div
+          id="cc-panel-objetos"
+          role="tabpanel"
+          aria-labelledby="cc-pestana-objetos"
+          style={{ visibility: mostrada === 'objetos' ? undefined : 'hidden' }}
+          className={`absolute left-1/2 -translate-x-1/2 top-[7rem] bottom-[13.5rem] w-[min(94vw,104rem)] flex items-center justify-center gap-[5vw] text-white transition-opacity duration-300 ${open ? 'opacity-100' : 'opacity-0'} pointer-events-none`}
+          inert={!open || mostrada !== 'objetos' || undefined}
+        >
+          <div className="shrink-0 aspect-square w-[min(38vw,calc(100vh-22rem))]" aria-hidden="true">
+            {mostrada === 'objetos' && (
+              <Suspense fallback={null}>
+                <EscenaObjeto id={objeto} activa={verObjeto || (open && mostrada === 'objetos')} sale={pestana !== 'objetos' || !open} />
+              </Suspense>
+            )}
+          </div>
+          <div
+            data-coreo="objetos"
+            data-fase={mostrada === 'objetos' ? fase || undefined : undefined}
+            data-oculta={mostrada !== 'objetos' || undefined}
+            style={{ '--cc-base': `${CORE.DERECHA}ms` }}
+            className={`w-[min(34vw,32rem)] [text-shadow:0_1px_5px_rgba(0,0,0,0.9)] ${open && mostrada === 'objetos' ? 'pointer-events-auto' : ''}`}
+          >
+            <Suspense fallback={null}>
+              <TextoObjeto lang={lang} id={objeto} activo={open && mostrada === 'objetos'} />
+            </Suspense>
+          </div>
+        </div>
+      )}
+      {!compact && (mostrada === 'objetos' || pestana === 'objetos') && (
+        <div
+          data-coreo="objetos"
+          data-fase={mostrada === 'objetos' ? fase || undefined : undefined}
+          data-oculta={mostrada !== 'objetos' || undefined}
+          style={{ visibility: mostrada === 'objetos' ? undefined : 'hidden' }}
+          className={`absolute left-1/2 -translate-x-1/2 bottom-[8.25rem] w-max text-white [text-shadow:0_1px_5px_rgba(0,0,0,0.9)] transition-[opacity,transform] duration-300 ${open ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'} ${open && mostrada === 'objetos' ? 'pointer-events-auto' : 'pointer-events-none'}`}
+          inert={!open || mostrada !== 'objetos' || undefined}
+        >
+          <Suspense fallback={null}>
+            <ChipsObjetos lang={lang} seleccion={objeto} onSeleccion={setObjeto} enFila />
+          </Suspense>
         </div>
       )}
 
@@ -566,7 +637,7 @@ export default function CharacterCustomizer({
             <>
               <button
                 type="button"
-                onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; onWallpaper() }}
+                onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; if (pestana === 'objetos') setPestana('skins'); onWallpaper() }}
                 onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
                 className="shop-btn shop-btn--primary burbuja-vidrio tecla-amarilla h-[52px] px-5 gap-2 text-[13px] whitespace-nowrap"
               >

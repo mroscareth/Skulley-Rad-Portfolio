@@ -111,6 +111,7 @@ const ZoidianDialog = lazy(() => import('./components/ZoidianDialog.jsx'))
 // El diálogo con el drone de M.A.D.R.E. (DroneNPC en la home).
 const importDialogoMadre = () => import('./components/drone/DialogoMadre.jsx')
 const DialogoMadre = lazy(importDialogoMadre)
+const ToastOfrenda = lazy(() => import('./components/ToastOfrenda.jsx'))
 // Los avisos de las trampas, con la cara del diálogo de M.A.D.R.E.
 const importAvisoMadre = () => import('./components/drone/AvisoMadre.jsx')
 const AvisoMadre = lazy(importAvisoMadre)
@@ -193,6 +194,7 @@ import { useShopCartCtx } from './lib/shopCartContext.jsx'
 import { startGameSession, endGameSession } from './lib/gameSession.js'
 import { iniciarJuego, detenerJuego, escuchar as escucharJuego } from './lib/juegoEsferas.js'
 import { castigarConDron, avisarDron } from './lib/droneNpc.js'
+import { EVENTO_GANADA, comentarProyecto } from './lib/misionesOfrenda.js'
 import { argus } from './lib/argusNpc.js'
 import JuegoHUD from './components/JuegoHUD.jsx'
 import useDwellTimeTracking from './hooks/useDwellTimeTracking.js'
@@ -512,6 +514,17 @@ function SiteApp() {
   const [socialsOpen, setSocialsOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [tutorialOpen, setTutorialOpen] = useState(false)
+  // Las ofrendas que se van ganando (lib/misionesOfrenda.js): una tarjeta por cada una, en orden.
+  const [ofrendasGanadas, setOfrendasGanadas] = useState([])
+  const [toastOfrendaAbierto, setToastOfrendaAbierto] = useState(false)
+  useEffect(() => {
+    const alGanar = (e) => {
+      const id = e?.detail?.id
+      if (id) setOfrendasGanadas((l) => (l.includes(id) ? l : [...l, id]))
+    }
+    window.addEventListener(EVENTO_GANADA, alGanar)
+    return () => window.removeEventListener(EVENTO_GANADA, alGanar)
+  }, [])
   // { modo: 'madre' | 'furia', id }: cuándo se asoman los ojos de M.A.D.R.E.
   const [ojosMadre, setOjosMadre] = useState(null)
   // La escena del trato de Argus (ZoidianDialog): la UI se va, Skulley camina
@@ -2151,7 +2164,7 @@ function SiteApp() {
     ...sectionLabel,
     section3: 'LOST AND FOUND ITEMS SHOP',
     section6: 'SKULLEYGLYPH — A LANGUAGE OF THE PORTALS',
-    customize: (t('customizer.title') || 'CUSTOMIZE').toUpperCase(),
+    customize: (t('customizer.inventory') || 'INVENTORY').toUpperCase(),
   }), [sectionLabel, t])
 
   // Measure bottom nav height to position CTA with +40px spacing
@@ -2474,7 +2487,8 @@ function SiteApp() {
       await new Promise((listo) => requestAnimationFrame(() => requestAnimationFrame(VERSION_RAPIDA ? listo : () => requestAnimationFrame(listo))))
       await irisOpen({ x: window.innerWidth / 2, y: window.innerHeight * 0.55 })
       // si te lo enseñó M.A.D.R.E., lo comenta en su viñeta
-      if (proyectoDeMadreRef.current === cerrado) avisarDron({ comenta: cerrado })
+      // (y cuenta para la misión del iPad: lib/misionesOfrenda.js)
+      if (proyectoDeMadreRef.current === cerrado) comentarProyecto(cerrado)
     } finally {
       viajeRapidoRef.current = false
       proyectoDeMadreRef.current = null
@@ -2553,7 +2567,7 @@ function SiteApp() {
     abrirTrasTurno(() => setZoidianDialogOpen(true))
   }, [section, homeLanded, sphereGameActive, customizeOpen, transitionState.active, dialogoDron, tutorialOpen])
   // con una charla abierta (las barras de cine) los globos no hablan; al cerrarla, siguen
-  useEffect(() => { pausarTurnos(dialogoDron || zoidianDialogOpen) }, [dialogoDron, zoidianDialogOpen])
+  useEffect(() => { pausarTurnos(dialogoDron || zoidianDialogOpen || toastOfrendaAbierto) }, [dialogoDron, zoidianDialogOpen, toastOfrendaAbierto])
   useEffect(() => {
     if (!zoidianDialogOpen || !(section !== 'home' || sphereGameActive || customizeOpen || transitionState.active)) return
     setZoidianDialogOpen(false)
@@ -3430,7 +3444,7 @@ function SiteApp() {
                       className="title-banner"
                       style={estiloMarquee(faseMarquee)}
                     >
-                      {textoMarquee((t('customizer.title') || 'CUSTOMIZE').toUpperCase(), faseMarquee)}
+                      {textoMarquee((t('customizer.inventory') || 'INVENTORY').toUpperCase(), faseMarquee)}
                     </span>
                   ))}
                 </div>
@@ -4128,6 +4142,20 @@ function SiteApp() {
           markTutorialShown()
         }}
       />
+      {/* Ofrenda ganada: el objeto girando y qué hacer con él (sale con la home libre y nadie hablando). */}
+      {ofrendasGanadas.length > 0 && (
+        <Suspense fallback={null}>
+          <ToastOfrenda
+            key={ofrendasGanadas[0]}
+            id={ofrendasGanadas[0]}
+            lang={lang}
+            puede={section === 'home' && homeLanded && !dialogoDron && !zoidianDialogOpen && !customizeOpen
+              && !sphereGameActive && !tutorialOpen && !transitionState.active && !proyectoRapido}
+            onAbierto={setToastOfrendaAbierto}
+            onClose={() => setOfrendasGanadas((l) => l.slice(1))}
+          />
+        </Suspense>
+      )}
       {/* El diálogo con el drone de M.A.D.R.E. */}
       {dialogoDron && (
         <Suspense fallback={null}>

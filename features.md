@@ -17,7 +17,7 @@ Pedido de Oscar, 2026-11-24. Hecho hasta hoy: la canción rota que se recompone,
 | # | Objeto | Qué representa | Modelo 3D |
 |---|---|---|---|
 | 1 | iPad | Donde dibuja | Hecho: en su atril de funda, con Apple Pencil y un boceto de Skulley en la pantalla |
-| 2 | Cámara Leica | La fotografía | Hecho: tipo M, con su punto rojo y la correa |
+| 2 | Cámara (la D-Lux 8 de Oscar; en el sitio solo "cámara", sin marcas) | La fotografía | Hecho: compacta negra con su visor, sus perillas y el lente grande; sin punto rojo ni correa |
 | 3 | Álbum de fotos | Sus personas importantes y cercanas | Hecho: abierto, seis fotos y dos sueltas (siluetas pintadas en canvas) |
 | 4 | Teclado MIDI tipo Arturia MiniLab 3 (25 teclas, 8 perillas, 8 pads de colores, 4 faders, pantallita) | Su lado musical | Hecho |
 | 5 | Caja de cerillos | Regalo de su novia | Hecho: abierta, con cerillos y uno quemado; etiqueta con un corazón |

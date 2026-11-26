@@ -9,9 +9,10 @@ import { CENTRO, LUGARES, CAMA } from '../../lib/plazaOfrenda.js'
 import { ofrendaPuesta, ofrendasEnMano, ponerOfrenda, nivelOfrenda, TOTAL_OFRENDAS } from '../../lib/ofrendas.js'
 import { setObstaculosExtra } from '../../lib/obstaculosHome.js'
 import { playSfx } from '../../lib/sfx.js'
+import STICKER_IPAD from '../../assets/stickers/4-lineas.png'
 
 // Los objetos de la ofrenda del Día de los Skulleys (Oscar, 2026-11-24;
-// features.md): el iPad donde dibuja, su Leica, el álbum de su gente, su teclado
+// features.md): el iPad donde dibuja, su cámara (una D-Lux 8, sin marcas: Oscar no quiere que se llame Leica en el sitio), el álbum de su gente, su teclado
 // MIDI, la caja de cerillos que le regaló su novia y la almohada. Los modela
 // scripts/ofrenda/objetos.py (Character/Ofrendas.blend) → public/3dmodels/ofrendas.glb,
 // cada uno a su tamaño real en metros con el frente hacia +z; aquí van en el piso de
@@ -34,28 +35,33 @@ import { playSfx } from '../../lib/sfx.js'
 // llegar a la orilla de su corona (`CARGA.radio`) vuela en arco hasta arriba de su
 // lugar, creciendo a su tamaño, y de ahí cae con el rayo. La almohada solo se pone con las otras cinco ya puestas.
 
-const VERSION = '2026-11-24b'
-const URL = `${import.meta.env.BASE_URL}3dmodels/ofrendas.glb?v=${VERSION}`
+const VERSION = '2026-11-25d'
+export const URL_OFRENDAS = `${import.meta.env.BASE_URL}3dmodels/ofrendas.glb?v=${VERSION}`
+const URL = URL_OFRENDAS
 const NADA = 1e-4
 const CERCA = 75
 // metros reales → unidades del sitio (Skulley mide 2.85, o sea 1.61 por metro real)
-const ESCALA = { ipad: 6, leica: 6.5, album: 3.3, teclado: 4.6, cerillos: 10, almohada: 2.2 }
+export const ESCALA = { ipad: 6, leica: 9, album: 3.3, teclado: 4.6, cerillos: 10, almohada: 2.2 }
 // lo sólido de cada uno, en unidades del sitio (radio en el piso)
-const SOLIDO = { ipad: 0.62, leica: 0.45, album: 0.85, teclado: 0.72, cerillos: 0.38 }
+const SOLIDO = { ipad: 0.62, leica: 0.5, album: 0.85, teclado: 0.72, cerillos: 0.38 }
 const CAE = { alto: 2.6, espera: 0.6, dura: 0.75, rebote: 0.12, luz: 0.3 }
 // La que carga: `tam` lo que mide su lado más largo, a `alto` del piso (arriba de la cresta), con
 // `vueltas` de varias alrededor; `sigue` lo pegada que va a él (1/s). `radio` y `radioCama`: a qué
 // distancia del lugar se pone (afuera de lo que ocupa el objeto, para que no le caiga encima); `arco`:
 // lo alto del arco con que vuela a su lugar, y `luz` lo que la alumbra mientras la carga (la plaza es oscura).
-const CARGA = { tam: 1.05, alto: 3.75, vueltas: 0.75, separa: 0.75, sigue: 9, entra: 0.45, sale: 0.22, radio: 2.3, radioCama: 2.5, arco: 2.2, luz: 0.55 }
+// `cabeza`: si lo que carga flota sobre su cabeza. Oscar, 2026-11-25: no; lo que gana va al inventario
+// (Customize → Objetos) y al llegar a su piedra el objeto sale de Skulley (`salida`, a la altura del pecho)
+// y vuela a su lugar.
+const CARGA = { cabeza: false, salida: 1.5, tam: 1.05, alto: 3.75, vueltas: 0.75, separa: 0.75, sigue: 9, entra: 0.45, sale: 0.22, radio: 2.3, radioCama: 2.5, arco: 2.2, luz: 0.55 }
 const TAU = Math.PI * 2
 const rebotaFuera = (x) => { const c = 1.9; return 1 + (c + 1) * Math.pow(x - 1, 3) + c * Math.pow(x - 1, 2) }
 
 const COLOR = {
   Ipad_Aluminio: '#5b6068', Ipad_Bisel: '#111215', Ipad_Funda: '#24305e', Ipad_Lente: '#0c0c0e',
   Lapiz_Blanco: '#f3f3f1', Lapiz_Punta: '#8e8f93',
-  Leica_Piel: '#141416', Leica_Metal: '#c9ccd1', Leica_Lente: '#16161a', Leica_Vidrio: '#22335a',
-  Leica_Rojo: '#e0141e', Leica_Ventana: '#3b4658', Leica_Correa: '#7a4422',
+  // la cámara (la D-Lux 8 de Oscar, sin marcas; los nombres de material conservan el id `leica`)
+  Leica_Piel: '#141416', Leica_Tapa: '#2a2c31', Leica_Metal: '#c9ccd1', Leica_Lente: '#16161a', Leica_Vidrio: '#22335a',
+  Leica_Ventana: '#3b4658', Leica_Rojo: '#e0141e', Leica_Pantalla: '#2c3540',
   Album_Piel: '#6e2a1c', Album_Hojas: '#f1e8d2', Album_Marco: '#fbfaf6', Album_Esquina: '#1c1c1c',
   Teclado_Cuerpo: '#1b1b1f', Teclado_Blanca: '#f5f5f3', Teclado_Negra: '#0d0d0f', Teclado_Perilla: '#2a2a2f',
   Teclado_Marca: '#f0f0f0', Teclado_Fader: '#d9d9dc', Teclado_Tira: '#333338',
@@ -78,9 +84,11 @@ function lienzo(w, h, pinta) {
   return t
 }
 
-// La pantalla del iPad: un dibujo de Skulley a medio colorear en la app de dibujo.
+// La pantalla del iPad: la app de dibujo con el sticker de Skulley en líneas negras, el mismo del
+// wallpaper (Oscar, 2026-11-25: el dibujo de antes "feo"). La imagen llega después: se pinta encima
+// y se resube la textura (no compila nada).
 function pantallaIpad() {
-  return lienzo(512, 368, (g, w, h) => {
+  const fondo = (g, w, h) => {
     g.fillStyle = '#f6f1e4'
     g.fillRect(0, 0, w, h)
     // la barra de la app y los deslizadores del pincel
@@ -90,39 +98,23 @@ function pantallaIpad() {
     g.beginPath(); g.arc(w - 26, 13, 7, 0, 7); g.fill()
     g.fillStyle = '#d9d4c6'
     for (const [x, y, hh] of [[10, 70, 90], [10, 180, 90]]) { g.beginPath(); g.roundRect(x, y, 10, hh, 5); g.fill() }
-    // la cabeza: cráneo, quijada, cuencas, ojos amarillos y la cresta
-    const cx = w * 0.56, cy = h * 0.55
-    g.lineWidth = 7
-    g.lineJoin = 'round'
-    g.lineCap = 'round'
-    g.strokeStyle = '#111'
-    g.fillStyle = '#e8303a'
-    g.beginPath(); g.ellipse(cx, cy - 10, 95, 88, 0, Math.PI * 0.95, Math.PI * 2.05); g.closePath()
-    g.save(); g.clip(); g.fillRect(cx - 120, cy - 110, 120, 220); g.restore()
-    g.beginPath(); g.ellipse(cx, cy - 10, 95, 88, 0, 0, Math.PI * 2); g.stroke()
-    g.beginPath(); g.moveTo(cx - 52, cy + 62); g.quadraticCurveTo(cx, cy + 120, cx + 52, cy + 62); g.stroke()
-    for (const s of [-1, 1]) {
-      g.fillStyle = '#111'
-      g.beginPath(); g.ellipse(cx + s * 38, cy - 4, 26, 30, 0, 0, 7); g.fill()
-      g.fillStyle = '#f5ff00'
-      g.beginPath(); g.ellipse(cx + s * 38, cy - 4, 15, 18, 0, 0, 7); g.fill()
-    }
-    g.strokeStyle = '#1ec8d8'
-    g.lineWidth = 12
-    for (let k = -3; k <= 3; k++) {
-      const a = -Math.PI / 2 + k * 0.22
-      g.beginPath()
-      g.moveTo(cx + Math.cos(a) * 80, cy - 10 + Math.sin(a) * 74)
-      g.quadraticCurveTo(cx + Math.cos(a) * 120 + k * 6, cy - 10 + Math.sin(a) * 118, cx + Math.cos(a) * 140 + k * 12, cy - 10 + Math.sin(a) * 120)
-      g.stroke()
-    }
-    // el trazo que va a medias y el pincel
-    g.strokeStyle = '#e8303a'
-    g.lineWidth = 9
-    g.beginPath(); g.moveTo(cx + 10, cy - 70); g.quadraticCurveTo(cx + 60, cy - 60, cx + 70, cy - 20); g.stroke()
-    g.fillStyle = 'rgba(17,17,17,0.18)'
-    g.beginPath(); g.arc(cx + 72, cy - 18, 14, 0, 7); g.fill()
-  })
+  }
+  let lienzoPantalla = null
+  const tex = lienzo(512, 368, (g, w, h) => { fondo(g, w, h); lienzoPantalla = g })
+  // la pantalla del GLB trae la v de arriba hacia abajo (v = 0 arriba): sin esto el dibujo salía de cabeza
+  tex.flipY = false
+  const img = new Image()
+  img.onload = () => {
+    const g = lienzoPantalla
+    const { width: w, height: h } = g.canvas
+    const lado = (h - 26) * 0.86
+    const k = lado / Math.max(img.width, img.height)
+    const iw = img.width * k, ih = img.height * k
+    g.drawImage(img, w * 0.53 - iw / 2, 26 + (h - 26 - ih) / 2, iw, ih)
+    tex.needsUpdate = true
+  }
+  img.src = STICKER_IPAD
+  return tex
 }
 
 // Las fotos del álbum (4 × 2, en el orden de las celdas del modelo): el Cerro de
@@ -308,7 +300,7 @@ function sombra() {
   })
 }
 
-function armar(gltf) {
+export function armar(gltf) {
   const tex = { pantalla: pantallaIpad(), fotos: fotosAlbum(), etiqueta: etiquetaCerillos(), pads: padsTeclado(), sombra: sombra() }
   tex.pads.magFilter = THREE.NearestFilter
   // cada objeto con sus materiales (la luz de su rayo no debe prender otro objeto); mismos programas
@@ -456,18 +448,25 @@ export default function ObjetosOfrenda({ playerRef, activo = true, mostrarCarga 
     for (const o of Object.values(armado.objetos)) {
       // ---- la que carga
       const enM = mano.includes(o.id)
-      if (enM && o.enMano === false && !primera) { try { playSfx('magiaInicia', { volume: 0.8 }) } catch { /* sin audio */ } }
+      if (CARGA.cabeza && enM && o.enMano === false && !primera) { try { playSfx('magiaInicia', { volume: 0.8 }) } catch { /* sin audio */ } }
       o.enMano = enM
       // llegó a la orilla de su corona: vuela a su lugar y cae con el rayo
-      if (enM && ver && o.lugar && o.sube < 0 && o.cargaT > 0.5) {
+      if (enM && ver && o.lugar && o.sube < 0 && (o.cargaT > 0.5 || !CARGA.cabeza)) {
         const d = Math.hypot(p.x - o.lugar.x, p.z - o.lugar.z)
         const puede = o.id !== CAMA.id || nivelOfrenda() >= TOTAL_OFRENDAS - 1
         if (puede && d < (o.id === CAMA.id ? CARGA.radioCama : CARGA.radio) && ponerOfrenda(o.id)) {
           // vuela de donde va hasta la pose con que el puesto empieza a caer: un solo objeto
           o.sube = 0
-          o.p0.copy(o.carga.position)
-          o.q0.copy(o.carga.quaternion)
-          o.s0 = o.carga.scale.x
+          if (CARGA.cabeza) {
+            o.p0.copy(o.carga.position)
+            o.q0.copy(o.carga.quaternion)
+            o.s0 = o.carga.scale.x
+          } else {
+            // sale de Skulley, chiquito, y crece en el vuelo
+            o.p0.set(p.x, p.y + CARGA.salida, p.z)
+            o.q0.identity()
+            o.s0 = 0
+          }
           o.q1.setFromAxisAngle(_y, o.raiz.rotation.y)
           o.p1.copy(o.centro).multiplyScalar(o.esc).applyQuaternion(o.q1)
           o.p1.x += o.raiz.position.x
@@ -491,7 +490,7 @@ export default function ObjetosOfrenda({ playerRef, activo = true, mostrarCarga 
         escala = o.s0 + (o.esc - o.s0) * e
         if (u >= 1) { o.sube = -1; o.cargaT = 0; escala = 0 }
       } else if (p) {
-        const meta = enM && ver ? 1 : 0
+        const meta = enM && ver && CARGA.cabeza ? 1 : 0
         const aparece = meta && o.cargaT === 0
         o.cargaT = meta ? Math.min(1, o.cargaT + dt / CARGA.entra) : Math.max(0, o.cargaT - dt / CARGA.sale)
         if (enM) {

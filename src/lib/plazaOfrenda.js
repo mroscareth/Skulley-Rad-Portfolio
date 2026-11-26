@@ -39,7 +39,7 @@ export const PLAZA = {
 export const LUGARES = [
   { id: 'album', grados: 0, es: 'Album', en: 'Album' },
   { id: 'ipad', grados: 72, es: 'iPad', en: 'iPad' },
-  { id: 'leica', grados: -72, es: 'Leica', en: 'Leica' },
+  { id: 'leica', grados: -72, es: 'Cámara', en: 'Camera' },
   { id: 'teclado', grados: 144, es: 'Teclado', en: 'Keyboard' },
   { id: 'cerillos', grados: -144, es: 'Cerillos', en: 'Matches' },
 ].map((l, i) => {

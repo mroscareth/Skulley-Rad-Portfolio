@@ -17,7 +17,7 @@ import { crearMaterialMochila, crearCaraMochila } from './argus/pantallaMochila.
 import { crearRelojHolograma } from './argus/relojHolograma.js'
 import { argus, escucharArgus, avisarArgus, picarArgus, picarArgusLejos, argusEnojado, animoArgus } from '../lib/argusNpc.js'
 import { dron, avisarDron } from '../lib/droneNpc.js'
-import { pedirTurno, soltarTurno, tiempoLinea, alCompletar, TURNO } from '../lib/turnoGlobos.js'
+import { pedirTurno, soltarTurno, tiempoLinea, alCompletar, registrarCallar, choque, TURNO } from '../lib/turnoGlobos.js'
 import HumoDron from './drone/HumoDron.jsx'
 
 // Zoidian (Argus) — NPC dueño del juego de las esferas. Vive donde antes flotaba
@@ -1258,6 +1258,13 @@ export default function ZoidianNPC({
     }
     const burla = (key) => { sayMock(key, { prioridad: 1 }); reaccionar('Risa', 450) }
     decirRef.current = sayMock
+    // un susto (turnoGlobos `choque`): se calla a media frase. Lo que tenga pedido para después (las
+    // burlas del susto) sigue en pie.
+    const quitarCallar = registrarCallar('argus', () => {
+      clearTimers()
+      completarRef.current = null
+      setMock({ on: false, typed: '', full: '' })
+    })
     // desarrollo: window.__argusDice('texto') le pone una frase (probar los globos)
     if (import.meta.env.DEV) window.__argusDice = (texto) => sayMock(null, { delay: 0, texto })
     // Los rayos (Oscar, 2026-11-19): solo comenta si le pegan a alguien. A
@@ -1286,6 +1293,7 @@ export default function ZoidianNPC({
       const pts = e?.detail?.points || []
       if (!pts.some((q) => Math.hypot(q.x - argus.pos.x, q.z - argus.pos.z) < RADIO_TRUENO)) return
       chamuscadoEn = performance.now()
+      choque({ quien: 'argus' })
       avisarArgus({ quemar: true })
       clearTimeout(chamuscaTimer)
       // con un respiro: si el mismo rayo también la quemó a ella, su escena espera a que se recupere
@@ -1357,6 +1365,7 @@ export default function ZoidianNPC({
       clearTimeout(madreTimer)
       clearTimeout(chamuscaTimer)
       quitarJuego()
+      quitarCallar()
       clearTimers()
       decirRef.current = null
     }

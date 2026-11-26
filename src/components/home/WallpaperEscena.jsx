@@ -5,6 +5,7 @@ import { characterNormalTexture } from '../../lib/toonInkBuffer.js'
 import { pngDeCanvas } from '../../lib/wallpaperPng.js'
 import { WALLPAPER_W, WALLPAPER_H, GIRO_POR_PX, wallpaperEstado as est, entrarAislado } from '../../lib/wallpaperEscritorio.js'
 import { crearParticulas } from '../../lib/particulasSkulley.js'
+import { pideOculto, skulleyOculto, ponerOculto } from '../../lib/inventarioEscena.js'
 
 // Skulley aislado en escritorio, adentro del Canvas: mueve la onda de la trama al
 // entrar y salir de Customize, dibuja la máscara que ella respeta, quita el mundo,
@@ -33,6 +34,10 @@ const DESHAZ_S = 0.5
 // Las runas de aquí duran menos que las de Aleatorio, y el relevo espera a que se
 // apague lo último que vuela: a mitad del vuelo el preloader se siente como un corte.
 const RUNAS_VIAJE = { life: 1.1, spread: 0.3 }
+// Inventario → Objetos (Oscar, 2026-11-25: "el desintegrar que tenemos cuando vamos a una sección"):
+// con la pestaña de objetos Skulley se deshace igual, sin acercarse; al regresar se rearma al revés (los
+// puntos vuelven y el corte baja de la cabeza a los pies). `total`: hasta que se apaga el último punto.
+const INV = { total: DESHAZ_S + 0.82 }
 const VIAJE_S = 2.2
 // De lejos los puntos no se leen: la cámara se acerca a Skulley mientras se queda solo.
 const VIAJE_ZOOM = 2.5
@@ -377,6 +382,7 @@ export default function WallpaperEscena({ playerRef, portals }) {
     if (playerRef.current) playerRef.current.rotation.y = est.yawBase
     est.cubre = false
     est.viaje = null
+    est.inv = null
     est.corte = 0
     est.sombraViva = 1
     est.particulas = null
@@ -414,6 +420,51 @@ export default function WallpaperEscena({ playerRef, portals }) {
       particulas.t = v.t - DESHAZ_DESDE_S
     }
     if (v.t >= VIAJE_S) v.listo()
+  }
+
+  // Inventario: se deshace ('sale') o se rearma ('entra') en su lugar. El tiempo corre desde que hay foto.
+  const avanzaInv = (v, dt) => {
+    const p = playerRef.current
+    if (!v.alto) {
+      v.alto = particulas.suelta(p, DESHAZ_S) || [p.position.y, p.position.y + 3]
+      if (v.sentido === 'sale') { try { window.dispatchEvent(new CustomEvent('character-color-burst', { detail: RUNAS_VIAJE })) } catch { } }
+    }
+    if (!v.foto) return
+    v.t += dt
+    const tt = v.sentido === 'sale' ? v.t : Math.max(0, INV.total - v.t)
+    v.k = Math.min(1, Math.max(0, tt / DESHAZ_S))
+    particulas.t = tt
+    // su sombra (y la orilla de la llama, que sale por el mismo canal de la trama) se va con él
+    est.sombraViva = 1 - v.k
+    if (v.sentido === 'sale' && v.k >= 1 && !skulleyOculto()) ponerOculto(true)
+    if (v.t >= INV.total) {
+      est.inv = null
+      est.corte = 0
+      est.particulas = null
+      est.sombraViva = 1
+    }
+  }
+  const proyectaCorteInv = (v) => {
+    const p = playerRef.current
+    const s = r.current
+    const pies = s.v.set(p.position.x, v.alto[0], p.position.z).project(camera).y * 0.5 + 0.5
+    const cabeza = s.v.set(p.position.x, v.alto[1], p.position.z).project(camera).y * 0.5 + 0.5
+    v.altoPantalla = Math.abs(cabeza - pies)
+    if (!v.apuntado) {
+      particulas.apunta(camera)
+      v.apuntado = true
+      // rearmándose ya no está en el cuadro: los puntos toman el color de la foto de cuando se fue
+      if (v.sentido === 'entra') {
+        if (foto.current) particulas.foto = foto.current
+        else v.sinPuntos = true
+        v.foto = true
+        v.k = 1
+        est.sombraViva = 0
+      }
+    }
+    if (v.foto) est.corte = pies - 0.02 + (cabeza - pies + 0.13) * (v.k ?? 0)
+    // ya con el corte arriba de la cabeza, que se vea: así se rearma de la cabeza a los pies
+    if (v.sentido === 'entra' && skulleyOculto()) ponerOculto(false)
   }
 
   // Ya con el encuadre de este cuadro.
@@ -511,7 +562,13 @@ export default function WallpaperEscena({ playerRef, portals }) {
     est.giroVisto += (est.giro - est.giroVisto) * (1 - Math.exp(-GIRO_SIGUE * dt))
     p.rotation.y = est.yawBase + est.giroVisto
 
+    // saliendo de Customize (o en el marco) a media animación del inventario: se cancela limpio
+    if (est.inv && (est.viaje || est.fase !== 'lista' || est.enMarco)) { est.inv = null; est.corte = 0; est.particulas = null; est.sombraViva = 1 }
     if (est.viaje) avanzaViaje(est.viaje, dt)
+    else if (est.fase === 'lista' && !est.enMarco) {
+      if (!est.inv && pideOculto() !== skulleyOculto()) est.inv = { sentido: pideOculto() ? 'sale' : 'entra', t: 0 }
+      if (est.inv) avanzaInv(est.inv, dt)
+    }
     encuadra(W, H)
 
     const portal = est.viaje && portals?.find((x) => x.id === est.viaje.id)
@@ -519,6 +576,7 @@ export default function WallpaperEscena({ playerRef, portals }) {
     origen.project(camera)
     est.pies = [origen.x * 0.5 + 0.5, origen.y * 0.5 + 0.5]
     if (est.viaje?.alto) proyectaCorte(est.viaje)
+    else if (est.inv?.alto) proyectaCorteInv(est.inv)
     // Con la onda en camino (entrando o saliendo); en 'lista' el mundo ya se fue
     // completo y lo escondido se queda así hasta que la onda regrese.
     if (!est.viaje && (est.fase === 'entra' || est.fase === 'sale')) tapaEnfrente(p, W, H)
@@ -601,11 +659,12 @@ export default function WallpaperEscena({ playerRef, portals }) {
         if (s.runas) gl.render(s.runas, camera)
         est.runas = fboRunas.texture
       }
-      if (est.viaje?.foto) {
+      const vp = est.viaje || est.inv
+      if (vp?.foto && !vp.sinPuntos) {
         if (fboParticulas.width !== fw || fboParticulas.height !== fh) fboParticulas.setSize(fw, fh)
         gl.setRenderTarget(fboParticulas)
         gl.clear(true, false, false)
-        particulas.tam = (est.viaje.altoPantalla || 0.3) * fh * 0.034
+        particulas.tam = (vp.altoPantalla || 0.3) * fh * 0.034
         gl.render(particulas.puntos, camera)
         est.particulas = fboParticulas.texture
       }
@@ -623,7 +682,7 @@ export default function WallpaperEscena({ playerRef, portals }) {
 
   // Mismo cuadro: el canvas todavía tiene lo que dibujó el composer.
   useFrame(() => {
-    const v = est.viaje
+    const v = est.viaje || (est.inv?.sentido === 'sale' ? est.inv : null)
     if (v?.apuntado && !v.foto) {
       const m = gl.getDrawingBufferSize(r.current.tam)
       if (foto.current?.image.width !== m.x || foto.current?.image.height !== m.y) {
