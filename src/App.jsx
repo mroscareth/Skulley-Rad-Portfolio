@@ -546,6 +546,10 @@ function SiteApp() {
   // cuadros la cámara termina de regresar del diálogo (cortaBarrido).
   const [proyectoPausa, setProyectoPausa] = useState(false)
   const [dialogoModo, setDialogoModo] = useState('charla')
+  // la ofrenda que te dan en cinemática (lib/misionesOfrenda.js): la de M.A.D.R.E. va con
+  // dialogoModo 'entrega'; la de Argus abre su trato en modo entrega
+  const [entregaMadre, setEntregaMadre] = useState(null)
+  const [entregaArgus, setEntregaArgus] = useState(null)
   const [sphereGameActive, setSphereGameActive] = useState(false)
   // Guarda de secciones durante la partida (se define junto a sectionLabel).
   // Devuelve true si bloqueó la entrada.
@@ -2555,6 +2559,7 @@ function SiteApp() {
     setDialogoDron(false)
     // si se corta la bienvenida, que la UI no se quede esperándola
     if (dialogoModo === 'bienvenida') { setDialogoModo('charla'); markTutorialShown() }
+    if (dialogoModo === 'entrega') { setDialogoModo('charla'); setEntregaMadre(null) }
   }, [dialogoDron, dialogoModo, section, sphereGameActive, customizeOpen, transitionState.active, markTutorialShown])
 
   // Argus: su escena del trato solo con Skulley dentro de su radio (argus.cerca,
@@ -2573,12 +2578,23 @@ function SiteApp() {
   puedeEntregarRef.current = section === 'home' && homeLanded && !dialogoDron && !zoidianDialogOpen && !customizeOpen
     && !sphereGameActive && !gameOverOpen && !tutorialOpen && !transitionState.active && !proyectoRapido && !toastOfrendaAbierto
   useEffect(() => {
-    const id = setInterval(() => intentarEntrega(puedeEntregarRef.current), 1500)
+    const abrir = (quien, id) => {
+      if (quien === 'madre') {
+        setEntregaMadre(id)
+        setDialogoModo('entrega')
+        setDialogoDron(true)
+      } else if (argus.cerca) {
+        setEntregaArgus(id)
+        setZoidianDialogOpen(true)
+      }
+    }
+    const id = setInterval(() => intentarEntrega(puedeEntregarRef.current, abrir), 1500)
     return () => clearInterval(id)
   }, [])
   useEffect(() => {
     if (!zoidianDialogOpen || !(section !== 'home' || sphereGameActive || customizeOpen || transitionState.active)) return
     setZoidianDialogOpen(false)
+    setEntregaArgus(null)
   }, [zoidianDialogOpen, section, sphereGameActive, customizeOpen, transitionState.active])
   const empezarPartida = useCallback(() => {
     setSphereGameActive(true)
@@ -4169,9 +4185,11 @@ function SiteApp() {
         <Suspense fallback={null}>
           <DialogoMadre
             modo={dialogoModo}
+            entrega={entregaMadre}
             onVerProyecto={verProyectoDeMadre}
             onClose={() => {
               setDialogoDron(false)
+              if (dialogoModo === 'entrega') { setDialogoModo('charla'); setEntregaMadre(null) }
               if (dialogoModo === 'bienvenida') {
                 setDialogoModo('charla')
                 setTimeout(() => setTutorialOpen(true), 250)
@@ -4187,9 +4205,11 @@ function SiteApp() {
             playerRef={playerRef}
             portals={portals}
             tactil={controlesTactiles}
-            onClose={() => setZoidianDialogOpen(false)}
+            entrega={entregaArgus}
+            onClose={() => { setZoidianDialogOpen(false); setEntregaArgus(null) }}
             onPlay={() => {
               setZoidianDialogOpen(false)
+              setEntregaArgus(null)
               empezarPartida()
             }}
           />

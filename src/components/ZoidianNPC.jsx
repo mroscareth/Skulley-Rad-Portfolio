@@ -255,9 +255,9 @@ const MIRADA_CLIP = {
 // en `sale`; tiembla `tiembla` segundos y echa humo (HumoDron, el del drone).
 // Se oscurece cambiando el color de sus materiales: no recompila nada.
 export const QUEMA_ARGUS = { dura: 4.5, sale: 3, tiembla: 0.75, negro: 0.86 }
-// La entrega de una ofrenda (lib/misionesOfrenda.js): a menos de `cerca` de él te la da; a menos de
-// `llama` te grita que vayas, a lo más cada `llamaCada` segundos.
-export const ENTREGA_ARGUS = { cerca: 9, llama: 26, llamaCada: 35 }
+// La entrega de una ofrenda (lib/misionesOfrenda.js): lejos de él (sin `argus.cerca`) pero a menos de
+// `llama`, te grita que vayas, a lo más cada `llamaCada` segundos.
+export const ENTREGA_ARGUS = { llama: 26, llamaCada: 35 }
 
 const _v1 = new THREE.Vector3()
 const _v2 = new THREE.Vector3()
@@ -1157,9 +1157,8 @@ export default function ZoidianNPC({
   // lo que dice en su globo (sayMock, del efecto de las burlas): lo usan el enojo y el reclamo
   const decirRef = useRef(null)
   const reclamoRef = useRef(0)
-  const entregaRef = useRef(0)
   const llamadoRef = useRef(-Infinity)
-  useEffect(() => () => { clearTimeout(reclamoRef.current); clearTimeout(entregaRef.current) }, [])
+  useEffect(() => () => clearTimeout(reclamoRef.current), [])
   useEffect(() => escucharArgus((msg) => {
     if (!msg) return
     const d = dialogoRef.current
@@ -1177,27 +1176,13 @@ export default function ZoidianNPC({
     }
     // el turno ya lo pidió la escena (DroneNPC): aquí solo se escribe
     if (msg.dice) decirRef.current?.(null, { texto: msg.dice, delay: 0, tomado: true })
-    // una ofrenda que ya te debe (lib/misionesOfrenda.js `intentarEntrega`: los cerillos, la almohada).
-    // Él no camina: con Skulley cerca te la da (`alEmpezar` cuando de verdad empieza a decirlo); de lejos
-    // pero a la vista, lo llama de vez en cuando para que vaya.
-    if (msg.entrega?.id && !d.on && !d.escena && !juego.activo && !argusEnojado()) {
-      const ent = msg.entrega
+    // le debe una ofrenda a Skulley y está lejos (lib/misionesOfrenda.js `intentarEntrega`): lo llama de vez
+    // en cuando para que vaya. La entrega es su trato en modo 'entrega' (ZoidianDialog), en cinemática.
+    if (msg.llamaOfrenda && !d.on && !d.escena && !juego.activo && !argusEnojado()) {
       const p = lookAtRef?.current?.position
       const dist = p ? Math.hypot(p.x - argus.pos.x, p.z - argus.pos.z) : Infinity
       const ahora = performance.now() / 1000
-      if (dist < ENTREGA_ARGUS.cerca) {
-        decirRef.current?.(`zoidian.ofrenda.${ent.id}`, {
-          delay: 0, prioridad: 2, espera: 6,
-          alEmpezar: () => {
-            ent.alEmpezar?.()
-            d.cara = 'feliz'
-            d.mirar = 'skulley'
-            try { ctrlRef.current?.forzar('Presumir') } catch { }
-            clearTimeout(entregaRef.current)
-            entregaRef.current = setTimeout(() => { if (!d.on && !d.escena) { d.cara = null; d.mirar = null } }, 5000)
-          },
-        })
-      } else if (dist < ENTREGA_ARGUS.llama && ahora - llamadoRef.current > ENTREGA_ARGUS.llamaCada) {
+      if (dist < ENTREGA_ARGUS.llama && ahora - llamadoRef.current > ENTREGA_ARGUS.llamaCada) {
         llamadoRef.current = ahora
         decirRef.current?.('zoidian.ofrenda.llama', { delay: 0, prioridad: 1, espera: 4 })
         try { ctrlRef.current?.forzar('Saludo') } catch { }
@@ -1257,7 +1242,7 @@ export default function ZoidianNPC({
     }
     // Pide turno (lib/turnoGlobos.js): no corta su frase ni la de nadie; cuando le toca se escribe a
     // TURNO.letras y se queda lo que se tarda en leerla. `tomado`: el turno ya lo pidió una escena.
-    const sayMock = (key, { delay = 700, texto = null, prioridad = 0, espera = TURNO.esperaDef, tomado = false, alEmpezar = null } = {}) => {
+    const sayMock = (key, { delay = 700, texto = null, prioridad = 0, espera = TURNO.esperaDef, tomado = false } = {}) => {
       // La key puede resolver a un string o a un POOL de frases (rayo.skulley); las
       // escenas con M.A.D.R.E. mandan el `texto` ya escrito.
       const resolved = texto ?? t(key)
@@ -1265,7 +1250,6 @@ export default function ZoidianNPC({
       if (!full) return
       const mostrar = (d) => {
         clearTimers()
-        if (alEmpezar) { try { alEmpezar() } catch (err) { console.warn('[argus] alEmpezar', err) } }
         let i = 0
         setMock({ on: true, typed: '', full })
         const typeId = setInterval(() => {

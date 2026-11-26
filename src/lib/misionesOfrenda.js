@@ -12,7 +12,7 @@
 
 import { MISIONES_ABIERTAS, OFRENDAS, conseguirOfrenda, ofrendaPuesta, ofrendaEnMano } from './ofrendas.js'
 import { avisarDron } from './droneNpc.js'
-import { avisarArgus } from './argusNpc.js'
+import { argus, avisarArgus } from './argusNpc.js'
 import { escuchar as escucharJuego } from './juegoEsferas.js'
 import scoreStore from './scoreStore.js'
 import { hablando } from './turnoGlobos.js'
@@ -99,9 +99,10 @@ export const HISTORIAS = {
 //   cerillos  prender `MISION.petalos` pétalos con la bola de fuego (PetalosCamino)        → Argus
 //   almohada  hacer `MISION.puntos` en una partida del trato                               → Argus
 // Cumplida (`misionHecha`) se guarda en el navegador y la entrega llega sola cuando la home está libre y
-// nadie habla: App llama `intentarEntrega` cada rato y le avisa a quien la da (`entrega: { id,
-// alEmpezar }`). Ella vuela hacia Skulley; Argus no camina: te la da con Skulley cerca y, de lejos, lo
-// llama (ZoidianNPC). Si le preguntas en su diálogo antes, te la da ahí mismo.
+// nadie habla, siempre en cinemática (Oscar: el texto en su viñeta "me pasó de noche"): App llama
+// `intentarEntrega(puede, abrir)` cada rato y abre el diálogo de quien la da en modo 'entrega' (ella vuela
+// frente a Skulley; el trato de Argus solo con Skulley junto a él, si no Argus lo llama en su globo,
+// `llamaOfrenda` en ZoidianNPC). El diálogo llama `ganarOfrenda`. Si le preguntas antes, te la da ahí.
 
 export const ORDEN = { madre: ['ipad', 'leica', 'teclado', 'album'], argus: ['cerillos', 'almohada'] }
 export const ENTREGA = Object.fromEntries(Object.entries(ORDEN).flatMap(([q, ids]) => ids.map((id) => [id, q])))
@@ -190,16 +191,12 @@ export function proyectoVistoConMadre(slug) {
 
 const intento = {}
 
-/** Regresaste de un proyecto que te enseñó M.A.D.R.E.: lo cuenta y ella lo comenta (o, con el tercero, te
- * da el iPad en lugar del comentario). */
+/** Regresaste de un proyecto que te enseñó M.A.D.R.E.: lo cuenta y ella lo comenta; con el tercero no lo
+ * comenta: se abre su cinemática con el iPad (`intentarEntrega`). */
 export function comentarProyecto(slug) {
   if (!slug) return
   proyectoVistoConMadre(slug)
-  if (entregaPendiente('madre') === 'ipad') {
-    // que `intentarEntrega` no lo pida encima mientras ella lo dice aquí
-    intento.ipad = performance.now() / 1000
-    avisarDron({ comenta: slug, entrega: { id: 'ipad', vistos: vistos.size, alEmpezar: () => ganarOfrenda('ipad') } })
-  } else avisarDron({ comenta: slug })
+  if (entregaPendiente('madre') !== 'ipad') avisarDron({ comenta: slug })
 }
 
 let quemados = 0
@@ -215,17 +212,17 @@ escucharJuego((tipo) => {
   if ((scoreStore.get() || 0) >= MISION.puntos) misionHecha('almohada')
 })
 
-/** App, cada rato: si la home está libre (`puede`) y nadie habla, pide la siguiente entrega. */
-export function intentarEntrega(puede) {
+/** App, cada rato: si la home está libre (`puede`) y nadie habla, abre la cinemática de la siguiente
+ * entrega (`abrir(quien, id)`). La de Argus solo con Skulley junto a él; si no, Argus lo llama. */
+export function intentarEntrega(puede, abrir) {
   if (!puede || !misionesAbiertas() || hablando()) return
   const ahora = performance.now() / 1000
   for (const quien of Object.keys(ORDEN)) {
     const id = entregaPendiente(quien)
     if (!id || ahora - (intento[id] ?? -Infinity) < MISION.reintento[quien]) continue
     intento[id] = ahora
-    const entrega = { id, vistos: MISION_IPAD.proyectos, alEmpezar: () => ganarOfrenda(id) }
-    if (quien === 'madre') avisarDron({ entrega })
-    else avisarArgus({ entrega })
+    if (quien === 'argus' && !argus.cerca) avisarArgus({ llamaOfrenda: true })
+    else abrir?.(quien, id)
     return
   }
 }

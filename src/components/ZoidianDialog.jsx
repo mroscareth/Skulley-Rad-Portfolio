@@ -10,7 +10,8 @@ import { dron, avisarDron, juntoArgus } from '../lib/droneNpc.js'
 import { useGlitchSolo, textoGlitch } from '../hooks/useGlitchRunas.js'
 import RenglonRunas from './drone/RenglonRunas.jsx'
 import { TicketArt } from './GoldenTicketBadge.jsx'
-import { misionesAbiertas, pedirCosa } from '../lib/misionesOfrenda.js'
+import { misionesAbiertas, pedirCosa, ganarOfrenda } from '../lib/misionesOfrenda.js'
+import { trozos } from '../lib/dialogoMadre.js'
 import { PRIZE_RAYS, Sparkle } from './argusArt.jsx'
 import { Tecla, Raton, GlifoTactil } from './TutorialModal.jsx'
 
@@ -167,7 +168,9 @@ function Muestra({ tipo, D, gold, silver }) {
   return null
 }
 
-export default function ZoidianDialog({ onClose, onPlay, playerRef, portals, tactil = false }) {
+// `entrega`: abre para darte esa ofrenda que ya te ganaste y se cierra (los textos de los objetos van en
+// cinemática, Oscar 2026-11-26; lib/misionesOfrenda.js).
+export default function ZoidianDialog({ onClose, onPlay, playerRef, portals, tactil = false, entrega = null }) {
   const { lang, t } = useLanguage()
   const tickets = useTicketStats()
   // lo que recuerda de la última vez y la semilla de las variantes: fijos mientras dura la escena
@@ -191,6 +194,12 @@ export default function ZoidianDialog({ onClose, onPlay, playerRef, portals, tac
   const [cosas, setCosas] = useState(null)
   const renglonesDe = (clave) => (clave === 'cosas' ? cosas : D[clave]) || []
   const linea = cola ? renglonesDe(cola.clave)[cola.i] : null
+  // lo que dice al darte una ofrenda (`zoidian.ofrenda.<id>`, el mismo de su globo), por frases
+  const lineasEntrega = (id) => {
+    const pool = t(`zoidian.ofrenda.${id}`)
+    const texto = Array.isArray(pool) ? pool[Math.floor(Math.random() * pool.length)] : pool
+    return trozos(texto).map((x, i) => (i === 0 ? { t: x, accion: 'Presumir', cara: 'feliz' } : { t: x, cara: 'feliz' }))
+  }
   const opciones = useMemo(() => [
     'jugar', 'como', 'premios', ...(misionesAbiertas() ? ['cosas'] : []), 'adios',
   ].map((id) => ({ id, label: D.opciones[id] })), [D])
@@ -258,6 +267,12 @@ export default function ZoidianDialog({ onClose, onPlay, playerRef, portals, tac
     const espera = () => {
       const listo = !caminata.activa || caminata.llego
       if (performance.now() - t0 >= ENTRADA_MS && listo) {
+        if (entrega) {
+          ganarOfrenda(entrega)
+          setCosas(lineasEntrega(entrega))
+          empezar('cosas', 'fin')
+          return
+        }
         empezar(primera ? 'trato' : 'otraVez', 'menu')
         return
       }
@@ -301,6 +316,7 @@ export default function ZoidianDialog({ onClose, onPlay, playerRef, portals, tac
       return
     }
     if (cola.despues === 'salir' || cola.despues === 'jugar') { cerrar(cola.despues); return }
+    if (cola.despues === 'fin') { cerrar('salir'); return }
     avisarArgus({ cara: null, mirar: 'skulley' })
     setFase('menu')
   }, [fase, linea, completo, cola, cerrar, D, cosas])
@@ -310,7 +326,8 @@ export default function ZoidianDialog({ onClose, onPlay, playerRef, portals, tac
   const avanzarRef = useRef(avanzar)
   avanzarRef.current = avanzar
   useEffect(() => {
-    if (fase !== 'texto' || !completo || !cola || cola.despues === 'menu') return undefined
+    // ('fin' es la entrega de una ofrenda: se cierra con clic, para que dé tiempo de leerla)
+    if (fase !== 'texto' || !completo || !cola || cola.despues === 'menu' || cola.despues === 'fin') return undefined
     const lista = renglonesDe(cola.clave)
     const sigue = lista[cola.i + 1]
     let raf = 0
@@ -349,11 +366,8 @@ export default function ZoidianDialog({ onClose, onPlay, playerRef, portals, tac
       const r = pedirCosa('argus')
       const C = D.cosas
       let lineas
-      if (r.tipo === 'entrega') {
-        const pool = t(`zoidian.ofrenda.${r.id}`)
-        const texto = Array.isArray(pool) ? pool[Math.floor(Math.random() * pool.length)] : pool
-        lineas = [{ t: texto, accion: 'Presumir', cara: 'feliz' }]
-      } else if (r.tipo === 'pista') {
+      if (r.tipo === 'entrega') lineas = lineasEntrega(r.id)
+      else if (r.tipo === 'pista') {
         lineas = r.nueva
           ? [...(r.primera ? C.intro : []), ...C.pistas[r.id]]
           : [{ t: C.recuerda.replace('{cosa}', C.cosa[r.id]), cara: 'sospecha' }, ...C.pistas[r.id].slice(1)]

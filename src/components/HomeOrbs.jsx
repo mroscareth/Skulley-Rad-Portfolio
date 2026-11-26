@@ -672,6 +672,17 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
     window.addEventListener('bolt-ground-impact', onImpact)
     return () => window.removeEventListener('bolt-ground-impact', onImpact)
   }, [])
+  // Un estallido en el piso que pide alguien más con este mismo PortalBurst (ya compilado): la ofrenda
+  // que cae en su lugar (home/ObjetosOfrenda.jsx). detail: { x, z, color, orb, radio }.
+  useEffect(() => {
+    const onEstallido = (e) => {
+      const d = e?.detail || {}
+      if (!Number.isFinite(d.x) || !Number.isFinite(d.z)) return
+      portalBurstRef.current?.burst([d.x, GROUND_Y, d.z], d.color || '#ff7a1a', d.orb ?? 0.6, d.radio ?? 2)
+    }
+    window.addEventListener('estallido-piso', onEstallido)
+    return () => window.removeEventListener('estallido-piso', onEstallido)
+  }, [])
 
   // Restaura cooldown persistido al montar.
   useEffect(() => {

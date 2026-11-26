@@ -8,7 +8,7 @@ import SilhouetteShadow from '../SilhouetteShadow.jsx'
 import DomeShield from '../fx/DomeShield.jsx'
 import HumoDron from './HumoDron.jsx'
 import { dron, escucharDron, juntoArgus, picarMadre, madreEnojada, salioDeHome, volvioAHome, cargarProyectos, siguienteProyecto, recomendo } from '../../lib/droneNpc.js'
-import { dialogoMadre, escoger } from '../../lib/dialogoMadre.js'
+import { dialogoMadre, escoger, trozos } from '../../lib/dialogoMadre.js'
 import { escuchar as escucharJuego } from '../../lib/juegoEsferas.js'
 import scoreStore from '../../lib/scoreStore.js'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
@@ -132,15 +132,6 @@ const CHAMUSCA = { espera: 6 }
 const COMENTA_S = 0.8
 
 const azar = (a, b) => a + Math.random() * (b - a)
-// Parte un texto por frases en trozos de hasta `max` letras (una frase más larga va sola).
-const trozos = (texto, max = 100) => {
-  const out = []
-  for (const f of texto.split(/(?<=[.!?…])\s+/)) {
-    if (out.length && (out[out.length - 1] + ' ' + f).length <= max) out[out.length - 1] += ' ' + f
-    else out.push(f)
-  }
-  return out
-}
 const angulo = (a) => Math.atan2(Math.sin(a), Math.cos(a))
 
 export default function DroneNPC({
@@ -406,34 +397,22 @@ export default function DroneNPC({
       }
     }
     // regresaste del proyecto que te enseñó: dice dónde lo usaría una marca
-    // (dialogoMadre.js `usos`); lo largo, en trozos por frase. Con `entrega: { id, alEmpezar, vistos }`
-    // (la misión de la ofrenda, lib/misionesOfrenda.js) en su lugar te da el objeto (`entregas[id]`,
-    // {n} = proyectos vistos) y avisa con `alEmpezar` cuando el primer trozo de verdad empieza; si no
-    // puede hablar, no avisa y la misión lo vuelve a intentar con el siguiente proyecto.
+    // (dialogoMadre.js `usos`); lo largo, en trozos por frase. Las entregas de la ofrenda ya no van en
+    // su viñeta (Oscar: "me pasó de noche"): son su diálogo en modo 'entrega' (DialogoMadre).
     if (msg.comenta) {
       clearTimeout(comentaRef.current)
       const slug = msg.comenta
-      const entrega = msg.entrega
       comentaRef.current = setTimeout(() => {
         const e2 = est.current
         if (e2.modo !== 'deambular' || madreEnojada() || juegoActivoRef.current) return
         const T2 = textosRef.current
-        let texto
-        if (entrega?.id && T2.entregas?.[entrega.id]) {
-          texto = escoger(T2.entregas[entrega.id], `entrega-${entrega.id}`, { lang: langRef.current })
-          texto = texto?.replaceAll('{n}', String(entrega.vistos ?? 3))
-        } else {
-          const tipo = T2.proyectos?.[slug]?.tipo
-          const propios = T2.usosProyecto?.[slug]
-          const lista = propios || T2.usos?.[tipo] || T2.usos?.generico
-          texto = escoger(lista, `uso-${propios ? slug : tipo || 'generico'}`, { lang: langRef.current })
-        }
+        const tipo = T2.proyectos?.[slug]?.tipo
+        const propios = T2.usosProyecto?.[slug]
+        const lista = propios || T2.usos?.[tipo] || T2.usos?.generico
+        const texto = escoger(lista, `uso-${propios ? slug : tipo || 'generico'}`, { lang: langRef.current })
         if (!texto) return
         const [primero, ...resto] = trozos(texto)
-        decir(primero, 0, {
-          prioridad: entrega ? 2 : 1, espera: 10, cola: resto,
-          alEmpezar: entrega?.alEmpezar ? () => { caraRef.current?.poner('feliz'); entrega.alEmpezar() } : null,
-        })
+        decir(primero, 0, { prioridad: 1, espera: 10, cola: resto })
         caraRef.current?.poner('feliz')
         if (e2.fase === 'quieto') pedir('IdleJugueton')
         const ahora = performance.now() / 1000
@@ -465,26 +444,6 @@ export default function DroneNPC({
       const ahora = performance.now() / 1000
       e.saludaEn = Math.max(e.saludaEn, ahora + SALUDA.trasCharla)
       e.recomiendaEn = Math.max(e.recomiendaEn, ahora + RECOMIENDA.trasCharla)
-    }
-    // una ofrenda que ya te debe (lib/misionesOfrenda.js `intentarEntrega`: el iPad, la cámara, el teclado, el
-    // álbum): vuela hacia Skulley y te la da con `entregas[id]`; `alEmpezar` cuando de verdad empieza a
-    // decirlo. Si no puede hablar no hace nada y la misión lo vuelve a pedir.
-    if (msg.entrega?.id && !msg.comenta && e.modo === 'deambular' && !madreEnojada() && !juegoActivoRef.current) {
-      const ent = msg.entrega
-      const texto = escoger(textosRef.current.entregas?.[ent.id], `entrega-${ent.id}`, { lang: langRef.current })
-        ?.replaceAll('{n}', String(ent.vistos ?? 3))
-      if (texto) {
-        acercarseASkulley()
-        const [primero, ...resto] = trozos(texto)
-        decir(primero, 0, {
-          prioridad: 2, espera: 12, cola: resto,
-          alEmpezar: () => { caraRef.current?.poner('feliz'); ent.alEmpezar?.() },
-        })
-        caraRef.current?.poner('feliz')
-        const ahora = performance.now() / 1000
-        e.saludaEn = Math.max(e.saludaEn, ahora + SALUDA.trasCharla)
-        e.recomiendaEn = Math.max(e.recomiendaEn, ahora + RECOMIENDA.trasCharla)
-      }
     }
     if (msg.burlaArgus) e.burlaArgusEn = performance.now() / 1000
     if (msg.argusChamuscado) e.chamusca = { en: performance.now() / 1000, ambos: Boolean(msg.argusChamuscado.ambos) }

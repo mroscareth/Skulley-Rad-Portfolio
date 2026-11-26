@@ -8,6 +8,7 @@ import { hablando } from '../lib/turnoGlobos.js'
 import { useGlitchRunas, textoGlitch } from '../hooks/useGlitchRunas.js'
 import useFocoModal from '../hooks/useFocoModal.js'
 import { playSfx } from '../lib/sfx.js'
+import { sonarObjetoGanado } from '../lib/ofrendaSonidos.js'
 import { PRIZE_RAYS, Sparkle } from './argusArt.jsx'
 
 // El aviso de una ofrenda ganada (Oscar, 2026-11-25): una tarjeta chica al centro con el objeto
@@ -117,7 +118,7 @@ export default function ToastOfrenda({ id, lang = 'es', puede = true, onAbierto,
   useEffect(() => {
     if (!abierto) return undefined
     onAbierto?.(true)
-    try { playSfx('sparkleBom', { volume: 0.8 }) } catch { /* sin audio */ }
+    sonarObjetoGanado()
     return () => onAbierto?.(false)
   }, [abierto, onAbierto])
 

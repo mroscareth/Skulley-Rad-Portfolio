@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
-import { dialogoMadre, escoger } from '../../lib/dialogoMadre.js'
+import { dialogoMadre, escoger, trozos } from '../../lib/dialogoMadre.js'
 import { avisarDron, tomarSaludo, cerrarConMadre, siguienteProyecto } from '../../lib/droneNpc.js'
-import { comentarProyecto, misionesAbiertas, pedirCosa, MISION_IPAD } from '../../lib/misionesOfrenda.js'
+import { comentarProyecto, misionesAbiertas, pedirCosa, ganarOfrenda, MISION_IPAD } from '../../lib/misionesOfrenda.js'
 import { blipMadre } from '../../lib/blipMadre.js'
 import { useGlitchSolo, textoGlitch } from '../../hooks/useGlitchRunas.js'
 import RenglonRunas from './RenglonRunas.jsx'
@@ -42,9 +42,11 @@ const quietoPreferido = () => {
   try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch { return false }
 }
 
-// `modo`: 'charla' (al picarla: saludo y menú) o 'bienvenida' (la primera vez en
-// la experiencia: su bienvenida y se cierra; App abre después los controles).
-export default function DialogoMadre({ onClose, onVerProyecto, modo = 'charla' }) {
+// `modo`: 'charla' (al picarla: saludo y menú), 'bienvenida' (la primera vez en
+// la experiencia: su bienvenida y se cierra; App abre después los controles) o
+// 'entrega' (te da la ofrenda `entrega` que ya te ganaste y se cierra: los textos de
+// los objetos van en cinemática, Oscar 2026-11-26; lib/misionesOfrenda.js).
+export default function DialogoMadre({ onClose, onVerProyecto, modo = 'charla', entrega = null }) {
   const { lang } = useLanguage()
   const D = dialogoMadre(lang)
   const [fase, setFase] = useState('entra')      // entra | texto | menu | sale
@@ -63,6 +65,11 @@ export default function DialogoMadre({ onClose, onVerProyecto, modo = 'charla' }
   const renglonesRef = useRef(0)
 
   const linea = cola ? cola.lineas[cola.i] : null
+  // lo que dice al darte una ofrenda, por frases (lib/misionesOfrenda.js)
+  const lineasEntrega = (id) => {
+    const t = (escoger(D.entregas?.[id], `entrega-${id}`, { lang }) || '').replaceAll('{n}', String(MISION_IPAD.proyectos))
+    return trozos(t).map((x) => ({ t: x, cara: 'feliz', accion: 'IdleJugueton' }))
+  }
   // "Cuéntame de sus proyectos" va después de "¿Quién es Skulley Rad?". Sí a la izquierda y No a la
   // derecha (Oscar, 2026-11-25); Sí es el que queda marcado.
   const tras = D.temas.findIndex((x) => x.id === 'skulley') + 1
@@ -113,7 +120,7 @@ export default function DialogoMadre({ onClose, onVerProyecto, modo = 'charla' }
     faseRef.current = 'sale'
     let c = como
     if (!c) c = f !== 'texto' ? 'sinAdios' : colaRef.current?.despues === 'salir' ? 'adios' : 'cortada'
-    if (modo === 'bienvenida') c = null
+    if (modo === 'bienvenida' || modo === 'entrega') c = null
     cerrarConMadre(c)
     avisarDron({ fin: true, como: c })
     setTimeout(() => {
@@ -129,9 +136,14 @@ export default function DialogoMadre({ onClose, onVerProyecto, modo = 'charla' }
   useEffect(() => {
     let primera = true
     try { primera = !sessionStorage.getItem(VISTO); sessionStorage.setItem(VISTO, '1') } catch { }
-    const s = modo === 'bienvenida' ? null : tomarSaludo()
+    const s = modo === 'bienvenida' || modo === 'entrega' ? null : tomarSaludo()
     const id = setTimeout(() => {
       if (modo === 'bienvenida') { empezar(D.bienvenida, 'salir'); return }
+      if (modo === 'entrega') {
+        ganarOfrenda(entrega)
+        empezar(lineasEntrega(entrega), 'salir')
+        return
+      }
       if (s.tipo === 'proyecto' && s.proyecto) { ofrecer(s.proyecto); return }
       if (primera && s.tipo !== 'regano' && s.tipo !== 'perdon') { empezar(D.saludo, 'menu'); return }
       const lista = { seguido: D.seguido, vuelta: D.vuelta, regano: D.regano, perdon: D.perdon }[s.tipo] || D.otraVez
@@ -188,10 +200,8 @@ export default function DialogoMadre({ onClose, onVerProyecto, modo = 'charla' }
       const r = pedirCosa('madre')
       const C = D.cosas
       let lineas
-      if (r.tipo === 'entrega') {
-        const t = (escoger(D.entregas?.[r.id], `entrega-${r.id}`, { lang }) || '').replaceAll('{n}', String(MISION_IPAD.proyectos))
-        lineas = [{ t, cara: 'feliz', accion: 'IdleJugueton' }]
-      } else if (r.tipo === 'pista') {
+      if (r.tipo === 'entrega') lineas = lineasEntrega(r.id)
+      else if (r.tipo === 'pista') {
         lineas = r.nueva
           ? [...(r.primera ? C.intro : []), ...C.pistas[r.id]]
           : [{ t: C.recuerda.replace('{cosa}', C.cosa[r.id]), cara: 'confundida' }, ...C.pistas[r.id].slice(1)]

@@ -792,6 +792,16 @@ export function dialogoMadre(lang) {
   return lang === 'en' ? EN : ES
 }
 
+/** Parte un texto por frases en trozos de hasta `max` letras (una frase más larga va sola). */
+export function trozos(texto, max = 100) {
+  const out = []
+  for (const f of String(texto || '').split(/(?<=[.!?…])\s+/)) {
+    if (out.length && (out[out.length - 1] + ' ' + f).length <= max) out[out.length - 1] += ' ' + f
+    else out.push(f)
+  }
+  return out
+}
+
 // Saca uno de la lista sin repetir hasta acabarla (una bolsa revuelta por
 // `clave`), y llena `{seg}`. Lo que pide `{seg}` sin el dato (o con menos de 20)
 // no sale. Sirve igual para frases sueltas y para saludos de varios renglones.

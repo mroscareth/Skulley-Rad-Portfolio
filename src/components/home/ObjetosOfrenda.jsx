@@ -9,6 +9,7 @@ import { CENTRO, LUGARES, CAMA } from '../../lib/plazaOfrenda.js'
 import { ofrendaPuesta, ofrendasEnMano, ponerOfrenda, nivelOfrenda, TOTAL_OFRENDAS } from '../../lib/ofrendas.js'
 import { setObstaculosExtra } from '../../lib/obstaculosHome.js'
 import { playSfx } from '../../lib/sfx.js'
+import { sonarOfrendaVuela, sonarOfrendaPuesta } from '../../lib/ofrendaSonidos.js'
 import STICKER_IPAD from '../../assets/stickers/4-lineas.png'
 
 // Los objetos de la ofrenda del Día de los Skulleys (Oscar, 2026-11-24;
@@ -45,6 +46,8 @@ export const ESCALA = { ipad: 6, leica: 9, album: 3.3, teclado: 4.6, cerillos: 1
 // lo sólido de cada uno, en unidades del sitio (radio en el piso)
 const SOLIDO = { ipad: 0.62, leica: 0.5, album: 0.85, teclado: 0.72, cerillos: 0.38 }
 const CAE = { alto: 2.6, espera: 0.6, dura: 0.75, rebote: 0.12, luz: 0.3 }
+// al tocar el piso: el estallido (color, tamaño de la esfera y del aro en PortalBurst) y el temblor
+const PUESTA = { color: '#ff7a1a', orb: 0.75, radio: 2.4, temblor: 0.55 }
 // La que carga: `tam` lo que mide su lado más largo, a `alto` del piso (arriba de la cresta), con
 // `vueltas` de varias alrededor; `sigue` lo pegada que va a él (1/s). `radio` y `radioCama`: a qué
 // distancia del lugar se pone (afuera de lo que ocupa el objeto, para que no le caiga encima); `arco`:
@@ -472,7 +475,7 @@ export default function ObjetosOfrenda({ playerRef, activo = true, mostrarCarga 
           o.p1.x += o.raiz.position.x
           o.p1.y += CAE.alto
           o.p1.z += o.raiz.position.z
-          try { playSfx('sparkleBom', { volume: 0.8 }) } catch { /* sin audio */ }
+          sonarOfrendaVuela(CAE.espera)
         }
       }
       let escala = 0
@@ -519,7 +522,18 @@ export default function ObjetosOfrenda({ playerRef, activo = true, mostrarCarga 
       else if (puesta && o.estado === 'fuera') { o.estado = 'cae'; o.t = 0; cambio = true }
       else if (!puesta && o.estado !== 'fuera') { o.estado = 'fuera'; cambio = true }
       if (o.estado === 'cae') {
+        const antes = o.t
         o.t += dt
+        // toca el piso: su golpe y el estallido naranja (PortalBurst de HomeOrbs, ya montado) con un
+        // temblor chico (Oscar, 2026-11-26: "un sonido de cuando lo pones en su lugar y un visual")
+        const toca = CAE.espera + CAE.dura
+        if (antes < toca && o.t >= toca) {
+          sonarOfrendaPuesta()
+          try {
+            window.dispatchEvent(new CustomEvent('estallido-piso', { detail: { x: o.raiz.position.x, z: o.raiz.position.z, ...PUESTA } }))
+            window.dispatchEvent(new CustomEvent('camera-temblor', { detail: { fuerza: PUESTA.temblor } }))
+          } catch { /* sin window */ }
+        }
         if (o.t >= CAE.espera + CAE.dura + 0.5) o.estado = 'puesto'
       }
       // la luz: la del rayo ya puesto, o un poco mientras la carga (comparten materiales)
