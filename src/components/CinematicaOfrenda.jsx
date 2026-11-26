@@ -8,9 +8,14 @@ import { caminarA, caminata, soltarCaminata } from '../lib/caminataAuto.js'
 import { siesta } from '../lib/siestaSkulley.js'
 import { dron } from '../lib/droneNpc.js'
 import {
-  cine, toma, dronHaz, marcarFinalVisto, GUION_FINAL, TOMAS, RAIZ, CAMA_YAW,
-  MADRE_HABLA, MADRE_PORTAL, MADRE_SE_VA, PORTAL, CABEZA,
+  cine, toma, dronHaz, marcarFinalVisto, finalVisto, GUION_FINAL, TOMAS, RAIZ, CAMA_YAW, ARRANCA,
+  MADRE_HABLA, MADRE_PORTAL, MADRE_SE_VA, MADRE_ESPERA, PORTAL, CABEZA,
 } from '../lib/cinematicaOfrenda.js'
+
+// la música se va al empezar (Oscar: con Skulley acostándose no debe sonar nada) y regresa con el título
+const musica = (on, segundos) => {
+  try { window.dispatchEvent(new CustomEvent('musica-silencio', { detail: { on, segundos } })) } catch { }
+}
 
 // La cinemática del final de la ofrenda (Oscar, 2026-11-26; qué pasa y quién hace qué en
 // lib/cinematicaOfrenda.js). Aquí van la línea de tiempo, las barras de cine (las del diálogo de M.A.D.R.E.,
@@ -45,6 +50,14 @@ export default function CinematicaOfrenda({ lang = 'es', onPortal, onFin }) {
   const portalRef = useRef(false)
   const finRef = useRef(false)
   const nRef = useRef(0)
+  const calladaRef = useRef(false)
+  // la primera vez no se salta (Oscar, 2026-11-26); ya vista, Saltar y Esc la terminan
+  const [saltable] = useState(() => finalVisto())
+  const regresaMusica = (segundos) => {
+    if (!calladaRef.current) return
+    calladaRef.current = false
+    musica(false, segundos)
+  }
 
   const esperar = (ms) => new Promise((ok) => {
     const t0 = performance.now()
@@ -90,6 +103,7 @@ export default function CinematicaOfrenda({ lang = 'es', onPortal, onFin }) {
     vivo.current = false
     abrirPortal()
     marcarFinalVisto()
+    regresaMusica(2)
     soltarCaminata()
     cine.dron = null
     cine.cam = null
@@ -109,14 +123,17 @@ export default function CinematicaOfrenda({ lang = 'es', onPortal, onFin }) {
     cine.fase = 'camina'
     cine.dron = null
     cine.aplasta = 0
+    calladaRef.current = true
+    musica(true, 1.6)
     const correr = async () => {
-      // 1. camina a la cama y se acuesta con la cabeza en la almohada
+      // 1. camina a la cama y se acuesta con la cabeza en la almohada; en el corte de la primera toma aparece a
+      // unos pasos de ella, venga de donde venga
       toma(TOMAS.abre)
+      cine.salta = { x: ARRANCA.x, z: ARRANCA.z }
       caminarA(RAIZ.x, RAIZ.z, RAIZ.x, RAIZ.z + 5)
-      // ella viene y se queda cerca, viéndolo; si anda lejos (la plaza queda a ~130 del claro) aparece fuera
-      // de cuadro, detrás de la cámara, y entra volando: si no, la cobija tardaba medio minuto
-      const lejos = Math.hypot(dron.pos.x - CABEZA.x, dron.pos.z - CABEZA.z) > 22
-      dronHaz({ pos: [CABEZA.x + 2.2, 2.4, CABEZA.z + 3.4], salta: lejos ? [CABEZA.x + 12, 5, CABEZA.z + 15] : null, mira: 'skulley', cara: 'feliz', vel: 7 })
+      // ella espera fuera de cuadro, detrás de las cámaras, para llegar volando en la toma de arriba: aparece
+      // ahí en el corte de la primera toma (volando hasta ahí se veía cruzar antes de su turno; Oscar)
+      dronHaz({ pos: MADRE_ESPERA, salta: MADRE_ESPERA, mira: 'skulley', cara: 'feliz', vel: 7 })
       await esperar(400)
       await esperarQue(() => caminata.llego, 5000)
       if (!vivo.current) return
@@ -129,11 +146,16 @@ export default function CinematicaOfrenda({ lang = 'es', onPortal, onFin }) {
       const t0 = performance.now()
       await esperarQue(() => { cine.aplasta = Math.min(1, (performance.now() - t0) / 350); return cine.aplasta >= 1 }, 1000)
       if (!vivo.current) return
-      // 2. M.A.D.R.E. llega y lo tapa (su rutina de la siesta)
+      // 2. M.A.D.R.E. llega y lo tapa (su rutina de la siesta): desde arriba la vemos llegar volando y, cuando
+      // suelta la cobija, close up a él tapándose
       cine.fase = 'cobija'
-      toma(TOMAS.cobija)
+      toma(TOMAS.llega)
       // la suelta: con él dormido, su rutina de la siesta lo tapa
       cine.dron = null
+      // (la de la vez anterior puede seguir tirada o yéndose: esa no cuenta)
+      await esperarQue(() => ['aparece', 'cae', 'puesta'].includes(siesta.cobija.fase), 12000)
+      if (!vivo.current) return
+      toma(TOMAS.tapa)
       await esperarQue(() => siesta.cobija.fase === 'puesta', 16000)
       await esperar(2200)
       if (!vivo.current) return
@@ -143,9 +165,13 @@ export default function CinematicaOfrenda({ lang = 'es', onPortal, onFin }) {
       const aLaCabeza = [CABEZA.x, CABEZA.y, CABEZA.z]
       dronHaz({ pos: MADRE_HABLA, mira: aLaCabeza, ojos: [0, -0.7], cara: 'feliz', vel: 2.2 })
       await esperar(1800)
+      // la toma cambia solo si el renglón trae otra: pedir la misma otra vez la cortaba a su inicio y la
+      // cámara brincaba entre renglones seguidos de ella (Oscar, 2026-11-26)
+      let tomaVa = null
       for (const l of G.soliloquio) {
         if (!vivo.current) return
-        toma(TOMAS[l.toma] || TOMAS.dos)
+        const t = l.toma || 'dos'
+        if (t !== tomaVa) { tomaVa = t; toma(TOMAS[t] || TOMAS.dos) }
         dronHaz({ mira: aLaCabeza, ojos: l.toma === 'madre' ? [0, -0.5] : [0, -0.75], cara: l.cara })
         await decir(l.t)
       }
@@ -203,6 +229,7 @@ export default function CinematicaOfrenda({ lang = 'es', onPortal, onFin }) {
       if (!vivo.current) return
       setTitulo(true)
       setFase('titulo')
+      regresaMusica(3)
       await esperar(TITULO_DURA_MS)
       if (!vivo.current) return
       terminar()
@@ -212,6 +239,7 @@ export default function CinematicaOfrenda({ lang = 'es', onPortal, onFin }) {
       // si App la quita a media escena (salir de la home), que nada se quede pegado
       if (!finRef.current) {
         vivo.current = false
+        regresaMusica(1)
         soltarCaminata()
         cine.dron = null
         cine.cam = null
@@ -230,7 +258,7 @@ export default function CinematicaOfrenda({ lang = 'es', onPortal, onFin }) {
       if (e.repeat) { e.preventDefault(); e.stopImmediatePropagation(); return }
       e.preventDefault()
       e.stopImmediatePropagation()
-      if (e.key === 'Escape') { terminar(); return }
+      if (e.key === 'Escape') { if (saltable) terminar(); return }
       if (e.key === ' ' || e.key === 'Enter') avanzarRef.current?.()
     }
     const suelta = (e) => { e.preventDefault(); e.stopImmediatePropagation() }
@@ -240,16 +268,18 @@ export default function CinematicaOfrenda({ lang = 'es', onPortal, onFin }) {
       window.removeEventListener('keydown', tecla, true)
       window.removeEventListener('keyup', suelta, true)
     }
-  }, [terminar])
+  }, [terminar, saltable])
 
   const clase = `dlg-raiz cin-raiz is-${fase === 'texto' ? 'texto' : fase === 'sale' ? 'sale' : 'entra'}${quietoPreferido() ? ' is-quieto' : ''}`
   const es = lang !== 'en'
   return (
     <div className={clase} role="dialog" aria-modal="true" aria-label="M.A.D.R.E." onClick={() => avanzarRef.current?.()}>
       <div className="dlg-barra dlg-barra--arriba">
-        <button type="button" className="dlg-salir" onClick={(e) => { e.stopPropagation(); terminar() }}>
-          <span className="dlg-tecla">Esc</span>{G.saltar}
-        </button>
+        {saltable && (
+          <button type="button" className="dlg-salir" onClick={(e) => { e.stopPropagation(); terminar() }}>
+            <span className="dlg-tecla">Esc</span>{G.saltar}
+          </button>
+        )}
       </div>
       <div className="dlg-barra dlg-barra--abajo" />
       <div className="dlg-globo">

@@ -21,6 +21,7 @@ import PortalBurst from './fx/PortalBurst.jsx'
 import { playSfx } from '../lib/sfx.js'
 import { playOrbBounce, playOrbDrop, playOrbGrab, playOrbHit, playOrbPortal, ubicarSonido } from '../lib/homeSounds.js'
 import { claroBounce } from '../lib/obstaculosHome.js'
+import { cine } from '../lib/cinematicaOfrenda.js'
 import { ORB_PHYS, kickContact, simulateOrbPath, resolveOrbHit, sweptContactT, orbsApartInHeight, domeBounce, obstaculoBounce } from '../lib/orbPhysics.js'
 
 // Qué tan rápido tiene que pegar una esfera en el domo para que se vea el escudo:
@@ -1759,7 +1760,8 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
         // esto el usuario quedaba atorado sin esfera roja). Post-unlock, la
         // purified ya NO ofrenda → invoca rayos como siempre.
         const isOffering = isCursed && nearest.id === 'section6' && !section6UnlockedRef.current
-        if (sinRayo && isCursed && !isOffering) continue
+        // en la cinemática del final tampoco: su trueno se oía encima del soliloquio (Oscar, 2026-11-26)
+        if ((sinRayo || cine.activo) && isCursed && !isOffering) continue
         // La ofrenda se captura AL INSTANTE — sin exigir que vaya lenta ni que
         // repose: si la avientas con fuerza igual cuenta el tributo.
         if (!isOffering && !s._dorada && speed > SPEED_STOP && s.portalDwellTime < DWELL_CAPTURE_TIME) continue

@@ -1026,6 +1026,7 @@ export default function DroneNPC({
     if (e.modo === 'guion' && (!cine.activo || !cine.dron)) {
       e.modo = 'deambular'
       e.guionQuema = null
+      e.altoGuion = null
       caraRef.current?.mirar(0, 0)
       caraRef.current?.poner('normal')
       quieto(azar(1.5, 3))
@@ -1038,6 +1039,7 @@ export default function DroneNPC({
       if (d.salta) { e.pos.set(d.salta[0], d.salta[1], d.salta[2]); e.v.set(0, 0, 0) }
       if (d.pos) {
         const meta = new THREE.Vector3(d.pos[0], d.pos[1], d.pos[2])
+        e.altoGuion = d.pos[1]
         viajar(meta, d.vel, d.mira === 'skulley' ? 'skulley' : null)
         e.fase = 'viaje'
         if (!d.accion) pedir(e.pos.distanceTo(meta) > 6 ? 'Arrancar' : 'Avanzar')
@@ -1343,7 +1345,9 @@ export default function DroneNPC({
     e.pos.z += e.v.z * dt
     const altoMeta = e.modo === 'quemada' && e.sacudida === 0
       ? QUEMADA.alto + 0.12 * Math.sin(e.tQuemada * 2.4)
-      : (e.meta ? e.meta.y : ALTO)
+      // en la cinemática se queda a la altura de su toma también ya llegada (al soltar la meta subía a ALTO,
+      // 0.8 arriba de donde ve la cámara, y quedaba en lo alto del cuadro: Oscar, 2026-11-26)
+      : (e.meta ? e.meta.y : e.modo === 'guion' && e.altoGuion != null ? e.altoGuion : ALTO)
     e.pos.y += (altoMeta - e.pos.y) * (1 - Math.exp(-dt * 2.5))
 
     // si Skulley se le mete encima, se hace apenas a un lado (si no, se queda donde se detuvo)

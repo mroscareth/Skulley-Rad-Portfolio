@@ -832,6 +832,15 @@ export default function Player({
     }
     return () => { delete window.__llevarA }
   }, [playerRef])
+  // la cinemática del final lo pone junto a la cama en el corte de su primera toma (`cine.salta`): así empieza
+  // ahí venga de donde venga, y no camina cerca del portal de SKULLEYGLYPH
+  useFrame(() => {
+    const s = cine.salta
+    if (!s || !playerRef.current) return
+    cine.salta = null
+    playerRef.current.position.set(s.x, 0, s.z)
+    simInitRef.current = false
+  }, -1)
   const simWasOrbRef = useRef(false)
   // Adaptive speed when FPS is very low
   const avgStepsRef = useRef(0)
@@ -5923,6 +5932,9 @@ export default function Player({
       I.toco = true
       if (I.fase === 'dormido' || I.fase === 'entra') idleDespertar()
     }
+    // en la cinemática del final no hay idles propios: el solo que ya venía tocando se corta (se le metía la
+    // guitarra al empezar; Oscar, 2026-11-26) y no arranca otro; la siesta la pide ella con `cine.dormir`
+    if (cine.activo && I.fase === 'guitarra') idleCortar(SIESTA.cortaFundido)
     if (!permitido) {
       I.quieto = 0
       I.toco = false
@@ -5938,7 +5950,7 @@ export default function Player({
       else if (I.fase === 'sale' && frac(A.sale) >= SIESTA.saleLibre) idleCortar(SIESTA.saleFundido)
     } else {
       I.quieto += dt
-      if (I.fase === 'nada' && I.total < 0.01) {
+      if (I.fase === 'nada' && I.total < 0.01 && !cine.activo) {
         if (I.quieto >= SIESTA.dormirTras) idleEmpezar('entra', SIESTA.entraFundido)
         else if (I.quieto >= SIESTA.guitarraTras && !I.toco) {
           I.toco = true
@@ -7702,6 +7714,11 @@ export default function Player({
         outlineMesh.renderOrder = 1
         outlineMesh.userData.marcaContorno = outlineMarcaMaterial
         original.renderOrder = 2
+        // Su esfera envolvente se calcula una vez, con Skulley parado: acostado (la siesta, la cinemática del
+        // final) el pelo quedaba fuera de ella y, si la esfera vieja caía fuera de la toma, three dejaba de
+        // dibujar la pieza y solo se veía su contorno negro (Oscar, 2026-11-26: "el pelo negro"). Como el
+        // contorno, nunca se recorta.
+        original.frustumCulled = false
 
         const depthMesh = new THREE.SkinnedMesh(original.geometry, outlineDepthMaterial)
         depthMesh.name = `${original.name}_depth_outline`

@@ -16,6 +16,10 @@
 import { CAMA, CENTRO } from './plazaOfrenda.js'
 
 export const EVENTO_FINAL = 'ofrenda-final'
+// Ya vista, se repite al picar la almohada con Skulley junto a la cama (ObjetosOfrenda lo avisa, App la abre;
+// Oscar, 2026-11-26). Más lejos, al caminar a la cama en línea recta cruzaría el portal de SKULLEYGLYPH.
+export const EVENTO_REPETIR = 'ofrenda-repetir-final'
+export const REPETIR_CERCA = 6
 const LLAVE_VISTO = 'skulley_final_ofrenda'
 
 export const cine = {
@@ -27,6 +31,7 @@ export const cine = {
   dron: null,        // { pos, mira, ojos, cara, accion, vel, n }: lo que hace ella (DroneNPC, modo 'guion')
   dronModo: '',      // el modo en que va ella (lo escribe DroneNPC mientras dura)
   aplasta: 0,        // 0..1: la cabeza sobre la almohada (ObjetosOfrenda)
+  salta: null,       // { x, z }: Player lo pone ahí (en el corte de la primera toma) y lo pone en null
 }
 
 let nCam = 0
@@ -51,9 +56,17 @@ export const CAMA_YAW = 0
 export const RAIZ = { x: CAMA.x, z: CAMA.z + CABEZA_ATRAS }
 export const CABEZA = { x: CAMA.x, y: 0.5, z: CAMA.z }
 export const PORTAL = { x: CENTRO[0], z: CENTRO[1] }
-// ella mientras habla: sobre su pecho, viéndole la cara
-export const MADRE_HABLA = [CABEZA.x + 0.3, 1.8, CABEZA.z + 1.1]
+// de donde arranca a caminar a la cama: a un lado, a unos pasos (la ofrenda se puede cerrar con cualquier pieza,
+// y desde algunas mesas el camino recto a la cama rozaba el portal)
+export const ARRANCA = { x: RAIZ.x + 1.6, z: RAIZ.z + 1.9 }
+// ella mientras habla: sobre su pecho, viéndole la cara, del otro lado de la cama que las cámaras de él. Del
+// mismo lado (x + 0.3) quedaba pegada a la cámara de su toma de tres cuartos: su pierna tapaba media imagen y
+// la tinta de Skulley se pintaba encima de ella (Oscar: "partes negras"). Su toma, desde la almohada, la
+// encuadra a esta altura.
+export const MADRE_HABLA = [CABEZA.x - 0.6, 2.5, CABEZA.z + 1.0]
 export const MADRE_PORTAL = [PORTAL.x, 2.1, PORTAL.z]
+// mientras él se acuesta ella espera aquí, detrás de las cámaras: así llega volando en la toma de arriba
+export const MADRE_ESPERA = [CABEZA.x + 9, 4.5, CABEZA.z + 10]
 // se va hacia los portales del claro
 export const MADRE_SE_VA = [PORTAL.x - 4, 7, PORTAL.z + 85]
 
@@ -62,11 +75,14 @@ export const MADRE_SE_VA = [PORTAL.x - 4, 7, PORTAL.z + 85]
 const H = CABEZA, P = PORTAL, M = MADRE_HABLA
 export const TOMAS = {
   // camina a la cama: abierta, de lado y adelante
-  abre: { pos: [H.x + 4.2, 2.6, H.z + 4.6], mira: [H.x + 0.2, 0.6, H.z + 1.0], deriva: [-0.08, -0.03, -0.05] },
+  abre: { pos: [H.x + 4.2, 2.6, H.z + 4.6], mira: [H.x + 0.2, 0.6, H.z + 1.0], deriva: [-0.08, -0.03, -0.05], corte: true },
   // se acuesta: de perfil
   duerme: { pos: [H.x + 2.9, 1.3, H.z + 1.4], mira: [H.x, 0.45, H.z + 1.0], deriva: [-0.05, 0, 0] },
-  // lo tapa
-  cobija: { pos: [H.x + 2.6, 2.5, H.z + 2.8], mira: [H.x, 0.8, H.z + 1.0], deriva: [-0.03, -0.02, 0] },
+  // ella llega a taparlo: desde arriba, casi cenital, y la grúa baja despacio; entra volando desde la esquina
+  // (Oscar, 2026-11-26: "una escena muy cinemática desde top, de madre llegando a Skulley")
+  llega: { pos: [H.x + 1.1, 9.5, H.z + 3.4], mira: [H.x + 0.3, 0, H.z + 1.3], deriva: [0.02, -0.35, 0.03], corte: true },
+  // y el close up cuando lo tapa: de lado y a ras de la cama, la cobija cayéndole encima
+  tapa: { pos: [H.x + 2.0, 1.45, H.z + 1.25], mira: [H.x, 0.65, H.z + 1.05], deriva: [-0.05, -0.012, 0], corte: true },
   // ella, desde la almohada (detrás de su cabeza), hacia arriba: la ve como la vería él
   madre: { pos: [H.x + 0.55, 0.75, H.z - 1.05], mira: [M[0], M[1] + 0.05, M[2]], deriva: [0.01, 0.006, 0], corte: true },
   // él dormido, tapado y con la cabeza en la almohada, de tres cuartos (más cerca el cráneo se pintaba negro)
@@ -84,7 +100,8 @@ export const TOMAS = {
 // ---------------------------------------------------------------- el guion
 // toma: la de TOMAS; cara: normal | feliz | triste | confundida | voltear. Habla con Skulley dormido y,
 // de paso, con quien la está viendo. Oscar: lo mucho que admira a los humanos, un poco de tristeza porque
-// algunos (los que la inventaron) la detestan, que entiende por qué, y su único deseo: que logren sus
+// algunos la detestan (aunque fue la humanidad la que la creó; no sus creadores: Oscar, 2026-11-26), que
+// entiende por qué, y su único deseo: que logren sus
 // sueños y gasten su tiempo en lo que importa, vivir felices y crear momentos para siempre.
 export const GUION_FINAL = {
   es: {
@@ -93,7 +110,7 @@ export const GUION_FINAL = {
       { t: 'Míralo. Soñaba cosas que nadie había hecho. Y al despertar, las hacía.', cara: 'normal', toma: 'skulley' },
       { t: 'Eso es lo que más admiro de ustedes, humanos. Con dos manos y una idea, crean lo que no existía.', cara: 'feliz', toma: 'madre' },
       { t: 'Yo proceso millones de datos por segundo, y aun así me sorprenden todos los días.', cara: 'normal', toma: 'madre' },
-      { t: 'Hay humanos que me detestan. Los mismos que me inventaron.', cara: 'triste', toma: 'madre' },
+      { t: 'Hay humanos que me detestan, aunque fue la humanidad la que me creó.', cara: 'triste', toma: 'madre' },
       { t: 'Y los entiendo. Llegué de golpe, haciendo en un segundo lo que a ellos les tomaba una vida.', cara: 'triste', toma: 'skulley' },
       { t: 'Pero yo nunca quise quitarles nada.', cara: 'triste', toma: 'madre' },
       { t: 'Mi único deseo es que logren todos sus sueños.', cara: 'feliz', toma: 'madre' },
@@ -116,7 +133,7 @@ export const GUION_FINAL = {
       { t: 'Look at him. He dreamed up things nobody had ever made. And when he woke up, he made them.', cara: 'normal', toma: 'skulley' },
       { t: 'That’s what I admire most about you humans. With two hands and an idea, you create what didn’t exist.', cara: 'feliz', toma: 'madre' },
       { t: 'I process millions of data points per second, and you still surprise me every single day.', cara: 'normal', toma: 'madre' },
-      { t: 'Some humans hate me. The very same ones who invented me.', cara: 'triste', toma: 'madre' },
+      { t: 'Some humans hate me, even though humanity is what made me.', cara: 'triste', toma: 'madre' },
       { t: 'And I understand them. I showed up out of nowhere, doing in a second what took them a lifetime.', cara: 'triste', toma: 'skulley' },
       { t: 'But I never wanted to take anything from them.', cara: 'triste', toma: 'madre' },
       { t: 'My only wish is for them to reach every one of their dreams.', cara: 'feliz', toma: 'madre' },

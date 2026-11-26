@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
+import { cine } from '../../lib/cinematicaOfrenda.js'
 
 // Luciérnagas del home (Oscar, 2026-11-19): motas que flotan por el escenario y
 // titilan, como el polvo mágico de la historia (POLVO en SkulleyFallRig), para
@@ -26,6 +27,10 @@ const LUCES = {
   tam: [0.022, 0.048], // tamaño de la mota enfocada, en unidades del mundo (como las de los portales)
   apertura: 0.45,     // qué tanto se desenfoca lo que no está en el plano de Skulley
   maxPx: 140,         // tope del punto desenfocado, en pixeles del canvas
+  // en la cinemática del final, más moderado y enfocado a lo que ve la toma: con los close ups las del
+  // fondo salían como manchas enormes (Oscar, 2026-11-26)
+  aperturaCine: 0.14,
+  maxPxCine: 42,
   color: '#86ffc0',   // verde menta (Oscar)
   brillo: 1,
   // Cuánto se multiplica el color: arriba de 1 pasan el umbral del bloom y
@@ -39,6 +44,8 @@ const VERT = /* glsl */`
   uniform float uAlpha;
   uniform float uAltoPx;
   uniform float uFoco;
+  uniform float uApertura;
+  uniform float uMaxPx;
   uniform vec3 uCentro;
   uniform vec3 uCaja;
   attribute float aFase;
@@ -64,8 +71,8 @@ const VERT = /* glsl */`
     float d = max(-vista.z, 0.2);
     float escala = projectionMatrix[1][1] * uAltoPx * 0.5;
     float nitida = aTam * escala / d;
-    float coc = ${LUCES.apertura.toFixed(3)} * escala * abs(1.0 / d - 1.0 / uFoco);
-    float tam = min(sqrt(nitida * nitida + coc * coc), ${LUCES.maxPx.toFixed(1)});
+    float coc = uApertura * escala * abs(1.0 / d - 1.0 / uFoco);
+    float tam = min(sqrt(nitida * nitida + coc * coc), uMaxPx);
     vBlur = clamp(coc / max(tam, 1e-3), 0.0, 1.0);
     // Al desenfocarse la luz se reparte en un disco más grande: baja el brillo,
     // con un piso para que las grandes se sigan viendo.
@@ -134,6 +141,8 @@ export default function Luciernagas({ playerRef, activo = true }) {
           uDeriva: { value: quieto ? 0 : 1 },
           uAltoPx: { value: 1000 },
           uFoco: { value: 16 },
+          uApertura: { value: LUCES.apertura },
+          uMaxPx: { value: LUCES.maxPx },
           uCentro: { value: new THREE.Vector3() },
           uCaja: { value: new THREE.Vector3(LUCES.ancho, LUCES.alto, LUCES.fondo) },
         },
@@ -142,7 +151,7 @@ export default function Luciernagas({ playerRef, activo = true }) {
   }, [])
   useEffect(() => () => { recursos.geo.dispose(); recursos.mat.dispose() }, [recursos])
 
-  const tmp = useRef({ v: new THREE.Vector3(), dir: new THREE.Vector3(), tam: new THREE.Vector2(), alpha: 0 })
+  const tmp = useRef({ v: new THREE.Vector3(), dir: new THREE.Vector3(), tam: new THREE.Vector2(), alpha: 0, cine: 0 })
   useFrame((state, delta) => {
     const u = recursos.mat.uniforms
     const t = tmp.current
@@ -157,10 +166,16 @@ export default function Luciernagas({ playerRef, activo = true }) {
     cam.getWorldDirection(t.dir)
     t.dir.y = 0
     if (t.dir.lengthSq() > 1e-6) t.dir.normalize()
+    const enCine = cine.activo && cine.cam
+    t.cine += ((enCine ? 1 : 0) - t.cine) * (1 - Math.exp(-2.5 * Math.min(delta, 0.1)))
+    u.uApertura.value = THREE.MathUtils.lerp(LUCES.apertura, LUCES.aperturaCine, t.cine)
+    u.uMaxPx.value = THREE.MathUtils.lerp(LUCES.maxPx, LUCES.maxPxCine, t.cine)
     if (p) {
       u.uCentro.value.set(p.x + t.dir.x * LUCES.adelante, 0, p.z + t.dir.z * LUCES.adelante)
-      // El plano enfocado es el de Skulley.
-      t.v.copy(p).applyMatrix4(cam.matrixWorldInverse)
+      // El plano enfocado es el de Skulley; en la cinemática, el de lo que ve la toma.
+      if (enCine) t.v.set(cine.cam.mira[0], cine.cam.mira[1], cine.cam.mira[2])
+      else t.v.copy(p)
+      t.v.applyMatrix4(cam.matrixWorldInverse)
       u.uFoco.value = Math.max(2, -t.v.z)
     }
   })

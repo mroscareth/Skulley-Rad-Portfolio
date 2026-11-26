@@ -5,6 +5,7 @@ import CharacterNormalPass from '../fx/CharacterNormalPass.jsx'
 import WallpaperEscena, { CARA_Y } from './WallpaperEscena.jsx'
 import { registrarCabeza } from '../../lib/cabezaEnPantalla.js'
 import { toonPisoGlobal } from '../../lib/toonBanding.js'
+import { cine } from '../../lib/cinematicaOfrenda.js'
 import { wallpaperEstado } from '../../lib/wallpaperEscritorio.js'
 import { PALETAS_HOME, useMomentoHome } from '../../lib/momentoHome.js'
 import PortalCrystal from '../fx/PortalCrystal.jsx'
@@ -427,7 +428,9 @@ function ToonKeyLight({ playerRef, intensity = 2.4 }) {
     // Skulley aislado (Customize y wallpaper): de cerca ese corte diagonal le cruza
     // la cara como una mancha (Oscar, 2026-11-04). La luz se pasa casi al frente y
     // la sombra se acomoda alrededor de ojos, nariz y boca. Se recorre, no brinca.
-    const meta = wallpaperEstado.fase === 'off' ? 0 : 1
+    // También en la cinemática del final: con 3 bandas, lo que recibía menos de 1/6 de luz caía a negro puro
+    // y en la plaza oscura el lado sin luz del mohawk y la cara brincaba a negro según la toma (Oscar, 2026-11-26)
+    const meta = wallpaperEstado.fase === 'off' && !cine.activo ? 0 : 1
     aislado.current += (meta - aislado.current) * (1 - Math.exp(-6 * Math.min(0.05, delta || 0)))
     const a = aislado.current
     toonPisoGlobal.value = PISO_AISLADO * a
@@ -757,7 +760,7 @@ export default function HomeScene({
             playerRef={playerRef}
             lightRigRef={orbLightRigRef}
             active={section === 'home' && npcsVisibles && !showPreloaderOverlay && !customizeActive}
-            sinRayo={Boolean(navTarget || transitionState.active || preloaderFadingOut)}
+            sinRayo={Boolean(navTarget || transitionState.active || preloaderFadingOut || dialogoDron || dialogoArgus)}
             // OLEADA.tope montadas desde el principio: el juego las va soltando por
             // oleadas y fuera del juego se ven OLEADA.libre (HomeOrbs oculta las
             // demás). No depende de isMobilePerf, que también se prende con

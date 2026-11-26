@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
@@ -10,7 +10,8 @@ import { ofrendaPuesta, ofrendasEnMano, ponerOfrenda, nivelOfrenda, TOTAL_OFREND
 import { setObstaculosExtra } from '../../lib/obstaculosHome.js'
 import { playSfx } from '../../lib/sfx.js'
 import { sonarOfrendaVuela, sonarOfrendaPuesta } from '../../lib/ofrendaSonidos.js'
-import { cine } from '../../lib/cinematicaOfrenda.js'
+import { cine, finalVisto, EVENTO_REPETIR, REPETIR_CERCA } from '../../lib/cinematicaOfrenda.js'
+import { siesta } from '../../lib/siestaSkulley.js'
 import STICKER_IPAD from '../../assets/stickers/4-lineas.png'
 
 // Los objetos de la ofrenda del Día de los Skulleys (Oscar, 2026-11-24;
@@ -457,8 +458,9 @@ export default function ObjetosOfrenda({ playerRef, activo = true, mostrarCarga 
       // llegó a la orilla de su corona: vuela a su lugar y cae con el rayo
       if (enM && ver && o.lugar && o.sube < 0 && (o.cargaT > 0.5 || !CARGA.cabeza)) {
         const d = Math.hypot(p.x - o.lugar.x, p.z - o.lugar.z)
-        const puede = o.id !== CAMA.id || nivelOfrenda() >= TOTAL_OFRENDAS - 1
-        if (puede && d < (o.id === CAMA.id ? CARGA.radioCama : CARGA.radio) && ponerOfrenda(o.id)) {
+        // en cualquier orden: la que cierre la ofrenda, sea cual sea, arranca el final (Oscar, 2026-11-26; antes
+        // la almohada solo se ponía con las otras cinco)
+        if (d < (o.id === CAMA.id ? CARGA.radioCama : CARGA.radio) && ponerOfrenda(o.id)) {
           // vuela de donde va hasta la pose con que el puesto empieza a caer: un solo objeto
           o.sube = 0
           if (CARGA.cabeza) {
@@ -560,10 +562,15 @@ export default function ObjetosOfrenda({ playerRef, activo = true, mostrarCarga 
           aplasta = 1 - 0.18 * Math.exp(-r * 6) * Math.cos(r * 18)
         }
       }
-      // la cabeza de Skulley dormido en la cinemática del final (lib/cinematicaOfrenda.js) aplasta la almohada
-      if (o.id === CAMA.id && cine.aplasta > 0) aplasta *= 1 - 0.42 * cine.aplasta
+      // la cabeza de Skulley dormido en la cinemática del final (lib/cinematicaOfrenda.js) aplasta la almohada:
+      // baja y apenas se ensancha, y entra y sale suave (inflándose 42 % de golpe parecía que se movía; Oscar)
+      let sxz = 2 - aplasta, sy = aplasta
+      if (o.id === CAMA.id) {
+        o.aplastaS = (o.aplastaS || 0) + (cine.aplasta - (o.aplastaS || 0)) * (1 - Math.exp(-5 * dt))
+        if (o.aplastaS > 1e-3) { sy *= 1 - 0.25 * o.aplastaS; sxz *= 1 + 0.06 * o.aplastaS }
+      }
       o.cuerpo.position.y = alto
-      o.cuerpo.scale.set(esc * (2 - aplasta), esc * aplasta, esc * (2 - aplasta))
+      o.cuerpo.scale.set(esc * sxz, esc * sy, esc * sxz)
       o.sombra.scale.y = 1
       o.sombra.visible = o.estado !== 'fuera' && !(o.estado === 'cae' && o.t < CAE.espera)
       o.sombra.material.opacity = 1
@@ -577,9 +584,33 @@ export default function ObjetosOfrenda({ playerRef, activo = true, mostrarCarga 
     if (cambio) armado.solidos?.()
   })
 
+  // la almohada, con la ofrenda completa y el final ya visto: picarla lo vuelve a dormir y repite el final
+  const { gl } = useThree()
+  const almohadaLista = () => {
+    const p = playerRef?.current?.position
+    // dormido en su propia siesta no: la cinemática lo acuesta ella
+    return activo && !cine.activo && nivelOfrenda() >= TOTAL_OFRENDAS && finalVisto()
+      && !['entra', 'dormido', 'sale'].includes(siesta.estado)
+      && !!p && Math.hypot(p.x - CAMA.x, p.z - CAMA.z) < REPETIR_CERCA
+  }
+  const picarAlmohada = (ev) => {
+    if (!almohadaLista()) return
+    ev.stopPropagation()
+    try { gl.domElement.style.cursor = '' } catch { }
+    try { window.dispatchEvent(new CustomEvent(EVENTO_REPETIR)) } catch { }
+  }
+  const sobreAlmohada = (ev) => {
+    if (!almohadaLista()) return
+    ev.stopPropagation()
+    try { gl.domElement.style.cursor = 'pointer' } catch { }
+  }
+  const fueraAlmohada = () => { try { gl.domElement.style.cursor = '' } catch { } }
+
   return (
     <group name="objetos-ofrenda">
-      {Object.values(armado.objetos).map((o) => <primitive key={o.id} object={o.raiz} />)}
+      {Object.values(armado.objetos).map((o) => (o.id === CAMA.id
+        ? <primitive key={o.id} object={o.raiz} onClick={picarAlmohada} onPointerOver={sobreAlmohada} onPointerOut={fueraAlmohada} />
+        : <primitive key={o.id} object={o.raiz} />))}
       {Object.values(armado.objetos).map((o) => <primitive key={`${o.id}-carga`} object={o.carga} />)}
     </group>
   )

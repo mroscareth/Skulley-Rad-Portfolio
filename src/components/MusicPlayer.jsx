@@ -435,8 +435,9 @@ export default function MusicPlayer({
   }, [])
 
   // La canción de la ofrenda sigue al reproductor: suena si él suena, con el
-  // nivel de la ofrenda. Con la ofrenda completa y su canción puesta en el
-  // reproductor, el portal no la vuelve a tocar encima.
+  // nivel de la ofrenda. En la plaza manda siempre ella, en loop hasta salir,
+  // aunque el reproductor traiga esa misma canción (Oscar, 2026-11-26: antes le
+  // cedía el lugar y, al acabarse, el reproductor pasaba a la siguiente).
   useEffect(() => {
     const o = ofrendaRef.current
     if (!o) return
@@ -448,10 +449,6 @@ export default function MusicPlayer({
   }, [ctxReady, pistaOfrenda?.src])
   useEffect(() => { ofrendaRef.current?.ponerCorriendo(isPlaying) }, [isPlaying, ctxReady])
   useEffect(() => { ofrendaRef.current?.ponerNivel(nivelOfr) }, [nivelOfr, ctxReady])
-  useEffect(() => {
-    const o = ofrendaRef.current
-    if (o) o.anular = ofrendaLista && esCancionOfrenda(current)
-  }, [ofrendaLista, current, ctxReady])
   useEffect(() => { if (enZona) setListOpen(false) }, [enZona])
   // Si la pista puesta es la escondida (el CMS la dejó primera), a la primera
   // que sí se ve.

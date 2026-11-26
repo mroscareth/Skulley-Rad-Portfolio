@@ -197,8 +197,8 @@ import { startGameSession, endGameSession } from './lib/gameSession.js'
 import { iniciarJuego, detenerJuego, escuchar as escucharJuego } from './lib/juegoEsferas.js'
 import { castigarConDron, avisarDron } from './lib/droneNpc.js'
 import { EVENTO_GANADA, EVENTO_QUEST, comentarProyecto, intentarEntrega, misionesAbiertas, llavesQuest, fusionarQuest } from './lib/misionesOfrenda.js'
-import { EVENTO_OFRENDAS, TOTAL_OFRENDAS } from './lib/ofrendas.js'
-import { finalVisto } from './lib/cinematicaOfrenda.js'
+import { EVENTO_OFRENDAS, TOTAL_OFRENDAS, nivelOfrenda } from './lib/ofrendas.js'
+import { finalVisto, EVENTO_REPETIR } from './lib/cinematicaOfrenda.js'
 import { argus } from './lib/argusNpc.js'
 import JuegoHUD from './components/JuegoHUD.jsx'
 import useDwellTimeTracking from './hooks/useDwellTimeTracking.js'
@@ -2601,15 +2601,33 @@ function SiteApp() {
   seccionRef.current = section
   useEffect(() => {
     let id = 0
+    let ultimo = 0
     const alCambiar = (e) => {
       if (e?.detail?.fusion || (e?.detail?.nivel ?? 0) < TOTAL_OFRENDAS || finalVisto() || !misionesAbiertas()) return
+      ultimo = performance.now()
       clearTimeout(id)
       // espera a que caiga la almohada y se entierren las piedras (HUNDE en HitosOfrenda)
       id = setTimeout(() => { if (seccionRef.current === 'home') setFinalOfrenda(true) }, 5400)
     }
+    // ya vista: picar la almohada la repite (con la home libre, como una entrega)
+    const repetir = () => { if (puedeEntregarRef.current) setFinalOfrenda(true) }
+    // La ofrenda completa sin el final visto (la recarga a media espera, la cuenta que trae las seis de otra
+    // computadora, o la home ocupada cuando se puso la última): en cuanto la home esté libre, arranca. Espera
+    // a que se entierren las piedras de un cambio reciente.
+    const vigila = setInterval(() => {
+      if (performance.now() - ultimo < 7000 || !puedeEntregarRef.current) return
+      if (nivelOfrenda() < TOTAL_OFRENDAS || finalVisto() || !misionesAbiertas()) return
+      setFinalOfrenda(true)
+    }, 1000)
     window.addEventListener(EVENTO_OFRENDAS, alCambiar)
+    window.addEventListener(EVENTO_REPETIR, repetir)
     if (import.meta.env.DEV) window.__finalOfrenda = () => setFinalOfrenda(true)
-    return () => { clearTimeout(id); window.removeEventListener(EVENTO_OFRENDAS, alCambiar) }
+    return () => {
+      clearTimeout(id)
+      clearInterval(vigila)
+      window.removeEventListener(EVENTO_OFRENDAS, alCambiar)
+      window.removeEventListener(EVENTO_REPETIR, repetir)
+    }
   }, [])
   // Las ofrendas que alguien ya te debe (lib/misionesOfrenda.js): se piden con la home libre, como el toast.
   const puedeEntregarRef = useRef(false)

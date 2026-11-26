@@ -8,6 +8,7 @@ import { ANTORCHAS, CENTRO, LUGARES, CAMA } from '../../lib/plazaOfrenda.js'
 import { ofrendaPuesta, ofrendaEnMano } from '../../lib/ofrendas.js'
 import { distanciaOfrenda } from '../../lib/zonaOfrenda.js'
 import { wallpaperEstado } from '../../lib/wallpaperEscritorio.js'
+import { cine } from '../../lib/cinematicaOfrenda.js'
 
 // La plaza de la ofrenda: su oscuridad, sus rayos de luz y sus antorchas. Las
 // estelas con el nombre de cada ofrenda van con el bosque (BosquePintado) y los
@@ -66,6 +67,9 @@ const CERCA = 75
 // Lo que queda de cada luz con la plaza en su punto más oscuro, y desde y hasta
 // dónde (distancia al portal) se oscurece.
 const OSCURO = { empieza: 48, llena: 26, luz: 0.42, ambiente: 0.45, entorno: 0.38, niebla: 0.42 }
+// en la cinemática del final se oscurece menos: completa, los negros se comían a Skulley y a M.A.D.R.E. en los
+// close ups (Oscar, 2026-11-26)
+const OSCURO_CINE = 0.45
 
 // Los rayos: de qué altura bajan, cuánto se angosta la punta, cuánto siguen bajo
 // el piso (su orilla de abajo no se ve), dónde se apagan al tocar el piso y el
@@ -83,6 +87,10 @@ const RAYO = {
   radioCama: 1.7,
   prende: 1.8,        // segundos en prender al poner la ofrenda
   guia: 0.32,         // lo que brilla el rayo del lugar de una ofrenda que Skulley carga
+  // a cuánto de `haz` y `charco` llega cada uno ya prendido: completos deslavaban a M.A.D.R.E. en la
+  // cinemática del final, que habla dentro del de la cama y se despide dentro del del portal (Oscar, 2026-11-26)
+  suaveOfrenda: 0.4,
+  suavePortal: 0.7,
 }
 
 const azar = (a, b) => a + Math.random() * (b - a)
@@ -437,7 +445,8 @@ export default function PlazaOfrenda({ playerRef, activo = true }) {
     recursos.mats.brasa.emissiveIntensity = 1.1 + 0.35 * Math.sin(e.t * 5.3) * Math.sin(e.t * 1.7)
     // La oscuridad de la plaza (en Customize no: ahí la escena es la foto).
     const d = distanciaOfrenda()
-    const metaOscuro = wallpaperEstado.fase === 'off' ? 1 - THREE.MathUtils.smoothstep(d, OSCURO.llena, OSCURO.empieza) : 0
+    const metaOscuro = wallpaperEstado.fase === 'off'
+      ? (1 - THREE.MathUtils.smoothstep(d, OSCURO.llena, OSCURO.empieza)) * (cine.activo ? OSCURO_CINE : 1) : 0
     e.oscuro += (metaOscuro - e.oscuro) * (1 - Math.exp(-4 * dt))
     if (e.oscuro < 1e-3 && metaOscuro === 0) e.oscuro = 0
     if (e.oscuro > 0 || e.oscuroPuesto) {
@@ -456,10 +465,11 @@ export default function PlazaOfrenda({ playerRef, activo = true }) {
           : ofrendaEnMano(l.id) ? RAYO.guia * (0.8 + 0.2 * Math.sin(e.t * 2.2)) : 0
         const b = R.brillo[i]
         const nb = b + Math.max(-dt / 0.8, Math.min(dt / RAYO.prende, meta - b))
-        if (Math.abs(nb - b) > 1e-4 || ac.array[i] !== nb) {
+        // Prende con un pulso: entra, se pasa tantito y se asienta.
+        const v = (nb >= 1 ? 1 : nb * (1 + 0.35 * Math.sin(Math.PI * nb)))
+          * (l.id === 'portal' ? RAYO.suavePortal : RAYO.suaveOfrenda)
+        if (Math.abs(nb - b) > 1e-4 || Math.abs(ac.array[i] - v) > 1e-4) {
           R.brillo[i] = nb
-          // Prende con un pulso: entra, se pasa tantito y se asienta.
-          const v = nb >= 1 ? 1 : nb * (1 + 0.35 * Math.sin(Math.PI * nb))
           ac.array[i] = v
           ah.array[i] = v
           cambio = true
