@@ -523,6 +523,10 @@ function SiteApp() {
   const [toastOfrendaAbierto, setToastOfrendaAbierto] = useState(false)
   // la cinemática del final: arranca al quedar la ofrenda completa (la almohada va al último)
   const [finalOfrenda, setFinalOfrenda] = useState(false)
+  // Con un panel abierto (el reproductor, Customize con su wallpaper, la cuenta…) la entrega de una
+  // ofrenda y su tarjeta esperan a que lo cierres, más un respiro (Oscar, 2026-11-26: la del teclado
+  // salía encima del SR-90 mientras rayabas el disco). Lo pone `panelAbierto`, más abajo.
+  const [panelesLibres, setPanelesLibres] = useState(true)
   useEffect(() => {
     const alGanar = (e) => {
       const id = e?.detail?.id
@@ -2611,7 +2615,7 @@ function SiteApp() {
   const puedeEntregarRef = useRef(false)
   puedeEntregarRef.current = section === 'home' && homeLanded && !dialogoDron && !zoidianDialogOpen && !customizeOpen
     && !sphereGameActive && !gameOverOpen && !tutorialOpen && !transitionState.active && !proyectoRapido && !toastOfrendaAbierto
-    && !finalOfrenda
+    && !finalOfrenda && panelesLibres
   useEffect(() => {
     const abrir = (quien, id) => {
       if (quien === 'madre') {
@@ -2660,6 +2664,14 @@ function SiteApp() {
   const [historiaAbierta, setHistoriaAbierta] = useState(false)
   const [historiaCara, setHistoriaCara] = useState(false)
   const historiaViajeRef = useRef(false)
+  // el respiro deja terminar la salida del panel (el barrido de Customize, el SR-90 que se va)
+  const panelAbierto = showMusic || customizeOpen || marcoOpen || accountOpen || settingsOpen || socialsOpen
+    || menuOpen || historiaAbierta
+  useEffect(() => {
+    if (panelAbierto) { setPanelesLibres(false); return undefined }
+    const id = setTimeout(() => setPanelesLibres(true), 1500)
+    return () => clearTimeout(id)
+  }, [panelAbierto])
   const abrirHistoria = useCallback(async () => {
     if (historiaViajeRef.current || historiaAbierta || transitionState.active) return
     historiaViajeRef.current = true
@@ -4209,7 +4221,8 @@ function SiteApp() {
             id={ofrendasGanadas[0]}
             lang={lang}
             puede={section === 'home' && homeLanded && !dialogoDron && !zoidianDialogOpen && !customizeOpen
-              && !sphereGameActive && !tutorialOpen && !transitionState.active && !proyectoRapido && !finalOfrenda}
+              && !sphereGameActive && !gameOverOpen && !tutorialOpen && !transitionState.active && !proyectoRapido && !finalOfrenda
+              && panelesLibres}
             onAbierto={setToastOfrendaAbierto}
             onClose={() => setOfrendasGanadas((l) => l.slice(1))}
           />
