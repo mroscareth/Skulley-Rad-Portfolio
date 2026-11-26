@@ -10,7 +10,7 @@ import { setObstaculos, setClaro } from '../../lib/obstaculosHome.js'
 import { zonasPiso } from '../../lib/pisoPintado.js'
 import { sectionColors } from '../../lib/appHelpers.js'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
-import { LUGARES, ANTORCHAS, SOLIDO_ANTORCHA } from '../../lib/plazaOfrenda.js'
+import { LUGARES, ANTORCHAS, SOLIDO_ANTORCHA, HAY_ANTORCHAS } from '../../lib/plazaOfrenda.js'
 import { ofrendaPuesta } from '../../lib/ofrendas.js'
 
 // El bosque del home (Oscar, 2026-11-22): la home es un claro en el bosque que
@@ -481,7 +481,7 @@ export default function BosquePintado({ playerRef, portales, colorPiso = '#20458
         for (const it of items) obstaculos.push({ x: it.x, z: it.z, r: pz.choque * it.s })
       })
       // Lo sólido de la plaza de la ofrenda: las antorchas (PlazaOfrenda).
-      for (const a of ANTORCHAS) obstaculos.push({ x: a.x, z: a.z, r: SOLIDO_ANTORCHA })
+      if (HAY_ANTORCHAS) for (const a of ANTORCHAS) obstaculos.push({ x: a.x, z: a.z, r: SOLIDO_ANTORCHA })
       const menhires = []
       menhir.forEach((pz, v) => {
         if (!pz) return

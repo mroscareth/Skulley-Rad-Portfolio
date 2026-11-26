@@ -4,8 +4,8 @@ import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { applyToonBanding } from '../../lib/toonBanding.js'
 import { CAMPO_MAX, VERT_CAMPO, FRAG_CAMPO, VERT_CHISPA, FRAG_CHISPA } from '../../lib/fuegoToon.js'
-import { ANTORCHAS, CENTRO, LUGARES, CAMA } from '../../lib/plazaOfrenda.js'
-import { ofrendaPuesta, ofrendaEnMano } from '../../lib/ofrendas.js'
+import { ANTORCHAS, CENTRO, LUGARES, CAMA, HAY_ANTORCHAS } from '../../lib/plazaOfrenda.js'
+import { ponerLuzPiso } from '../../lib/pisoPintado.js'
 import { distanciaOfrenda } from '../../lib/zonaOfrenda.js'
 import { wallpaperEstado } from '../../lib/wallpaperEscritorio.js'
 import { cine } from '../../lib/cinematicaOfrenda.js'
@@ -80,7 +80,7 @@ const RAYO = {
   alto: 13,
   punta: 0.42,
   bajoPiso: 1.12,
-  fundido: 2.4,
+  fundido: 5.5,         // se pierde en el aire mucho antes del piso (pegado al piso cortaba feo y quemaba)
   color: '#fff0d2',
   haz: 0.3,
   charco: 0.22,
@@ -201,11 +201,13 @@ void main() {
   float frente = abs(dot(vuelta, normalize(cameraPosition.xz - vMundo.xz)));
   float nucleo = pow(frente, 1.8);
   float r = 0.65 * ruido(vX * 16.0 + uTiempo * 0.15, 16.0) + 0.35 * ruido(vX * 35.0 - uTiempo * 0.11 + 7.0, 35.0);
-  float rayo = smoothstep(0.2, 0.85, r);
+  float rayo = smoothstep(0.0, 1.0, r);
   float tramo = ruido2(vec2(vX * 16.0, vY * 2.6 - uTiempo * 0.22), 16.0);
-  rayo *= smoothstep(0.2, 0.7, tramo);
+  rayo *= smoothstep(0.05, 0.95, tramo);
   float lado = smoothstep(0.92, 0.35, frente) * smoothstep(0.0, 0.45, frente);
-  float luz = nucleo * mix(0.85, 1.15, rayo) + lado * mix(0.04, 0.6, rayo);
+  // las franjas que fluyen se notan dentro del haz, pero difuminadas, como con bloom (Oscar: "que los rayos animados
+  // se vean más", "bloomy, difuminado")
+  float luz = nucleo * mix(0.6, 1.35, rayo) + lado * mix(0.1, 0.65, rayo);
   vec2 g = vec2(vX * 420.0, vY * 170.0 + uTiempo * 2.0);
   float h = fract(sin(dot(floor(g), vec2(127.1, 311.7))) * 43758.5453);
   float mota = step(0.986, h) * smoothstep(0.16, 0.0, length(fract(g) - 0.5)) * (0.5 + 0.5 * sin(uTiempo * 2.2 + h * 40.0));
@@ -243,12 +245,13 @@ void main() {
 `
 
 // Dónde caen los rayos: el portal, los cinco lugares y la cama.
+// Un solo rayo grande sobre el centro (Oscar, 2026-11-26: "como si fueran rayos que salen de entre los árboles
+// que tapan el cielo"; en lugar de uno por objeto y de las antorchas): cubre el portal y las cinco piedras, baja un
+// poco inclinado y respira despacio. `inclina` en radianes hacia `hacia` (x, z); en la cinemática baja (`cine`)
+// para no deslavar a M.A.D.R.E.
+const RAYO_GRANDE = { radio: 10.5, inclina: 0.3, hacia: [0.55, 0.83], brillo: 0.6, cine: 0.35, piso: 0.16, colorPiso: new THREE.Color('#ffd59a') }
 function lugaresDeRayos() {
-  return [
-    { id: 'portal', x: CENTRO[0], z: CENTRO[1], r: RAYO.radioPortal },
-    ...LUGARES.map((l) => ({ id: l.id, x: l.mesa.x, z: l.mesa.z, r: RAYO.radioOfrenda })),
-    { id: CAMA.id, x: CAMA.x, z: CAMA.z, r: RAYO.radioCama },
-  ]
+  return [{ id: 'centro', x: CENTRO[0], z: CENTRO[1], r: RAYO_GRANDE.radio }]
 }
 
 function armarRayos() {
@@ -279,10 +282,16 @@ function armarRayos() {
   const charcos = new THREE.InstancedMesh(plano, matCharco, n)
   const m = new THREE.Matrix4()
   const q = new THREE.Quaternion()
+  const ident = new THREE.Quaternion()
+  // inclinado: el eje baja hacia `hacia` y la punta se corre al lado contrario, así el pie queda en el centro
+  const [hx, hz] = RAYO_GRANDE.hacia
+  const eje = new THREE.Vector3(hx * Math.sin(RAYO_GRANDE.inclina), -Math.cos(RAYO_GRANDE.inclina), hz * Math.sin(RAYO_GRANDE.inclina)).normalize()
+  q.setFromUnitVectors(new THREE.Vector3(0, -1, 0), eje)
+  const corre = RAYO.alto * Math.tan(RAYO_GRANDE.inclina)
   lista.forEach((l, i) => {
-    m.compose(new THREE.Vector3(l.x, RAYO.alto, l.z), q, new THREE.Vector3(l.r, RAYO.alto * RAYO.bajoPiso, l.r))
+    m.compose(new THREE.Vector3(l.x - hx * corre, RAYO.alto, l.z - hz * corre), q, new THREE.Vector3(l.r, RAYO.alto * RAYO.bajoPiso, l.r))
     conos.setMatrixAt(i, m)
-    m.compose(new THREE.Vector3(l.x, 0.02, l.z), q, new THREE.Vector3(l.r * 1.15, 1, l.r * 1.15))
+    m.compose(new THREE.Vector3(l.x, 0.02, l.z), ident, new THREE.Vector3(l.r * 1.15, 1, l.r * 1.15))
     charcos.setMatrixAt(i, m)
   })
   conos.instanceMatrix.needsUpdate = true
@@ -460,7 +469,7 @@ export default function PlazaOfrenda({ playerRef, activo = true }) {
     // Las brasas respiran.
     recursos.mats.brasa.emissiveIntensity = 1.1 + 0.35 * Math.sin(e.t * 5.3) * Math.sin(e.t * 1.7)
     // el contorno de cada antorcha, medido en pantalla con su distancia (como el de los objetos)
-    if (cerca) {
+    if (cerca && HAY_ANTORCHAS) {
       const dprT = state.gl.getPixelRatio()
       for (const t of recursos.tintas) medirContorno(t.grosor, state.camera, state.size, dprT, t.centro, t.alto)
     }
@@ -480,28 +489,21 @@ export default function PlazaOfrenda({ playerRef, activo = true }) {
       R.matRayo.uniforms.uTiempo.value = e.t
       const ac = R.conos.geometry.getAttribute('aBrillo'), ah = R.charcos.geometry.getAttribute('aBrillo')
       let cambio = false
-      R.lista.forEach((l, i) => {
-        // si Skulley carga esa ofrenda, su lugar lo llama con un rayo tenue que respira
-        const meta = l.id === 'portal' || ofrendaPuesta(l.id) ? 1
-          : ofrendaEnMano(l.id) ? RAYO.guia * (0.8 + 0.2 * Math.sin(e.t * 2.2)) : 0
-        const b = R.brillo[i]
-        const nb = b + Math.max(-dt / 0.8, Math.min(dt / RAYO.prende, meta - b))
-        // Prende con un pulso: entra, se pasa tantito y se asienta.
-        const v = (nb >= 1 ? 1 : nb * (1 + 0.35 * Math.sin(Math.PI * nb)))
-          * (l.id === 'portal' ? RAYO.suavePortal : RAYO.suaveOfrenda)
-        if (Math.abs(nb - b) > 1e-4 || Math.abs(ac.array[i] - v) > 1e-4) {
-          R.brillo[i] = nb
-          ac.array[i] = v
-          ah.array[i] = v
-          cambio = true
-        }
-      })
+      // respira despacio, como luz que se cuela entre ramas que se mueven
+      const respira = 1 + 0.08 * Math.sin(e.t * 0.7) + 0.05 * Math.sin(e.t * 1.9 + 1.3)
+      const meta = (cine.activo ? RAYO_GRANDE.cine : RAYO_GRANDE.brillo) * respira
+      R.brillo[0] += (meta - R.brillo[0]) * (1 - Math.exp(-2 * dt))
+      const v = R.brillo[0]
+      // sin charco: a este tamaño quemaba el piso y su orilla se veía como un corte (Oscar)
+      if (Math.abs(ac.array[0] - v) > 1e-4 || ah.array[0] !== 0) { ac.array[0] = v; ah.array[0] = 0; cambio = true }
       if (cambio) { ac.needsUpdate = true; ah.needsUpdate = true }
-    }
+      // y su resplandor cálido en el piso (pisoPintado.js, casilla 1)
+      ponerLuzPiso(1, CENTRO[0], CENTRO[1], RAYO_GRANDE.radio * 1.05, RAYO_GRANDE.piso * respira, RAYO_GRANDE.colorPiso)
+    } else ponerLuzPiso(1, 0, 0, 1, 0)
     const camera = state.camera
     if (cerca) camera.updateMatrixWorld()
     const ch = recursos.chispas
-    for (const f of recursos.fuegos) {
+    for (const f of HAY_ANTORCHAS ? recursos.fuegos : []) {
       f.u.uTiempo.value = e.t + f.fase
       if (!cerca) {
         f.bocanadas.length = 0
@@ -577,15 +579,19 @@ export default function PlazaOfrenda({ playerRef, activo = true }) {
   const { geos, mats } = recursos
   return (
     <group>
-      <mesh geometry={geos.madera} material={mats.madera} />
-      <mesh geometry={geos.cuerda} material={mats.cuerda} />
-      <mesh geometry={geos.hierro} material={mats.hierro} />
-      <mesh geometry={geos.brasa} material={mats.brasa} />
-      {recursos.tintas.map((t, i) => <primitive key={`tinta-${i}`} object={t.mesh} />)}
+      {HAY_ANTORCHAS && (
+        <>
+          <mesh geometry={geos.madera} material={mats.madera} />
+          <mesh geometry={geos.cuerda} material={mats.cuerda} />
+          <mesh geometry={geos.hierro} material={mats.hierro} />
+          <mesh geometry={geos.brasa} material={mats.brasa} />
+          {recursos.tintas.map((t, i) => <primitive key={`tinta-${i}`} object={t.mesh} />)}
+          {recursos.fuegos.map((f, i) => <primitive key={i} object={f.mesh} />)}
+          <primitive object={recursos.chispas.puntos} />
+        </>
+      )}
       <primitive object={recursos.rayos.conos} />
       <primitive object={recursos.rayos.charcos} />
-      {recursos.fuegos.map((f, i) => <primitive key={i} object={f.mesh} />)}
-      <primitive object={recursos.chispas.puntos} />
     </group>
   )
 }

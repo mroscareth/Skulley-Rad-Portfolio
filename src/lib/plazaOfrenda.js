@@ -121,3 +121,5 @@ export const PETALOS_PLAZA_TOPE = TUPIDO
 // Lo sólido de la plaza que no es del bosque: las antorchas (Skulley las rodea;
 // las esferas no rebotan en un palo).
 export const SOLIDO_ANTORCHA = 0.28
+// Oscar las quitó el 2026-11-26 (en su lugar, un solo rayo grande sobre la plaza): el plano se queda por si regresan.
+export const HAY_ANTORCHAS = false
