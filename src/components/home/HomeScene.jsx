@@ -268,13 +268,28 @@ import { skulleyOculto, pideOculto, ponerOculto } from '../../lib/inventarioEsce
 
 // Inventario → Objetos: Skulley se quita de en medio y en su lugar gira el objeto (lib/inventarioEscena.js).
 // En Customize ya cubierto lo deshace y lo rearma WallpaperEscena; fuera de ahí va de inmediato.
+// Se ocultan sus hijos, no el grupo: dentro van dos pointLight (en 0) y, oculto el grupo, salían de la escena,
+// cambiaba el número de luces y three recompilaba todos los materiales iluminados (17 programas la primera vez
+// que se transformaba al final de la ofrenda; Oscar, 2026-11-26). Los hijos con luz se quedan.
 function OcultaSkulley({ playerRef }) {
+  const ocultos = useRef(null)
   useFrame(() => {
     const g = playerRef?.current
     if (!g) return
     if (wallpaperEstado.fase !== 'lista' && skulleyOculto() !== pideOculto()) ponerOculto(pideOculto())
-    const ver = !skulleyOculto()
-    if (g.visible !== ver) g.visible = ver
+    const ocultar = skulleyOculto()
+    if (ocultar && !ocultos.current) {
+      const lista = []
+      for (const hijo of g.children) {
+        let conLuz = false
+        hijo.traverse((o) => { if (o.isLight) conLuz = true })
+        if (!conLuz && hijo.visible) { hijo.visible = false; lista.push(hijo) }
+      }
+      ocultos.current = lista
+    } else if (!ocultar && ocultos.current) {
+      for (const hijo of ocultos.current) hijo.visible = true
+      ocultos.current = null
+    }
   })
   return null
 }
