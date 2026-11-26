@@ -257,6 +257,15 @@ const ES = {
       'Con un personaje así, una marca tiene quién la cuente. Y a este no le va a faltar trabajo.',
     ],
   },
+  // La ofrenda (lib/misionesOfrenda.js): al regresar del proyecto con que se gana un objeto, en vez del
+  // comentario te lo da, en su viñeta y en trozos ({n}: proyectos de Skulley que viste con ella). Del
+  // portal no dice nada: eso lo cuenta el aviso del objeto.
+  entregas: {
+    ipad: [
+      'Ya viste {n} de sus proyectos, humano. Ten, te lo ganaste: era el iPad de Skulley. Ahí dibujaba. Yo lo intenté 2,048 veces con ese lápiz y no me sale ni un trazo como los suyos.',
+      'Ten, humano. Era suyo: en esa pantalla dibujaba sus personajes antes de que existieran. Lo guardé desde que se fue. Cuídamelo, ¿eh?',
+    ],
+  },
   // ---- viñetas en el mundo (DroneNPC)
   // la cortaste a media frase; te fuiste del menú sin despedirte
   cortada: [
@@ -579,6 +588,12 @@ const EN = {
     'the-unemployed-alien': [
       'A character with a story of his own. Picture him as a brand mascot, in an animated series or as stickers for social media.',
       'With a character like this, a brand has someone to tell its story. And this one won’t be short on work.',
+    ],
+  },
+  entregas: {
+    ipad: [
+      'You’ve seen {n} of his projects, human. Here, you earned it: this was Skulley’s iPad. That’s where he drew. I’ve tried 2,048 times with that pencil and I can’t make a single stroke like his.',
+      'Here, human. It was his: on that screen he drew his characters before they existed. I’ve kept it since he left. Take care of it for me, okay?',
     ],
   },
   cortada: [

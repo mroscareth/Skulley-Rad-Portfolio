@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { dialogoMadre, escoger } from '../../lib/dialogoMadre.js'
 import { avisarDron, tomarSaludo, cerrarConMadre, siguienteProyecto } from '../../lib/droneNpc.js'
+import { comentarProyecto } from '../../lib/misionesOfrenda.js'
 import { blipMadre } from '../../lib/blipMadre.js'
 import { useGlitchSolo, textoGlitch } from '../../hooks/useGlitchRunas.js'
 import RenglonRunas from './RenglonRunas.jsx'
@@ -116,7 +117,8 @@ export default function DialogoMadre({ onClose, onVerProyecto, modo = 'charla' }
     setTimeout(() => {
       onClose?.()
       if (verRef.current) onVerProyecto?.(verRef.current)
-      if (fueraRef.current) avisarDron({ comenta: fueraRef.current })
+      // lo comenta y cuenta para la misión del iPad (lib/misionesOfrenda.js)
+      if (fueraRef.current) comentarProyecto(fueraRef.current)
     }, SALIDA_MS)
     setFase('sale')
   }, [onClose, onVerProyecto, modo])

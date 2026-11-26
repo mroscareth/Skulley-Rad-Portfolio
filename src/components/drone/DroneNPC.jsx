@@ -297,11 +297,17 @@ export default function DroneNPC({
   // dice algo en su viñeta (se escribe letra por letra)
   // Pide turno (lib/turnoGlobos.js): no corta su frase ni la de nadie; cuando le toca se escribe a
   // TURNO.letras y se queda lo que se tarda en leerla. `cola`: los trozos que siguen (una frase larga).
-  const decir = (texto, _dura, { prioridad = 0, espera = TURNO.esperaDef, cola = [] } = {}) => {
+  // `alEmpezar`: cuando de verdad empieza a escribirse (si caduca en la fila, nunca).
+  const decir = (texto, _dura, { prioridad = 0, espera = TURNO.esperaDef, cola = [], alEmpezar = null } = {}) => {
     if (!texto) return
     pedirTurno({
       quien: 'madre', texto, espera, prioridad,
-      iniciar: (d) => { const e = est.current; e.dice = { texto, t: 0, dura: d.total }; e.diceCola = cola },
+      iniciar: (d) => {
+        const e = est.current
+        e.dice = { texto, t: 0, dura: d.total }
+        e.diceCola = cola
+        if (alEmpezar) { try { alEmpezar() } catch (err) { console.warn('[dron] alEmpezar', err) } }
+      },
     })
   }
   const decirRef = useRef(decir)
@@ -400,21 +406,34 @@ export default function DroneNPC({
       }
     }
     // regresaste del proyecto que te enseñó: dice dónde lo usaría una marca
-    // (dialogoMadre.js `usos`); lo largo, en trozos por frase
+    // (dialogoMadre.js `usos`); lo largo, en trozos por frase. Con `entrega: { id, alEmpezar, vistos }`
+    // (la misión de la ofrenda, lib/misionesOfrenda.js) en su lugar te da el objeto (`entregas[id]`,
+    // {n} = proyectos vistos) y avisa con `alEmpezar` cuando el primer trozo de verdad empieza; si no
+    // puede hablar, no avisa y la misión lo vuelve a intentar con el siguiente proyecto.
     if (msg.comenta) {
       clearTimeout(comentaRef.current)
       const slug = msg.comenta
+      const entrega = msg.entrega
       comentaRef.current = setTimeout(() => {
         const e2 = est.current
         if (e2.modo !== 'deambular' || madreEnojada() || juegoActivoRef.current) return
         const T2 = textosRef.current
-        const tipo = T2.proyectos?.[slug]?.tipo
-        const propios = T2.usosProyecto?.[slug]
-        const lista = propios || T2.usos?.[tipo] || T2.usos?.generico
-        const texto = escoger(lista, `uso-${propios ? slug : tipo || 'generico'}`, { lang: langRef.current })
+        let texto
+        if (entrega?.id && T2.entregas?.[entrega.id]) {
+          texto = escoger(T2.entregas[entrega.id], `entrega-${entrega.id}`, { lang: langRef.current })
+          texto = texto?.replaceAll('{n}', String(entrega.vistos ?? 3))
+        } else {
+          const tipo = T2.proyectos?.[slug]?.tipo
+          const propios = T2.usosProyecto?.[slug]
+          const lista = propios || T2.usos?.[tipo] || T2.usos?.generico
+          texto = escoger(lista, `uso-${propios ? slug : tipo || 'generico'}`, { lang: langRef.current })
+        }
         if (!texto) return
         const [primero, ...resto] = trozos(texto)
-        decir(primero, 0, { prioridad: 1, espera: 10, cola: resto })
+        decir(primero, 0, {
+          prioridad: entrega ? 2 : 1, espera: 10, cola: resto,
+          alEmpezar: entrega?.alEmpezar ? () => { caraRef.current?.poner('feliz'); entrega.alEmpezar() } : null,
+        })
         caraRef.current?.poner('feliz')
         if (e2.fase === 'quieto') pedir('IdleJugueton')
         const ahora = performance.now() / 1000
