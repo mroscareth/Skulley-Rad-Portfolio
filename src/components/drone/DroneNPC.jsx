@@ -466,12 +466,13 @@ export default function DroneNPC({
       e.saludaEn = Math.max(e.saludaEn, ahora + SALUDA.trasCharla)
       e.recomiendaEn = Math.max(e.recomiendaEn, ahora + RECOMIENDA.trasCharla)
     }
-    // una ofrenda que ya te debe (lib/misionesOfrenda.js `intentarEntrega`: la cámara, el teclado, el
+    // una ofrenda que ya te debe (lib/misionesOfrenda.js `intentarEntrega`: el iPad, la cámara, el teclado, el
     // álbum): vuela hacia Skulley y te la da con `entregas[id]`; `alEmpezar` cuando de verdad empieza a
     // decirlo. Si no puede hablar no hace nada y la misión lo vuelve a pedir.
     if (msg.entrega?.id && !msg.comenta && e.modo === 'deambular' && !madreEnojada() && !juegoActivoRef.current) {
       const ent = msg.entrega
       const texto = escoger(textosRef.current.entregas?.[ent.id], `entrega-${ent.id}`, { lang: langRef.current })
+        ?.replaceAll('{n}', String(ent.vistos ?? 3))
       if (texto) {
         acercarseASkulley()
         const [primero, ...resto] = trozos(texto)

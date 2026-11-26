@@ -107,7 +107,32 @@ export function dialogoArgus(lang, datos) {
         jugar: '¡Trato! A jugar',
         como: '¿Cómo se juega?',
         premios: '¿Qué me gano?',
+        cosas: '¿Tienes algo de Skulley?',
         adios: 'Ahora no',
+      },
+      // Las cosas de Skulley que cuida él (lib/misionesOfrenda.js, Oscar 2026-11-26): de una en una, con
+      // pistas y no con órdenes. La entrega usa `zoidian.ofrenda.<id>` (LanguageContext), igual que en su globo.
+      cosas: {
+        intro: [
+          { t: '¿Cosas de Skulley? Uy, compa. Algo tengo, sí.', accion: 'Encogerse', cara: 'sospecha' },
+          { t: 'Dice M.A.D.R.E. que esas cosas sirven para algo, en algún lado. Yo nomás las cuido.', cara: 'neutral' },
+        ],
+        pistas: {
+          cerillos: [
+            { t: 'Tengo sus cerillos. Se los regaló su novia y él los cuidaba como tesoro.', accion: 'Presumir', cara: 'feliz' },
+            { t: 'Pero no se los doy a cualquiera. Nomás a alguien que no le tenga miedo al fuego.', cara: 'sospecha' },
+            { t: 'Por ahí hay un caminito de pétalos que nadie se atreve a tocar… yo nomás digo.', accion: 'Senalar', cara: 'sospecha' },
+          ],
+          almohada: [
+            { t: 'Lo último que tengo es su almohada. Ahí soñaba sus mejores ideas.', cara: 'feliz' },
+            { t: 'Esa la guardo para alguien que juegue en serio. Una partida de cuatro cifras, compa, no menos.', accion: 'Trato', cara: 'sospecha' },
+            { t: 'Y no me veas así, que yo no hago las reglas. Bueno, sí. Pero esta me gusta.', accion: 'Risa', cara: 'carcajada' },
+          ],
+        },
+        recuerda: '¿Todavía nada con {cosa}? Va otra vez.',
+        cosa: { cerillos: 'los cerillos', almohada: 'la almohada' },
+        fin: [{ t: 'Ya te di todo lo que tenía, compa. Lo demás lo guarda M.A.D.R.E.: pregúntale a ella.', cara: 'feliz', accion: 'Presumir' }],
+        finTodo: [{ t: 'Ya te di todo lo que tenía, compa. Ahora ve a ver para qué sirven esas cosas.', cara: 'feliz', accion: 'Presumir' }],
       },
       como: [
         tactil
@@ -203,7 +228,30 @@ export function dialogoArgus(lang, datos) {
       jugar: "Deal! Let's play",
       como: 'How do I play?',
       premios: 'What do I win?',
+      cosas: 'Got anything of Skulley’s?',
       adios: 'Not now',
+    },
+    cosas: {
+      intro: [
+        { t: 'Skulley’s stuff? Oof, buddy. I might have something, yeah.', accion: 'Encogerse', cara: 'sospecha' },
+        { t: 'M.A.D.R.E. says those things are good for something, somewhere. I just look after them.', cara: 'neutral' },
+      ],
+      pistas: {
+        cerillos: [
+          { t: 'I’ve got his matches. His girlfriend gave them to him and he kept them like treasure.', accion: 'Presumir', cara: 'feliz' },
+          { t: 'But I don’t hand them out to just anybody. Only to someone who isn’t scared of fire.', cara: 'sospecha' },
+          { t: 'There’s a little trail of petals out there nobody dares to touch… just saying.', accion: 'Senalar', cara: 'sospecha' },
+        ],
+        almohada: [
+          { t: 'The last thing I’ve got is his pillow. That’s where he dreamed up his best ideas.', cara: 'feliz' },
+          { t: 'I save that one for someone who plays for real. A four-digit game, buddy, nothing less.', accion: 'Trato', cara: 'sospecha' },
+          { t: 'Don’t look at me like that, I don’t make the rules. Well, I do. But I like this one.', accion: 'Risa', cara: 'carcajada' },
+        ],
+      },
+      recuerda: 'Still nothing with {cosa}? One more time.',
+      cosa: { cerillos: 'the matches', almohada: 'the pillow' },
+      fin: [{ t: 'I gave you everything I had, buddy. M.A.D.R.E. keeps the rest: ask her.', cara: 'feliz', accion: 'Presumir' }],
+      finTodo: [{ t: 'I gave you everything I had, buddy. Now go see what those things are for.', cara: 'feliz', accion: 'Presumir' }],
     },
     como: [
       tactil

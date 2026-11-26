@@ -9,7 +9,7 @@ import { ObjetoGirando } from './ToastOfrenda.jsx'
 import { useGlitchRunas, textoGlitch } from '../hooks/useGlitchRunas.js'
 import { useTituloOrilla } from '../hooks/useTituloOrilla.js'
 import { OFRENDAS, ofrendaPuesta, ofrendaEnMano, escucharOfrendas } from '../lib/ofrendas.js'
-import { HISTORIAS } from '../lib/misionesOfrenda.js'
+import { HISTORIAS, ENTREGA, misionPedida } from '../lib/misionesOfrenda.js'
 import { skulleyOculto } from '../lib/inventarioEscena.js'
 import { playSfx } from '../lib/sfx.js'
 
@@ -184,6 +184,14 @@ function NombreGlitch({ texto, activo }) {
   )
 }
 
+// Lo que falta: su pista si ya te lo soltaron (lib/misionesOfrenda.js), si no, a quién preguntarle.
+function pistaDe(id, h, L) {
+  if (misionPedida(id) && h.pista?.[L]) return h.pista[L]
+  const madre = ENTREGA[id] === 'madre'
+  if (L === 'en') return madre ? 'M.A.D.R.E. knows something about this. Ask her.' : 'Argus knows something about this. Ask him.'
+  return madre ? 'M.A.D.R.E. sabe algo de esto. Pregúntale.' : 'Argus sabe algo de esto. Pregúntale.'
+}
+
 // A la derecha: el nombre grande con glitch y abajo su historia y dónde va.
 export function TextoObjeto({ lang = 'es', id, activo = false, compacta = false }) {
   useOfrendas()
@@ -201,7 +209,7 @@ export function TextoObjeto({ lang = 'es', id, activo = false, compacta = false 
     <div className={`@container flex flex-col ${compacta ? 'w-full max-w-sm items-center text-center' : 'w-full'}`}>
       <div className="cc-pieza w-full"><NombreGlitch key={`${id}-${nombre}`} texto={nombre} activo={activo} /></div>
       <p className={`cc-pieza mt-5 leading-snug opacity-90 ${compacta ? 'text-[13px]' : 'text-[15px] md:text-base'}`}>
-        {tiene ? h[L] : (h.pista?.[L] || (L === 'es' ? 'Todavía no lo encuentras.' : "You haven't found it yet."))}
+        {tiene ? h[L] : pistaDe(id, h, L)}
       </p>
       {tiene && <p className="cc-pieza mt-3 text-[12px] md:text-[13px] leading-snug opacity-60">{donde}</p>}
     </div>

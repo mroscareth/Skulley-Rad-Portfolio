@@ -112,6 +112,9 @@ function bomba(ctx, destino, { de, a, ritmo, ganancia }) {
 function armar(ctx, out) {
   const t = ctx.currentTime
   const master = ctx.createGain()
+  // en 0 de base, no solo agendado: `ajustarVentiladores` cancela lo agendado desde ese instante y la
+  // ganancia regresaba a 1 (la de fábrica); al volver de lejos entraba a todo y luego bajaba (Oscar)
+  master.gain.value = 0
   master.gain.setValueAtTime(0, t)
   const paneo = ctx.createStereoPanner ? ctx.createStereoPanner() : null
   if (paneo) master.connect(paneo).connect(out)

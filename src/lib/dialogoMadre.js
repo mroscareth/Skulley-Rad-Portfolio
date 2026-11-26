@@ -199,6 +199,43 @@ const ES = {
   si: 'Sí',
   no: 'No',
   contarProyectos: 'Cuéntame de sus proyectos',
+  // Las cosas de Skulley (lib/misionesOfrenda.js, Oscar 2026-11-26): las suelta de una en una, con pistas y
+  // nunca con órdenes, y sin decir para qué sirven ni dónde (del portal escondido no sabe nada).
+  cosas: {
+    label: '¿Qué dejó Skulley?',
+    intro: [
+      { t: 'Seis cosas, humano. Seis cosas que Skulley atesoró más que a nada.', cara: 'normal' },
+      { t: 'No sé para qué sirven. Él nunca guardaba nada porque sí, así que seguro cumplen una función en algún lugar.', cara: 'confundida', voltear: true },
+      { t: 'Te las voy a contar de una en una, que si te digo todas te me abrumas. De dos sabe más Argus, pero no le digas que te dije.', cara: 'feliz' },
+    ],
+    pistas: {
+      ipad: [
+        { t: 'La primera: su iPad. Ahí dibujó casi todo lo que ves en este lugar.', cara: 'feliz' },
+        { t: 'Lo dejó entre sus proyectos. Decía que su trabajo se entendía mejor cuando alguien te lo enseñaba, uno por uno.', cara: 'normal', voltear: true },
+        { t: 'Y yo me sé todos sus proyectos de memoria, humano. Nomás digo.', cara: 'feliz' },
+      ],
+      leica: [
+        { t: 'La siguiente: su cámara. Con ella aprendió a encuadrar.', cara: 'feliz' },
+        { t: 'Se hacía el difícil, pero le encantaba que lo retrataran. Sobre todo en grande, de esos retratos que se ponen de fondo de pantalla.', cara: 'normal', voltear: true },
+        { t: 'Dicen que la cámara regresa con quien le toma un retrato así. Yo no digo nada.', cara: 'confundida' },
+      ],
+      teclado: [
+        { t: 'Ahora su teclado. Cuando se aburría de dibujar, se ponía a hacer música.', cara: 'feliz' },
+        { t: 'Y cuando se aburría de la música, le rayaba los discos al reproductor. Decía que así despertaban.', cara: 'confundida', voltear: true },
+        { t: 'Desde que se fue, ese teclado no suena. A lo mejor está esperando a que alguien despierte un disco.', cara: 'normal' },
+      ],
+      album: [
+        { t: 'La última que yo sé: su álbum de fotos. Ahí guardaba a su gente.', cara: 'feliz' },
+        { t: 'Lo que escribía de ellos lo dejó en sus Memorias. Tenía la costumbre de guardar las fotos junto a lo que contaba.', cara: 'normal', voltear: true },
+        { t: 'Yo nunca he podido abrir ese álbum. A lo mejor tú sí, si lees con calma.', cara: 'confundida' },
+      ],
+    },
+    // la vuelves a preguntar y todavía no la tienes: lo de `pistas` sin el primer renglón
+    recuerda: '¿Todavía no aparece {cosa}? Te repito lo que sé.',
+    cosa: { ipad: 'su iPad', leica: 'su cámara', teclado: 'su teclado', album: 'su álbum' },
+    fin: [{ t: 'Ya tienes todo lo que yo guardaba de él. Lo demás, pregúntale a Argus. Y cuídalo, ¿eh?', cara: 'feliz' }],
+    finTodo: [{ t: 'Ya tienes todo lo que dejó, humano. Para qué sirve, no lo sé. Pero algo me dice que tú lo vas a averiguar.', cara: 'feliz', voltear: true }],
+  },
   // la pregunta del menú cuando le dijiste que no
   preguntasNo: [
     'Bueno, te lo guardo para después. ¿Qué quieres saber?',
@@ -552,6 +589,40 @@ const EN = {
   si: 'Yes',
   no: 'No',
   contarProyectos: 'Tell me about his projects',
+  cosas: {
+    label: 'What did Skulley leave behind?',
+    intro: [
+      { t: 'Six things, human. Six things Skulley treasured more than anything.', cara: 'normal' },
+      { t: 'I don’t know what they’re for. He never kept anything without a reason, so they must serve a purpose somewhere.', cara: 'confundida', voltear: true },
+      { t: 'I’ll tell you about them one at a time, or you’ll get overwhelmed. Argus knows more about two of them, but don’t tell him I said so.', cara: 'feliz' },
+    ],
+    pistas: {
+      ipad: [
+        { t: 'The first one: his iPad. He drew almost everything you see in this place on it.', cara: 'feliz' },
+        { t: 'He left it among his projects. He used to say his work made more sense when someone showed it to you, one by one.', cara: 'normal', voltear: true },
+        { t: 'And I know all his projects by heart, human. Just saying.', cara: 'feliz' },
+      ],
+      leica: [
+        { t: 'Next: his camera. That’s how he learned to frame things.', cara: 'feliz' },
+        { t: 'He played hard to get, but he loved having his portrait taken. Especially big ones, the kind you set as your wallpaper.', cara: 'normal', voltear: true },
+        { t: 'They say the camera comes back to whoever takes a portrait like that. I’m not saying anything.', cara: 'confundida' },
+      ],
+      teclado: [
+        { t: 'Now his keyboard. Whenever he got bored of drawing, he made music.', cara: 'feliz' },
+        { t: 'And whenever he got bored of music, he scratched the records on the player. He said it woke them up.', cara: 'confundida', voltear: true },
+        { t: 'That keyboard hasn’t made a sound since he left. Maybe it’s waiting for someone to wake up a record.', cara: 'normal' },
+      ],
+      album: [
+        { t: 'The last one I know about: his photo album. That’s where he kept his people.', cara: 'feliz' },
+        { t: 'What he wrote about them, he left in his Memories. He had a habit of keeping the photos next to the stories.', cara: 'normal', voltear: true },
+        { t: 'I’ve never been able to open that album. Maybe you can, if you read slowly.', cara: 'confundida' },
+      ],
+    },
+    recuerda: 'Still no sign of {cosa}? Here’s what I know.',
+    cosa: { ipad: 'his iPad', leica: 'his camera', teclado: 'his keyboard', album: 'his album' },
+    fin: [{ t: 'You have everything I kept of his. For the rest, ask Argus. And take care of it, okay?', cara: 'feliz' }],
+    finTodo: [{ t: 'You have everything he left, human. What it’s for, I don’t know. But something tells me you’ll figure it out.', cara: 'feliz', voltear: true }],
+  },
   preguntasNo: [
     'Okay, I’ll save it for later. What do you want to know?',
     'Suit yourself. It’ll be here anyway, forever. What else do you want to know?',

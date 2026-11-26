@@ -10,6 +10,7 @@ import { dron, avisarDron, juntoArgus } from '../lib/droneNpc.js'
 import { useGlitchSolo, textoGlitch } from '../hooks/useGlitchRunas.js'
 import RenglonRunas from './drone/RenglonRunas.jsx'
 import { TicketArt } from './GoldenTicketBadge.jsx'
+import { misionesAbiertas, pedirCosa } from '../lib/misionesOfrenda.js'
 import { PRIZE_RAYS, Sparkle } from './argusArt.jsx'
 import { Tecla, Raton, GlifoTactil } from './TutorialModal.jsx'
 
@@ -167,7 +168,7 @@ function Muestra({ tipo, D, gold, silver }) {
 }
 
 export default function ZoidianDialog({ onClose, onPlay, playerRef, portals, tactil = false }) {
-  const { lang } = useLanguage()
+  const { lang, t } = useLanguage()
   const tickets = useTicketStats()
   // lo que recuerda de la última vez y la semilla de las variantes: fijos mientras dura la escena
   const [memoria] = useState(() => ({ ...(argus.memoria || {}) }))
@@ -186,8 +187,13 @@ export default function ZoidianDialog({ onClose, onPlay, playerRef, portals, tac
   const salidaRef = useRef(null)
 
   // Los renglones se leen del guion vivo (el conteo de dorados llega después de abrir).
-  const linea = cola ? D[cola.clave]?.[cola.i] : null
-  const opciones = useMemo(() => ['jugar', 'como', 'premios', 'adios'].map((id) => ({ id, label: D.opciones[id] })), [D])
+  // "¿Tienes algo de Skulley?": sus renglones salen de cómo vas con sus cosas (lib/misionesOfrenda.js)
+  const [cosas, setCosas] = useState(null)
+  const renglonesDe = (clave) => (clave === 'cosas' ? cosas : D[clave]) || []
+  const linea = cola ? renglonesDe(cola.clave)[cola.i] : null
+  const opciones = useMemo(() => [
+    'jugar', 'como', 'premios', ...(misionesAbiertas() ? ['cosas'] : []), 'adios',
+  ].map((id) => ({ id, label: D.opciones[id] })), [D])
 
   // El portal al que señala: el más cercano a Skulley.
   const portalRef = useRef(null)
@@ -287,7 +293,7 @@ export default function ZoidianDialog({ onClose, onPlay, playerRef, portals, tac
   const avanzar = useCallback(() => {
     if (fase !== 'texto' || !linea) return
     if (!completo) { setCompleto(true); return }
-    const lista = D[cola.clave] || []
+    const lista = renglonesDe(cola.clave)
     if (cola.i + 1 < lista.length) {
       renglonesRef.current += 1
       setCola({ ...cola, i: cola.i + 1, n: renglonesRef.current })
@@ -297,7 +303,7 @@ export default function ZoidianDialog({ onClose, onPlay, playerRef, portals, tac
     if (cola.despues === 'salir' || cola.despues === 'jugar') { cerrar(cola.despues); return }
     avisarArgus({ cara: null, mirar: 'skulley' })
     setFase('menu')
-  }, [fase, linea, completo, cola, cerrar, D])
+  }, [fase, linea, completo, cola, cerrar, D, cosas])
 
   // Los renglones que cierran se pasan solos al terminar de leerse; antes del de
   // M.A.D.R.E. se espera a que el drone llegue junto a Argus.
@@ -305,7 +311,7 @@ export default function ZoidianDialog({ onClose, onPlay, playerRef, portals, tac
   avanzarRef.current = avanzar
   useEffect(() => {
     if (fase !== 'texto' || !completo || !cola || cola.despues === 'menu') return undefined
-    const lista = D[cola.clave] || []
+    const lista = renglonesDe(cola.clave)
     const sigue = lista[cola.i + 1]
     let raf = 0
     const id = setTimeout(() => {
@@ -321,7 +327,7 @@ export default function ZoidianDialog({ onClose, onPlay, playerRef, portals, tac
       espera()
     }, CIERRE_SOLO_MS)
     return () => { clearTimeout(id); cancelAnimationFrame(raf) }
-  }, [fase, completo, cola, D, cerrar])
+  }, [fase, completo, cola, D, cerrar, cosas])
 
   const elegir = useCallback((i) => {
     const o = opciones[i]
@@ -339,9 +345,26 @@ export default function ZoidianDialog({ onClose, onPlay, playerRef, portals, tac
       empezar('adios', 'salir')
       return
     }
+    if (o.id === 'cosas') {
+      const r = pedirCosa('argus')
+      const C = D.cosas
+      let lineas
+      if (r.tipo === 'entrega') {
+        const pool = t(`zoidian.ofrenda.${r.id}`)
+        const texto = Array.isArray(pool) ? pool[Math.floor(Math.random() * pool.length)] : pool
+        lineas = [{ t: texto, accion: 'Presumir', cara: 'feliz' }]
+      } else if (r.tipo === 'pista') {
+        lineas = r.nueva
+          ? [...(r.primera ? C.intro : []), ...C.pistas[r.id]]
+          : [{ t: C.recuerda.replace('{cosa}', C.cosa[r.id]), cara: 'sospecha' }, ...C.pistas[r.id].slice(1)]
+      } else lineas = r.otro ? C.fin : C.finTodo
+      setCosas(lineas)
+      empezar('cosas', 'menu')
+      return
+    }
     setVistos((v) => new Set(v).add(o.id))
     empezar(o.id, 'menu')
-  }, [opciones, empezar])
+  }, [opciones, empezar, D, t])
 
   // teclado: va en captura y no deja pasar nada al juego mientras dura
   useEffect(() => {

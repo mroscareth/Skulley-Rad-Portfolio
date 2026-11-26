@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { dialogoMadre, escoger } from '../../lib/dialogoMadre.js'
 import { avisarDron, tomarSaludo, cerrarConMadre, siguienteProyecto } from '../../lib/droneNpc.js'
-import { comentarProyecto } from '../../lib/misionesOfrenda.js'
+import { comentarProyecto, misionesAbiertas, pedirCosa, MISION_IPAD } from '../../lib/misionesOfrenda.js'
 import { blipMadre } from '../../lib/blipMadre.js'
 import { useGlitchSolo, textoGlitch } from '../../hooks/useGlitchRunas.js'
 import RenglonRunas from './RenglonRunas.jsx'
@@ -72,6 +72,8 @@ export default function DialogoMadre({ onClose, onVerProyecto, modo = 'charla' }
       ...D.temas.slice(0, tras),
       { id: 'proyectos', label: D.contarProyectos },
       ...D.temas.slice(tras),
+      // las cosas de Skulley: te las suelta de una en una (lib/misionesOfrenda.js)
+      ...(misionesAbiertas() ? [{ id: 'cosas', label: D.cosas.label }] : []),
       { id: 'adios', label: D.adios.label },
     ]
   const colaRef = useRef(null)
@@ -182,6 +184,21 @@ export default function DialogoMadre({ onClose, onVerProyecto, modo = 'charla' }
     }
     selTemasRef.current = i
     if (o.id === 'adios') { empezar([escoger(D.adios.lineas, 'adios', { lang })], 'salir'); return }
+    if (o.id === 'cosas') {
+      const r = pedirCosa('madre')
+      const C = D.cosas
+      let lineas
+      if (r.tipo === 'entrega') {
+        const t = (escoger(D.entregas?.[r.id], `entrega-${r.id}`, { lang }) || '').replaceAll('{n}', String(MISION_IPAD.proyectos))
+        lineas = [{ t, cara: 'feliz', accion: 'IdleJugueton' }]
+      } else if (r.tipo === 'pista') {
+        lineas = r.nueva
+          ? [...(r.primera ? C.intro : []), ...C.pistas[r.id]]
+          : [{ t: C.recuerda.replace('{cosa}', C.cosa[r.id]), cara: 'confundida' }, ...C.pistas[r.id].slice(1)]
+      } else lineas = r.otro ? C.fin : C.finTodo
+      empezar(lineas, 'menu')
+      return
+    }
     if (o.id === 'proyectos') {
       const p = siguienteProyecto(D.proyectos)
       if (!p) return
