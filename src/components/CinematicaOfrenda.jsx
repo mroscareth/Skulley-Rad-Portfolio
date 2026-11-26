@@ -309,7 +309,7 @@ export default function CinematicaOfrenda({ lang = 'es', onPortal, onFin }) {
         )}
       </div>
       {titulo && (
-        <div className="cin-titulo" aria-live="polite">
+        <div className="msh-beat--hero cin-titulo" aria-live="polite">
           <div className="@container w-full">
             <h2
               className={`display-title select-none cin-titulo__nombre ${orilla ? 'titulo-orilla' : 'display-title--lg'}${!faseTitulo?.letras ? ' display-title--runas' : ''}${faseTitulo?.tiembla ? ' glitch-runas' : ''}`}

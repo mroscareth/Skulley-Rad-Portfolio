@@ -7894,7 +7894,7 @@ export default function Player({
         />
         {/* La llama de la mano (todas las skins): aquí adentro para que el
             modo wallpaper la cuente con el cuerpo. */}
-        <LlamaMano raiz={scene} disparoRef={laserShotRef} />
+        <LlamaMano raiz={scene} disparoRef={laserShotRef} alumbraPiso />
         {/* El mohawk en llamas de la skin Inferno. */}
         <LlamaMano raiz={scene} fuente="pelo" />
         {/* Orb sphere + inner sparkles to convey "ser de luz" */}

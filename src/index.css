@@ -7991,6 +7991,8 @@ div:has(> #privy-dialog-backdrop) {
   top: 50%;
   /* de orilla a orilla (Oscar, 2026-11-26): el título mide lo que mide este bloque */
   width: 94vw;
+  /* lleva msh-beat--hero por el Rock Salt del subtítulo; su margen de arriba no */
+  padding: 0;
   transform: translate(-50%, -58%);
   text-align: center;
   color: #fff;

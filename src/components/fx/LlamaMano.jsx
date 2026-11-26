@@ -4,6 +4,7 @@ import * as THREE from 'three'
 import { getSkinForcedColors, getCurrentSkinMode, SKIN_LINE_COLOR_EVENT } from '../../lib/skinShaders.js'
 import { getCharacterColors, CHARACTER_COLOR_EVENT } from '../../lib/characterColors.js'
 import { uniformsLlama } from '../../lib/toonBanding.js'
+import { ponerLuzPiso } from '../../lib/pisoPintado.js'
 import { BANDAS, VERT_BRASA, FRAG_BRASA } from '../../lib/fuegoToon.js'
 
 // La llama de la mano de Skulley, con todas las skins (Oscar, 2026-11-15: la
@@ -155,6 +156,8 @@ const LUZ = { parpadeo: 0.16, tope: 1.8, bola: 1.1, destello: 1.8, destelloDura:
 // 7.5 radios todo el torso quedaba en la banda fuerte y ya no se leía de dónde
 // venía la luz.
 const DERRAME = { fuerza: 0.78, alcance: 6.5, umbral: 0.36, enlace: 0.5 }
+// El charco que deja en el piso de la home (pisoPintado.js): radio en metros con la llama en reposo y fuerza.
+const LUZ_PISO = { radio: 2.4, fuerza: 0.8 }
 
 function hash1(n) { const x = Math.sin(n * 127.1) * 43758.5453; return x - Math.floor(x) }
 function ruido1(x) {
@@ -427,7 +430,9 @@ const uniformsEstela = (colores) => ({
   ...colores,
 })
 
-export default function LlamaMano({ raiz, disparoRef = null, fuente = 'mano' }) {
+export default function LlamaMano({ raiz, disparoRef = null, fuente = 'mano', alumbraPiso = false }) {
+  // al irse (salir de la home, el retrato que se desmonta) su charco no se queda en el piso
+  useEffect(() => () => { if (alumbraPiso) ponerLuzPiso(0, 0, 0, 1, 0) }, [alumbraPiso])
   const esPelo = fuente === 'pelo'
   const cfg = esPelo ? FUEGO_PELO : FUEGO
   const llamaRef = useRef(null)
@@ -913,6 +918,7 @@ export default function LlamaMano({ raiz, disparoRef = null, fuente = 'mano' }) 
       brasas.count = 0
       st.luzI = 0
       st.luzParams.x = 0
+      if (alumbraPiso) ponerLuzPiso(0, 0, 0, 1, 0)
       for (const c of casillas) {
         if (c.refB.current) c.refB.current.count = 0
         if (c.refE.current) c.refE.current.count = 0
@@ -1265,6 +1271,13 @@ export default function LlamaMano({ raiz, disparoRef = null, fuente = 'mano' }) 
       Rrep * DERRAME.alcance * Math.sqrt(Math.max(0, st.luzI)),
       DERRAME.umbral,
     )
+    // y en el piso (solo la de Skulley en la home, `alumbraPiso`): un charco bajo el fuego, más chico y tenue entre
+    // más alto va (Oscar, 2026-11-26: "que la flama ilumine el piso y su entorno")
+    if (alumbraPiso) {
+      const alto = THREE.MathUtils.clamp(1 - (st.luzPos.y - 1.2) / 3.5, 0, 1)
+      ponerLuzPiso(0, st.luzPos.x, st.luzPos.z, LUZ_PISO.radio * Math.sqrt(Math.max(0, st.luzI)) * (0.6 + 0.4 * alto),
+        LUZ_PISO.fuerza * Math.min(1.3, st.luzI) * alto, st.luzColor)
+    }
     st.enlace -= dt
     if (st.enlace <= 0 && st.raiz) {
       st.enlace = DERRAME.enlace

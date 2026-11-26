@@ -59,6 +59,8 @@ const PLAZA = [0, 0, 54]
 // Lo que mide la textura en el mundo, en unidades.
 const TAM_TIERRA = 5.5
 const PORTALES_MAX = 6
+// La luz del fuego en el piso (Oscar, 2026-11-26): la flama de Skulley (0) y las antorchas de la plaza (1..6).
+export const LUCES_PISO = 8
 // Hasta dónde llega el desgaste desde el centro de cada portal.
 // (Oscar: que abarque más y se vaya desvaneciendo; antes 3.6 y en dos escalones.)
 const RADIO_DESGASTE = 6.5
@@ -81,6 +83,9 @@ export const uniformsPiso = {
   // La capa fina: la misma pintura más chica, encima (ver GLSL_PISO).
   uPisoFino: { value: 0.8 },
   uPisoPortales: { value: Array.from({ length: PORTALES_MAX }, () => new THREE.Vector3()) },
+  uPisoLuces: { value: Array.from({ length: LUCES_PISO }, () => new THREE.Vector4(0, 0, 1, 0)) },
+  uPisoLucesColor: { value: Array.from({ length: LUCES_PISO }, () => new THREE.Color('#ff8a2a')) },
+  uPisoLuzFuerza: { value: 0.6 },
   uPisoPiedras: { value: null },
   uPisoPiedrasAlfa: { value: null },
   uPisoPlaza: { value: new THREE.Vector3(...PLAZA) },
@@ -269,6 +274,15 @@ export function caminoEnPiso(x, z) {
 }
 
 // Los portales del home ({ position: [x, y, z] }): ahí se gasta el piso.
+// La luz de un fuego en el piso: `i` su casilla (0 la flama de Skulley, 1..6 las antorchas), dónde, de qué radio,
+// qué tan fuerte (0 la apaga) y de qué color.
+export function ponerLuzPiso(i, x, z, radio, fuerza, color) {
+  const L = uniformsPiso.uPisoLuces.value[i]
+  if (!L) return
+  L.set(x, z, Math.max(0.01, radio), Math.max(0, fuerza))
+  if (color) uniformsPiso.uPisoLucesColor.value[i].copy(color)
+}
+
 export function ponerPortalesPiso(portales) {
   const lista = uniformsPiso.uPisoPortales.value
   for (let i = 0; i < PORTALES_MAX; i++) {
@@ -289,6 +303,9 @@ uniform float uPisoClaro;
 uniform float uPisoDesgaste;
 uniform float uPisoFino;
 uniform vec3 uPisoPortales[${PORTALES_MAX}];
+uniform vec4 uPisoLuces[${LUCES_PISO}];
+uniform vec3 uPisoLucesColor[${LUCES_PISO}];
+uniform float uPisoLuzFuerza;
 uniform sampler2D uPisoPiedras;
 uniform sampler2D uPisoPiedrasAlfa;
 uniform vec3 uPisoPlaza;
@@ -397,6 +414,28 @@ const GLSL_PISO = /* glsl */ `
   pintado = mix(pintado, vec3(1.0), uPisoClaro * max(d, 0.0) + uPisoDesgaste * desgaste);
   float mascara = clamp(max(abs(d) * 60.0, desgaste * 4.0), 0.0, 1.0) * uPisoFuerza;
   outgoingLight = mix(outgoingLight, pintado * pintado, mascara);
+  // La luz del fuego (la flama de Skulley, sus bolas y explosiones, las antorchas): charcos suaves que bailan.
+  // Sin luces reales: una luz nueva recompilaría la escena.
+  // Se mezcla hacia el color del fuego (sumado, el naranja sobre el azul salía rosa).
+  vec3 fuego = vec3(0.0);
+  float peso = 0.0;
+  for (int i = 0; i < ${LUCES_PISO}; i++) {
+    vec4 L = uPisoLuces[i];
+    if (L.w <= 0.0) continue;
+    // caída suave y redonda (en bandas duras se veía demasiado toon y con la orilla en ruido, como nube: Oscar);
+    // lo que se mueve es la fuerza y el tamaño, como la llama
+    float d = length(p - L.xy) / L.z;
+    if (d >= 1.6) continue;
+    // gaussiana: un resplandor que se pierde solo, sin orilla (Oscar: "más natural, como bloom, cozy")
+    float k = exp(-d * d * 3.2) * L.w;
+    fuego += uPisoLucesColor[i] * k;
+    peso += k;
+  }
+  if (peso > 0.0) {
+    vec3 tono = fuego / peso;
+    outgoingLight = mix(outgoingLight, tono * 0.8, min(peso * uPisoLuzFuerza, 0.5));
+    outgoingLight += tono * min(peso, 1.2) * 0.12;
+  }
 }
 `
 
@@ -427,7 +466,7 @@ export function aplicarPisoPintado(material, gl) {
   }
   const llavePrevia = material.customProgramCacheKey
   material.customProgramCacheKey = function () {
-    return `piso-pintado-2|${llavePrevia.call(this)}`
+    return `piso-pintado-3|${llavePrevia.call(this)}`
   }
   material.userData.pisoPintado = true
   material.needsUpdate = true
