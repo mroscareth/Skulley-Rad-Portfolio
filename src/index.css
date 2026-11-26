@@ -7989,7 +7989,8 @@ div:has(> #privy-dialog-backdrop) {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: min(86vw, 72rem);
+  /* de orilla a orilla (Oscar, 2026-11-26): el título mide lo que mide este bloque */
+  width: 94vw;
   transform: translate(-50%, -58%);
   text-align: center;
   color: #fff;
@@ -7997,7 +7998,7 @@ div:has(> #privy-dialog-backdrop) {
   text-shadow: 0 0.05em 0 #000, 0 0 0.7em rgba(0, 0, 0, 0.5);
   animation: cin-titulo-entra 900ms ease both;
 }
-.cin-titulo .cin-titulo__nombre { align-items: center; }
+.cin-titulo .cin-titulo__nombre { color: #fff; }
 .cin-titulo .cin-titulo__sub { margin-top: 0.6rem; opacity: 1; }
 .cin-raiz.is-sale .cin-titulo { animation: cin-titulo-sale 700ms ease both; }
 @keyframes cin-titulo-entra { from { opacity: 0; } to { opacity: 1; } }

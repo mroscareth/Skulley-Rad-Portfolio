@@ -9,6 +9,8 @@ import { ofrendaPuesta, ofrendaEnMano } from '../../lib/ofrendas.js'
 import { distanciaOfrenda } from '../../lib/zonaOfrenda.js'
 import { wallpaperEstado } from '../../lib/wallpaperEscritorio.js'
 import { cine } from '../../lib/cinematicaOfrenda.js'
+import { crearUniformContorno, medirContorno } from '../../lib/contornoPantalla.js'
+import { materialContorno, normalesSuaves } from './ObjetosOfrenda.jsx'
 
 // La plaza de la ofrenda: su oscuridad, sus rayos de luz y sus antorchas. Las
 // estelas con el nombre de cada ofrenda van con el bosque (BosquePintado) y los
@@ -103,6 +105,7 @@ const _v = new THREE.Vector3()
 function armarAntorchas() {
   const partes = { madera: [], cuerda: [], hierro: [], brasa: [] }
   const bocas = []
+  const siluetas = []
   const A = ANTORCHA
   const C = A.copa
   const arriba = A.palo
@@ -137,13 +140,18 @@ function armarAntorchas() {
     )
     for (const nombre of Object.keys(una)) for (const g of una[nombre]) { g.applyMatrix4(m); partes[nombre].push(g) }
     bocas.push(new THREE.Vector3(0, arriba + C.alto - 0.04, 0).applyMatrix4(m))
+    // su silueta de tinta, como la de los objetos de la ofrenda (Oscar, 2026-11-26: "no tienen stroke"): una por
+    // antorcha, para medir su grosor en pantalla con su propia distancia
+    const silueta = mergeGeometries([...una.madera, ...una.cuerda, ...una.hierro].map((g) => g.toNonIndexed()), false)
+    normalesSuaves(silueta)
+    siluetas.push({ geo: silueta, centro: new THREE.Vector3(0, (arriba + C.alto) / 2, 0).applyMatrix4(m), alto: arriba + C.alto })
   }
   const geos = {}
   for (const nombre of Object.keys(partes)) {
     geos[nombre] = mergeGeometries(partes[nombre].map((g) => g.toNonIndexed()), false)
     partes[nombre].forEach((g) => g.dispose())
   }
-  return { geos, bocas }
+  return { geos, bocas, siluetas }
 }
 
 const RAYO_VERT = /* glsl */`
@@ -379,7 +387,14 @@ function ponerCampo(f, camera) {
 export default function PlazaOfrenda({ playerRef, activo = true }) {
   const { size, gl, scene } = useThree()
   const recursos = useMemo(() => {
-    const { geos, bocas } = armarAntorchas()
+    const { geos, bocas, siluetas } = armarAntorchas()
+    const tintas = siluetas.map((s) => {
+      const grosor = crearUniformContorno()
+      const mesh = new THREE.Mesh(s.geo, materialContorno(grosor))
+      mesh.frustumCulled = false
+      mesh.renderOrder = -1
+      return { mesh, grosor, centro: s.centro, alto: s.alto }
+    })
     const mats = {
       madera: materialToon({ color: '#7a5236' }),
       cuerda: materialToon({ color: '#c9a46a' }),
@@ -416,7 +431,7 @@ export default function PlazaOfrenda({ playerRef, activo = true }) {
     const mc = new THREE.ShaderMaterial({ uniforms: { uEscalaPx: { value: 1 } }, vertexShader: VERT_CHISPA, fragmentShader: FRAG_CHISPA, toneMapped: false })
     const puntos = new THREE.Points(g, mc)
     puntos.frustumCulled = false
-    return { geos, mats, plano, fuegos, colores, chispas: { puntos, g, m: mc, vivas: [] }, rayos: armarRayos() }
+    return { geos, mats, plano, fuegos, colores, tintas, chispas: { puntos, g, m: mc, vivas: [] }, rayos: armarRayos() }
   }, [])
 
   useEffect(() => () => {
@@ -424,6 +439,7 @@ export default function PlazaOfrenda({ playerRef, activo = true }) {
     Object.values(recursos.mats).forEach((m) => m.dispose())
     recursos.plano.dispose()
     recursos.fuegos.forEach((f) => f.mesh.material.dispose())
+    recursos.tintas.forEach((t) => { t.mesh.geometry.dispose(); t.mesh.material.dispose() })
     recursos.chispas.g.dispose()
     recursos.chispas.m.dispose()
     for (const im of [recursos.rayos.conos, recursos.rayos.charcos]) { im.geometry.dispose(); im.material.dispose() }
@@ -443,6 +459,11 @@ export default function PlazaOfrenda({ playerRef, activo = true }) {
     e.cerca = cerca
     // Las brasas respiran.
     recursos.mats.brasa.emissiveIntensity = 1.1 + 0.35 * Math.sin(e.t * 5.3) * Math.sin(e.t * 1.7)
+    // el contorno de cada antorcha, medido en pantalla con su distancia (como el de los objetos)
+    if (cerca) {
+      const dprT = state.gl.getPixelRatio()
+      for (const t of recursos.tintas) medirContorno(t.grosor, state.camera, state.size, dprT, t.centro, t.alto)
+    }
     // La oscuridad de la plaza (en Customize no: ahí la escena es la foto).
     const d = distanciaOfrenda()
     const metaOscuro = wallpaperEstado.fase === 'off'
@@ -560,6 +581,7 @@ export default function PlazaOfrenda({ playerRef, activo = true }) {
       <mesh geometry={geos.cuerda} material={mats.cuerda} />
       <mesh geometry={geos.hierro} material={mats.hierro} />
       <mesh geometry={geos.brasa} material={mats.brasa} />
+      {recursos.tintas.map((t, i) => <primitive key={`tinta-${i}`} object={t.mesh} />)}
       <primitive object={recursos.rayos.conos} />
       <primitive object={recursos.rayos.charcos} />
       {recursos.fuegos.map((f, i) => <primitive key={i} object={f.mesh} />)}

@@ -1,9 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import RenglonRunas from './drone/RenglonRunas.jsx'
-import GlitchName, { finDeRunas } from './GlitchName.jsx'
-import useTitulosAjustados from '../hooks/useTitulosAjustados.js'
+import { useTituloOrilla } from '../hooks/useTituloOrilla.js'
 import { blipMadre } from '../lib/blipMadre.js'
-import { useGlitchSolo, textoGlitch } from '../hooks/useGlitchRunas.js'
+import { useGlitchSolo, useGlitchRunas, textoGlitch } from '../hooks/useGlitchRunas.js'
 import { caminarA, caminata, soltarCaminata } from '../lib/caminataAuto.js'
 import { siesta } from '../lib/siestaSkulley.js'
 import { dron } from '../lib/droneNpc.js'
@@ -24,7 +23,11 @@ const musica = (on, segundos) => {
 // adelanta), el título del final y Saltar (Esc). App la monta cuando se pone la última ofrenda.
 // `onPortal`: el rayo ya pegó en el portal (App abre la sección 6, que lo prende). `onFin`: ya se fue todo.
 
-const TITULO_RUNAS_MS = 250
+// el título del final: SKULLEY RAD de orilla a orilla en un renglón, llega en runas y se glitchea a letras
+// (solo de ida, sin el nombre civil: Oscar, 2026-11-26); el subtítulo se escribe después
+const NOMBRE_TITULO = 'SKULLEY RAD'
+const TITULO_GLITCH_MS = 900
+const TITULO_SUB_MS = 1500
 // los destellos del rayo que se deja caer ella (ms desde el primero)
 const RAYO_FINAL = [0, 150, 320, 560, 820]
 const TITULO_DURA_MS = 6200
@@ -42,8 +45,14 @@ export default function CinematicaOfrenda({ lang = 'es', onPortal, onFin }) {
   const [titulo, setTitulo] = useState(false)
   const nombreRef = useRef(null)
   const firma = useGlitchSolo(nombreRef, { primeraMs: 1400, cadaMs: 4200, sostieneMs: 1300 })
-  const tituloRef = useRef(null)
-  useTitulosAjustados(tituloRef, [titulo, lang], { tope: 0.16 })
+  const orilla = useTituloOrilla(NOMBRE_TITULO)
+  const llegadaTitulo = useGlitchRunas(titulo, { sonido: false, sostieneMs: 864e5 })
+  useEffect(() => {
+    if (!titulo) return undefined
+    const id = setTimeout(llegadaTitulo.disparar, TITULO_GLITCH_MS)
+    return () => clearTimeout(id)
+  }, [titulo, llegadaTitulo.disparar])
+  const faseTitulo = llegadaTitulo.fase
 
   const vivo = useRef(true)
   const avanzarRef = useRef(null)     // el clic: completa el renglón o lo pasa
@@ -300,18 +309,18 @@ export default function CinematicaOfrenda({ lang = 'es', onPortal, onFin }) {
         )}
       </div>
       {titulo && (
-        <div ref={tituloRef} className="msh-beat--hero cin-titulo" aria-live="polite">
-          <GlitchName
-            as="h2"
-            className="msh-title cin-titulo__nombre"
-            runesUntil={TITULO_RUNAS_MS}
-            glitchAfter={2200}
-            descripcion="Skulley Rad"
-            data-texto="SKULLEY RAD"
-            data-texto-glitch={'OSCAR MOCTE█UMA\nOSCAR MOCTEZUMA'}
-          />
+        <div className="cin-titulo" aria-live="polite">
+          <div className="@container w-full">
+            <h2
+              className={`display-title select-none cin-titulo__nombre ${orilla ? 'titulo-orilla' : 'display-title--lg'}${!faseTitulo?.letras ? ' display-title--runas' : ''}${faseTitulo?.tiembla ? ' glitch-runas' : ''}`}
+              style={orilla || undefined}
+              aria-label="Skulley Rad"
+            >
+              <span aria-hidden>{textoGlitch(NOMBRE_TITULO, faseTitulo)}</span>
+            </h2>
+          </div>
           <p className="msh-sub cin-titulo__sub">
-            <span className="dsp-sub-escribe" style={{ animationDelay: `${finDeRunas(TITULO_RUNAS_MS)}ms` }}>
+            <span className="dsp-sub-escribe" style={{ animationDelay: `${TITULO_SUB_MS}ms` }}>
               {es ? GUION_FINAL.es.titulo : GUION_FINAL.en.titulo}
             </span>
           </p>

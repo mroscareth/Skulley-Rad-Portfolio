@@ -256,7 +256,7 @@ function materialToon(params) {
   return m
 }
 
-function materialContorno(grosor) {
+export function materialContorno(grosor) {
   const m = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide, fog: false, toneMapped: false })
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uContorno = grosor
@@ -270,7 +270,7 @@ function materialContorno(grosor) {
 }
 
 // Normales promediadas por posición: con las partidas de las aristas el hull se abre en las esquinas.
-function normalesSuaves(geo) {
+export function normalesSuaves(geo) {
   const pos = geo.attributes.position
   const nor = geo.attributes.normal
   const n = pos.count
