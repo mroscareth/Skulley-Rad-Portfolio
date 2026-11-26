@@ -6,6 +6,7 @@ import { CENTRO as CENTRO_PLAZA, densidadPetalosPlaza, PETALOS_PLAZA_TOPE } from
 import { escucharExplosiones } from '../../lib/explosionesHome.js'
 import { ubicarSonido } from '../../lib/homeSounds.js'
 import { sonarBrota, sonarFuego, sonarPolvo, sonarPrenden } from '../../lib/petalosSonidos.js'
+import { petalosQuemados } from '../../lib/misionesOfrenda.js'
 
 // Pétalos de cempasúchil en el camino escondido de Work a SKULLEYGLYPH (2026-11-22):
 // donde la tierra tapa las lozas, los pétalos siguen el camino, como el de Día de
@@ -744,6 +745,9 @@ export default function PetalosCamino({ playerRef }) {
         s.pz[k] += s.pvz[k] * dt
       }
     }
+
+    // la misión de los cerillos (lib/misionesOfrenda.js): Argus te los da
+    if (prendidos) petalosQuemados(prendidos)
 
     // Los sonidos, desde Skulley y del lado de la pantalla donde pasa.
     if (prendidos || ardiendo || brotan || polvos || pr.sonaba) {

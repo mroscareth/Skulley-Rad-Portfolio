@@ -15,6 +15,7 @@ import {
   ensureScratchWorkletLoaded,
 } from '../lib/ScratchAudioNode.js'
 import IconoTinta from './ui/IconoTinta.jsx'
+import { misionHecha, MISION } from '../lib/misionesOfrenda.js'
 
 // Un track se pide por tres caminos a la vez: el buffer del worklet de scratch
 // y los dos lectores de portada con jsmediatags. Sin compartir la promesa, el
@@ -295,6 +296,8 @@ export default function MusicPlayer({
   const maxAngleRef = useRef(Math.PI * 2)
   const rafIdRef = useRef(0)
   const lastScratchTsRef = useRef(0)
+  // lo que se ha movido el disco con la mano: la misión del teclado (lib/misionesOfrenda.js)
+  const rayadoRef = useRef(0)
   const SCRATCH_GUARD_MS = 1200
   const wasScratchingRef = useRef(false) // Track previous scratch state to detect end of scratch
   // (Worklet-based scratch: needsRestartRef / sourceIdRef / lastRateUpdateRef /
@@ -995,6 +998,10 @@ export default function MusicPlayer({
     const l = Math.atan2(Math.sin(a - o), Math.cos(a - o))
     angleRef.current = Math.max(0, Math.min(angleRef.current - l, maxAngleRef.current))
     draggingFromRef.current = { ...n }
+    if (rayadoRef.current < MISION.rayadoRad) {
+      rayadoRef.current += Math.abs(l)
+      if (rayadoRef.current >= MISION.rayadoRad) misionHecha('teclado')
+    }
     // Direct DOM mutation — no React re-render for disc rotation during scratch
     setDiscRotation((angleRef.current * 180) / Math.PI)
     lastScratchTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now())

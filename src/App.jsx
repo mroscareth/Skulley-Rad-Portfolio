@@ -194,7 +194,7 @@ import { useShopCartCtx } from './lib/shopCartContext.jsx'
 import { startGameSession, endGameSession } from './lib/gameSession.js'
 import { iniciarJuego, detenerJuego, escuchar as escucharJuego } from './lib/juegoEsferas.js'
 import { castigarConDron, avisarDron } from './lib/droneNpc.js'
-import { EVENTO_GANADA, comentarProyecto } from './lib/misionesOfrenda.js'
+import { EVENTO_GANADA, comentarProyecto, intentarEntrega } from './lib/misionesOfrenda.js'
 import { argus } from './lib/argusNpc.js'
 import JuegoHUD from './components/JuegoHUD.jsx'
 import useDwellTimeTracking from './hooks/useDwellTimeTracking.js'
@@ -2568,6 +2568,14 @@ function SiteApp() {
   }, [section, homeLanded, sphereGameActive, customizeOpen, transitionState.active, dialogoDron, tutorialOpen])
   // con una charla abierta (las barras de cine) los globos no hablan; al cerrarla, siguen
   useEffect(() => { pausarTurnos(dialogoDron || zoidianDialogOpen || toastOfrendaAbierto) }, [dialogoDron, zoidianDialogOpen, toastOfrendaAbierto])
+  // Las ofrendas que alguien ya te debe (lib/misionesOfrenda.js): se piden con la home libre, como el toast.
+  const puedeEntregarRef = useRef(false)
+  puedeEntregarRef.current = section === 'home' && homeLanded && !dialogoDron && !zoidianDialogOpen && !customizeOpen
+    && !sphereGameActive && !gameOverOpen && !tutorialOpen && !transitionState.active && !proyectoRapido && !toastOfrendaAbierto
+  useEffect(() => {
+    const id = setInterval(() => intentarEntrega(puedeEntregarRef.current), 1500)
+    return () => clearInterval(id)
+  }, [])
   useEffect(() => {
     if (!zoidianDialogOpen || !(section !== 'home' || sphereGameActive || customizeOpen || transitionState.active)) return
     setZoidianDialogOpen(false)

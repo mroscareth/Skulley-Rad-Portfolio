@@ -6,6 +6,7 @@ import { GIRO_POR_PX, WALLPAPER_H, WALLPAPER_W, WALLPAPER_W_POCA_MEMORIA, wallpa
 import { dibujarTexto, FUENTES_TEXTO } from '../lib/wallpaperTexto.js'
 import { STICKERS } from '../lib/wallpaperStickers.js'
 import IconoTinta from './ui/IconoTinta.jsx'
+import { misionHecha } from '../lib/misionesOfrenda.js'
 
 // El marco del wallpaper de escritorio, encima de Skulley aislado (se abre desde
 // Customize). Tiene la proporción del archivo y lo que cae adentro es lo que sale.
@@ -559,6 +560,8 @@ export default function DesktopWallpaper({ lista = false, onSalir, fondo, onFond
     a.click()
     a.remove()
     setTimeout(() => URL.revokeObjectURL(url), 10000)
+    // la misión de la cámara (lib/misionesOfrenda.js): M.A.D.R.E. te la da al regresar a la home
+    misionHecha('leica')
   }
 
   const salir = useCallback(() => {

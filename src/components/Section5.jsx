@@ -13,6 +13,7 @@ import BlogTTS from './BlogTTS.jsx'
 import { sanitizeHtml } from '../lib/parseRichText.jsx'
 import BlogCard, { tr, coverSrc, postHref, openPost, CoverPlaceholder, PostMeta } from './blog/BlogCard.jsx'
 import IconoTinta from './ui/IconoTinta.jsx'
+import { misionHecha, MISION } from '../lib/misionesOfrenda.js'
 
 const API = '/api/blog.php'
 
@@ -304,6 +305,13 @@ function ShareButtons({ url, title }) {
 function BlogPostView({ post, onBack, shareUrl }) {
     const { lang } = useLanguage()
     const coverUrl = coverSrc(post)
+
+    // la misión del álbum (lib/misionesOfrenda.js): con una memoria abierta un rato, M.A.D.R.E. te lo
+    // da al regresar a la home
+    useEffect(() => {
+        const id = setTimeout(() => misionHecha('album'), MISION.leerS * 1000)
+        return () => clearTimeout(id)
+    }, [post?.slug])
 
     // Resolve translated content
     const postTitle = tr(post, 'title', lang)

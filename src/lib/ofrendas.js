@@ -9,8 +9,8 @@
 // Cada objeto pasa por dos estados: se consigue (una misión llama
 // `conseguirOfrenda(id)` y Skulley lo carga flotando sobre la cabeza,
 // home/ObjetosOfrenda.jsx) y se pone (al entrar a su corona en la plaza:
-// `ponerOfrenda(id)`, y cae con su rayo). Las misiones todavía no existen
-// (features.md). En desarrollo: window.__ofrendas.conseguir('ipad'), .poner(id),
+// `ponerOfrenda(id)`, y cae con su rayo). Las misiones viven en
+// misionesOfrenda.js. En desarrollo: window.__ofrendas.conseguir('ipad'), .poner(id),
 // .quitar(id), .todas(), .ninguna(), .cargarTodas().
 // Sin three: lo leen el reproductor (chunk del modal) y App.
 
@@ -24,10 +24,10 @@ export const OFRENDAS = [
 ]
 export const TOTAL_OFRENDAS = OFRENDAS.length
 export const EVENTO_OFRENDAS = 'ofrendas-cambiaron'
-// Mientras no existan las misiones, nada en pantalla dice cuántas ofrendas
-// faltan (el reproductor enseña "??" en lugar del 0/6): no se promete lo que
-// todavía no se puede hacer. Prenderlo cuando se pueda conseguir la primera.
-export const MISIONES_ABIERTAS = false
+// Las misiones (misionesOfrenda.js) abiertas para todos desde el 2026-11-26
+// (Oscar). En false nadie gana nada en producción y nada en pantalla dice
+// cuántas ofrendas faltan (el reproductor enseña "??" en lugar del 0/6).
+export const MISIONES_ABIERTAS = true
 
 const LLAVE = 'skulley_ofrendas'
 const VALIDAS = new Set(OFRENDAS.map((o) => o.id))

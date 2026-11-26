@@ -87,12 +87,13 @@ export function ChipsObjetos({ lang = 'es', seleccion, onSeleccion, enFila = fal
     const id = setTimeout(() => setMins(pintarMiniaturas(gltf)), 60)
     return () => clearTimeout(id)
   }, [gltf, mins])
-  // si lo escogido no lo tienes y sí tienes otro, escoge el primero que tengas
+  // al abrir: si lo escogido no lo tienes y sí tienes otro, escoge el primero que tengas (después se
+  // puede escoger uno que falta, para leer su pista)
   useEffect(() => {
     if (tieneOfrenda(seleccion)) return
     const primero = OFRENDAS.find((o) => tieneOfrenda(o.id))
     if (primero) onSeleccion?.(primero.id)
-  })
+  }, [])
   return (
     <div className={enFila ? 'flex justify-center gap-3' : 'grid grid-cols-2 gap-2.5 md:gap-3'} role="group" aria-label={lang === 'es' ? 'Objetos' : 'Objects'}>
       {OFRENDAS.map(({ id }) => {
@@ -200,7 +201,7 @@ export function TextoObjeto({ lang = 'es', id, activo = false, compacta = false 
     <div className={`@container flex flex-col ${compacta ? 'w-full max-w-sm items-center text-center' : 'w-full'}`}>
       <div className="cc-pieza w-full"><NombreGlitch key={`${id}-${nombre}`} texto={nombre} activo={activo} /></div>
       <p className={`cc-pieza mt-5 leading-snug opacity-90 ${compacta ? 'text-[13px]' : 'text-[15px] md:text-base'}`}>
-        {tiene ? h[L] : (L === 'es' ? 'Todavía no lo encuentras.' : "You haven't found it yet.")}
+        {tiene ? h[L] : (h.pista?.[L] || (L === 'es' ? 'Todavía no lo encuentras.' : "You haven't found it yet."))}
       </p>
       {tiene && <p className="cc-pieza mt-3 text-[12px] md:text-[13px] leading-snug opacity-60">{donde}</p>}
     </div>

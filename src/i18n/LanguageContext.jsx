@@ -373,6 +373,18 @@ const resources = {
         sinAdios: ['Not even a goodbye? Rude, buddy.', 'And there you go, no goodbye…'],
         lejos: ['Come closer, buddy! I can’t hear you from there.', 'Talking to me? Come over here.', 'Over here, buddy.'],
       },
+      // La ofrenda (lib/misionesOfrenda.js): te llama de lejos y te da lo que te ganaste.
+      ofrenda: {
+        llama: ['Hey, buddy! Come here a sec, I got something for you.', 'Psst! Over here, buddy. Got something for you.', 'Buddy! Don’t pretend you didn’t hear me, come here.'],
+        cerillos: [
+          'You’re the one burning the petals? Since you like fire so much, take these matches. They were Skulley’s. Just don’t tell M.A.D.R.E. I gave them to you.',
+          'Saw the smoke from here, buddy. Here, these were Skulley’s: he kept them like treasure. He only used one. You’ve burned like 30 petals already, so take care of them.',
+        ],
+        almohada: [
+          'Over a thousand points, buddy! Now that’s playing. Here, this was Skulley’s pillow. You earned it: go take a nap.',
+          'That game wore me out just watching. Here, this was Skulley’s pillow. That one goes all the way behind the portal, okay?',
+        ],
+      },
       // Empujón por invadirle el espacio (distinto del rayo: acá el tema es
       // la distancia personal, no la desgracia ajena).
       mockPush: [
@@ -901,6 +913,18 @@ const resources = {
         cortada: ['¡Ey! Te estaba hablando.', '¿Neta me vas a dejar hablando solo?', 'Ándale, vete. Al cabo ni quería.'],
         sinAdios: ['¿Ni un adiós? Qué poca, compa.', 'Y se fue sin despedirse…'],
         lejos: ['¡Acércate, compa! Desde allá no te oigo.', '¿Me hablas a mí? Vente para acá.', 'Aquí estoy, compa. Acércate.'],
+      },
+      // La ofrenda (lib/misionesOfrenda.js): te llama de lejos y te da lo que te ganaste.
+      ofrenda: {
+        llama: ['¡Ey, compa! Ven tantito, te tengo algo.', '¡Psst! Acá, compa. Tengo algo para ti.', '¡Compa! No te hagas, ven para acá.'],
+        cerillos: [
+          '¿Tú andas quemando los pétalos? Ya que te gusta el fuego, ten estos cerillos. Eran de Skulley. Nada más no le digas a M.A.D.R.E. que te los di.',
+          'Vi el humo desde acá, compa. Ten, eran de Skulley: los guardaba como tesoro. Solo usó uno. Tú ya quemaste como 30 pétalos, así que cuídalos.',
+        ],
+        almohada: [
+          '¡Pasaste de mil puntos, compa! Eso sí es jugar. Ten, era la almohada de Skulley. Te la ganaste: ve a echarte un sueñito.',
+          'Con esa partida hasta yo me cansé de verte. Toma, era la almohada de Skulley. Esa va hasta atrás del portal, ¿eh?',
+        ],
       },
       // Empujón por invadirle el espacio (distinto del rayo: acá el tema es
       // la distancia personal, no la desgracia ajena).

@@ -445,24 +445,45 @@ export default function DroneNPC({
     // una frase que le pide alguien de fuera (el diálogo de la Renderbox, lib/dialogoRenderbox.js): pide
     // turno como cualquiera y, si Skulley está lejos, vuela hacia él para que su globo salga en cuadro.
     // Solo paseando, sin estar enojada y sin partida; si no, no dice nada (quien la pidió se da cuenta).
+    const acercarseASkulley = () => {
+      const s = playerRef?.current?.position
+      if (!s) return
+      const dx = e.pos.x - s.x
+      const dz = e.pos.z - s.z
+      const L = Math.hypot(dx, dz) || 1
+      if (L > VER_CERCA) {
+        viajar(new THREE.Vector3(s.x + (dx / L) * SALUDA.recibe, ALTO, s.z + (dz / L) * SALUDA.recibe), VEL.prisa, 'skulley')
+        e.fase = 'viaje'
+        pedir(L > 9 ? 'Arrancar' : 'Avanzar')
+      }
+    }
     if (msg.dice?.texto && e.modo === 'deambular' && !madreEnojada() && !juegoActivoRef.current) {
       const d = msg.dice
-      const s = playerRef?.current?.position
-      if (d.acercarse && s) {
-        const dx = e.pos.x - s.x
-        const dz = e.pos.z - s.z
-        const L = Math.hypot(dx, dz) || 1
-        if (L > VER_CERCA) {
-          viajar(new THREE.Vector3(s.x + (dx / L) * SALUDA.recibe, ALTO, s.z + (dz / L) * SALUDA.recibe), VEL.prisa, 'skulley')
-          e.fase = 'viaje'
-          pedir(L > 9 ? 'Arrancar' : 'Avanzar')
-        }
-      }
+      if (d.acercarse) acercarseASkulley()
       decir(d.texto, 0, { prioridad: d.prioridad ?? 3, espera: d.espera ?? 15 })
       caraRef.current?.poner(d.cara || 'feliz')
       const ahora = performance.now() / 1000
       e.saludaEn = Math.max(e.saludaEn, ahora + SALUDA.trasCharla)
       e.recomiendaEn = Math.max(e.recomiendaEn, ahora + RECOMIENDA.trasCharla)
+    }
+    // una ofrenda que ya te debe (lib/misionesOfrenda.js `intentarEntrega`: la cámara, el teclado, el
+    // álbum): vuela hacia Skulley y te la da con `entregas[id]`; `alEmpezar` cuando de verdad empieza a
+    // decirlo. Si no puede hablar no hace nada y la misión lo vuelve a pedir.
+    if (msg.entrega?.id && !msg.comenta && e.modo === 'deambular' && !madreEnojada() && !juegoActivoRef.current) {
+      const ent = msg.entrega
+      const texto = escoger(textosRef.current.entregas?.[ent.id], `entrega-${ent.id}`, { lang: langRef.current })
+      if (texto) {
+        acercarseASkulley()
+        const [primero, ...resto] = trozos(texto)
+        decir(primero, 0, {
+          prioridad: 2, espera: 12, cola: resto,
+          alEmpezar: () => { caraRef.current?.poner('feliz'); ent.alEmpezar?.() },
+        })
+        caraRef.current?.poner('feliz')
+        const ahora = performance.now() / 1000
+        e.saludaEn = Math.max(e.saludaEn, ahora + SALUDA.trasCharla)
+        e.recomiendaEn = Math.max(e.recomiendaEn, ahora + RECOMIENDA.trasCharla)
+      }
     }
     if (msg.burlaArgus) e.burlaArgusEn = performance.now() / 1000
     if (msg.argusChamuscado) e.chamusca = { en: performance.now() / 1000, ambos: Boolean(msg.argusChamuscado.ambos) }

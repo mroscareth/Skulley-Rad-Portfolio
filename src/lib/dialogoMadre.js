@@ -265,6 +265,20 @@ const ES = {
       'Ya viste {n} de sus proyectos, humano. Ten, te lo ganaste: era el iPad de Skulley. Ahí dibujaba. Yo lo intenté 2,048 veces con ese lápiz y no me sale ni un trazo como los suyos.',
       'Ten, humano. Era suyo: en esa pantalla dibujaba sus personajes antes de que existieran. Lo guardé desde que se fue. Cuídamelo, ¿eh?',
     ],
+    // las que da sin proyecto (misionesOfrenda.js `intentarEntrega`): bajaste un wallpaper 4K, rayaste
+    // el disco, leíste una memoria
+    leica: [
+      '¡Qué bonito retrato le tomaste, humano! Ten: era su cámara. Con ella aprendió a encuadrar. Yo calculo 10,000 encuadres por segundo y ninguno se ve como los suyos.',
+      'Ese retrato quedó para enmarcarse. Toma, humano: era la cámara de Skulley. Cuídamela, ¿eh? No tiene repuesto.',
+    ],
+    teclado: [
+      '¡Ay, humano! ¿Le rayaste el disco? Él hacía lo mismo. Ten, era su teclado: de esas 25 teclas salieron canciones que todavía suenan aquí. Yo las toqué todas y no me salió ni una.',
+      'Si ya le rayas al disco, te toca esto. Toma, humano: era el teclado de Skulley. Algunas canciones del reproductor salieron de ahí. Nada más no lo rayes.',
+    ],
+    album: [
+      '¿Leíste su memoria, humano? Me da gusto. Ten: era su álbum. Ahí guardaba a su gente. Yo tengo 4 petabytes de fotos suyas y ninguna se siente como esas.',
+      'Ya lo conoces un poquito más. Toma, humano: es el álbum de Skulley. Hojéalo con cuidado, que esas fotos ya no se pueden repetir.',
+    ],
   },
   // ---- viñetas en el mundo (DroneNPC)
   // la cortaste a media frase; te fuiste del menú sin despedirte
@@ -594,6 +608,18 @@ const EN = {
     ipad: [
       'You’ve seen {n} of his projects, human. Here, you earned it: this was Skulley’s iPad. That’s where he drew. I’ve tried 2,048 times with that pencil and I can’t make a single stroke like his.',
       'Here, human. It was his: on that screen he drew his characters before they existed. I’ve kept it since he left. Take care of it for me, okay?',
+    ],
+    leica: [
+      'What a lovely portrait you took, human! Here: this was his camera. That’s how he learned to frame things. I compute 10,000 frames per second and none of them look like his.',
+      'That portrait deserves a frame. Here, human: this was Skulley’s camera. Take care of it for me, okay? There’s no spare.',
+    ],
+    teclado: [
+      'Oh, human! Did you scratch the record? He used to do that too. Here, this was his keyboard: songs that still play here came out of those 25 keys. I’ve played them all and couldn’t make a single one.',
+      'If you’re scratching records, this is yours. Here, human: this was Skulley’s keyboard. Some of the songs on the player came out of it. Just don’t scratch it.',
+    ],
+    album: [
+      'You read his memory, human? I’m glad. Here: this was his album. That’s where he kept his people. I have 4 petabytes of his photos and none of them feel like these.',
+      'Now you know him a little better. Here, human: this is Skulley’s album. Flip through it gently, those photos can’t be taken again.',
     ],
   },
   cortada: [
