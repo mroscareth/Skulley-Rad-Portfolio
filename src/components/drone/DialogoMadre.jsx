@@ -63,11 +63,11 @@ export default function DialogoMadre({ onClose, onVerProyecto, modo = 'charla' }
   const renglonesRef = useRef(0)
 
   const linea = cola ? cola.lineas[cola.i] : null
-  // "Cuéntame de sus proyectos" va después de "¿Quién es Skulley Rad?". Sí / No con
-  // la acción principal al final (Sí), que es la que queda marcada.
+  // "Cuéntame de sus proyectos" va después de "¿Quién es Skulley Rad?". Sí a la izquierda y No a la
+  // derecha (Oscar, 2026-11-25); Sí es el que queda marcado.
   const tras = D.temas.findIndex((x) => x.id === 'skulley') + 1
   const opciones = menu === 'sino' && proyecto
-    ? [{ id: 'no', label: D.no }, { id: 'si', label: D.si }]
+    ? [{ id: 'si', label: D.si }, { id: 'no', label: D.no }]
     : [
       ...D.temas.slice(0, tras),
       { id: 'proyectos', label: D.contarProyectos },
@@ -98,7 +98,7 @@ export default function DialogoMadre({ onClose, onVerProyecto, modo = 'charla' }
     setProyecto(p)
     avisarDron({ cara: 'feliz', accion: 'IdleJugueton' })
     const t = escoger(p.url ? D.llevarFuera : D.llevar, p.url ? 'llevarFuera' : 'llevar', { lang })
-    abrirMenu('sino', t.replace('{titulo}', p.titulo), 1)
+    abrirMenu('sino', t.replace('{titulo}', p.titulo), 0)
   }, [D, lang, abrirMenu])
 
   // `como`: 'adios' al despedirse; con Esc o Saltar, 'cortada' si estaba hablando

@@ -49,3 +49,7 @@ Thumbs.db
 # Claude Code local state (per-machine, no versionar)
 .claude/
 
+
+# respaldos de Blender y cachés de Python de los scripts
+*.blend1
+__pycache__/

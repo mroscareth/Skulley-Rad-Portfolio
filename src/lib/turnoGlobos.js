@@ -107,6 +107,11 @@ export function hablando() {
   return st.habla && ahora() < st.habla.hasta ? st.habla.quien : null
 }
 
+/** Lo que se está diciendo ahora (para quien espera un renglón exacto). */
+export function hablandoTexto() {
+  return st.habla && ahora() < st.habla.hasta ? st.habla.texto : null
+}
+
 /** Las charlas de las barras de cine pausan la fila y la vacían; al cerrarse, siguen los globos. */
 export function pausarTurnos(on) {
   st.pausa = Boolean(on)

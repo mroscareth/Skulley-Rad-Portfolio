@@ -173,6 +173,7 @@ export function armarPintado(escenaGltf) {
       material = crearMaterialPintado({ map: o.material?.map || null, color: o.material?.map ? '#ffffff' : (o.material?.color || '#cccccc') })
     }
     const malla = new THREE.Mesh(g, material)
+    malla.name = o.name
     if (gira) {
       // gira alrededor de su eje: la medida más chica del rotor (su grosor)
       g.computeBoundingBox()

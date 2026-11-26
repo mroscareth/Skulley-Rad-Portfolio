@@ -1390,6 +1390,11 @@ export default function ZoidianNPC({
     return () => { try { delete window.__argusCollider } catch { } }
   }, [position[0], position[2]])
   const pushTimelineRef = useRef({ t: -1, hit: false, armed: true, lastAt: -Infinity })
+  // Antes de empujar voltea el cuerpo hacia Skulley (Oscar, 2026-11-25) y después regresa despacio a su
+  // postura. Gira un grupo de adentro (el de afuera lleva su `rotationY` de la escena).
+  const giroRef = useRef(null)
+  const giroEstado = useRef({ yaw: 0, meta: 0, gira: -1, regresa: 0 })
+  const GIRO = { voltea: 0.16, regresa: 0.9 }
   const saludoRef = useRef({ lejos: true, ultimo: -Infinity })
   // Helpers de desarrollo: `__argusPush()` dispara el empujón; `__argusPush(true)`
   // solo la animación. `__argus('Risa')` (o IdleComer, Saludo…) pone un clip.
@@ -1402,7 +1407,7 @@ export default function ZoidianNPC({
         p.armed = false
         p.lastAt = -Infinity
       }
-      window.__argusPushState = () => ({ ...pushTimelineRef.current })
+      window.__argusPushState = () => ({ ...pushTimelineRef.current, giro: { ...giroEstado.current } })
       if (import.meta.env.DEV) window.__argus = (n) => ctrlRef.current?.reaccionar(n)
     } catch { }
     return () => {
@@ -1411,7 +1416,7 @@ export default function ZoidianNPC({
   }, [])
   const _playerPos = useRef(new THREE.Vector3())
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     const g = wrapRef.current
     if (!g) return
     if (groupRef && groupRef.current !== g) groupRef.current = g
@@ -1430,6 +1435,34 @@ export default function ZoidianNPC({
     }
 
     const push = pushTimelineRef.current
+    // el giro hacia Skulley antes del empujón, y el regreso a su postura después
+    {
+      const ge = giroEstado.current
+      const dt = Math.min(delta || 0, 0.05)
+      if (ge.gira >= 0) {
+        ge.gira += dt
+        const u = Math.min(1, ge.gira / GIRO.voltea)
+        const e = u * u * (3 - 2 * u)
+        let d = ge.meta - ge.desde
+        d = Math.atan2(Math.sin(d), Math.cos(d))
+        ge.yaw = ge.desde + d * e
+        if (u >= 1) {
+          ge.gira = -1
+          ge.regresa = 0
+          push.t = 0
+          push.hit = false
+        }
+      } else if (push.t < 0 && ge.yaw !== 0) {
+        // ya empujó: regresa despacio (con un respiro) a donde mira siempre
+        ge.regresa += dt
+        if (ge.regresa > 0.35) {
+          const k = 1 - Math.exp(-dt / (GIRO.regresa / 4))
+          ge.yaw += (0 - ge.yaw) * k
+          if (Math.abs(ge.yaw) < 1e-3) ge.yaw = 0
+        }
+      }
+      if (giroRef.current && giroRef.current.rotation.y !== ge.yaw) giroRef.current.rotation.y = ge.yaw
+    }
     // Momento del impacto: el thrust del brazo conecta a t≈0.13 → recién ahí se
     // despieza a Skulley (Player escucha 'argus-push-strike').
     if (push.t >= 0 && !push.hit && push.t >= 0.13) {
@@ -1448,9 +1481,14 @@ export default function ZoidianNPC({
       if (push.t < 0) {
         if (!push.armed) {
           if (dist > REARM_R) push.armed = true
-        } else if (dist < PUSH_TRIGGER_R && now - push.lastAt > 3 && !dialogoRef.current.on && !dialogoRef.current.escena) {
-          push.t = 0
-          push.hit = false
+        } else if (dist < PUSH_TRIGGER_R && now - push.lastAt > 3 && !dialogoRef.current.on && !dialogoRef.current.escena && giroEstado.current.gira < 0) {
+          // primero voltea hacia él; el empujón arranca al terminar de voltear (abajo)
+          const ge = giroEstado.current
+          let meta = Math.atan2(dx, dz) - rotationY
+          meta = Math.atan2(Math.sin(meta), Math.cos(meta))
+          ge.meta = meta
+          ge.desde = ge.yaw
+          ge.gira = 0
           push.armed = false
           push.lastAt = now
         }
@@ -1532,8 +1570,10 @@ export default function ZoidianNPC({
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
         </mesh>
         {/* Hover = outline blanco (nada de escalar al NPC, se veía raro) */}
-        <ZoidianModel targetHeight={targetHeight} lookAtRef={lookAtRef} outlineColor={hovered ? '#ffffff' : '#000000'} pushRef={pushTimelineRef}
-          ctrlRef={ctrlRef} hablaRef={hablaRef} dialogoRef={dialogoRef} quemaRef={quemaRef} variedad />
+        <group ref={giroRef}>
+          <ZoidianModel targetHeight={targetHeight} lookAtRef={lookAtRef} outlineColor={hovered ? '#ffffff' : '#000000'} pushRef={pushTimelineRef}
+            ctrlRef={ctrlRef} hablaRef={hablaRef} dialogoRef={dialogoRef} quemaRef={quemaRef} variedad />
+        </group>
         {/* Ancla de la viñeta a la altura del pecho */}
         <object3D ref={mockAnchorRef} position={[0, targetHeight * 0.55, 0]} />
       </group>

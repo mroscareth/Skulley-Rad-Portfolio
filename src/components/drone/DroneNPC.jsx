@@ -3,7 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import DroneModel, { INVOCAR_GOLPE_S } from './DroneModel.jsx'
 import SpeechBubble3D from '../SpeechBubble3D.jsx'
-import { pedirTurno, seguirTurno, soltarTurno, quitarDeFila, alCompletar, registrarCallar, escucharChoque, TURNO } from '../../lib/turnoGlobos.js'
+import { pedirTurno, seguirTurno, soltarTurno, quitarDeFila, alCompletar, registrarCallar, escucharChoque, choque, TURNO } from '../../lib/turnoGlobos.js'
 import SilhouetteShadow from '../SilhouetteShadow.jsx'
 import DomeShield from '../fx/DomeShield.jsx'
 import HumoDron from './HumoDron.jsx'
@@ -442,6 +442,28 @@ export default function DroneNPC({
         e2.recomiendaEn = Math.max(e2.recomiendaEn, ahora + RECOMIENDA.trasCharla)
       }, COMENTA_S * 1000)
     }
+    // una frase que le pide alguien de fuera (el diálogo de la Renderbox, lib/dialogoRenderbox.js): pide
+    // turno como cualquiera y, si Skulley está lejos, vuela hacia él para que su globo salga en cuadro.
+    // Solo paseando, sin estar enojada y sin partida; si no, no dice nada (quien la pidió se da cuenta).
+    if (msg.dice?.texto && e.modo === 'deambular' && !madreEnojada() && !juegoActivoRef.current) {
+      const d = msg.dice
+      const s = playerRef?.current?.position
+      if (d.acercarse && s) {
+        const dx = e.pos.x - s.x
+        const dz = e.pos.z - s.z
+        const L = Math.hypot(dx, dz) || 1
+        if (L > VER_CERCA) {
+          viajar(new THREE.Vector3(s.x + (dx / L) * SALUDA.recibe, ALTO, s.z + (dz / L) * SALUDA.recibe), VEL.prisa, 'skulley')
+          e.fase = 'viaje'
+          pedir(L > 9 ? 'Arrancar' : 'Avanzar')
+        }
+      }
+      decir(d.texto, 0, { prioridad: d.prioridad ?? 3, espera: d.espera ?? 15 })
+      caraRef.current?.poner(d.cara || 'feliz')
+      const ahora = performance.now() / 1000
+      e.saludaEn = Math.max(e.saludaEn, ahora + SALUDA.trasCharla)
+      e.recomiendaEn = Math.max(e.recomiendaEn, ahora + RECOMIENDA.trasCharla)
+    }
     if (msg.burlaArgus) e.burlaArgusEn = performance.now() / 1000
     if (msg.argusChamuscado) e.chamusca = { en: performance.now() / 1000, ambos: Boolean(msg.argusChamuscado.ambos) }
     if (msg.alJuego === true && e.modo !== 'castigo' && e.modo !== 'quemada' && e.modo !== 'dialogo') {
@@ -454,6 +476,9 @@ export default function DroneNPC({
       escudoRef.current?.hit({ x, y, z }, 0.6 + 0.4 * fuerza)
       ladear(e.pos.x - x, e.pos.z - z, 0.25 + 0.35 * fuerza)
       if (e.modo === 'castigo' || e.modo === 'dialogo' || e.modo === 'quemada') return
+      // un golpe es un susto (turnoGlobos `choque`): se calla a media frase, se acaba la escena con Argus y
+      // su reacción sale después de un respiro corto (Oscar: "que se corten si le disparas o la pateas")
+      choque({ quien: 'madre', silencio: 0.25 })
       e.golpesEscudo += 1
       const n = e.golpesEscudo
       if (n >= 3) {
@@ -473,6 +498,7 @@ export default function DroneNPC({
       // quemada y mareada no castiga: solo se mece del golpe
       if (e.modo === 'quemada') { ladear(msg.patada.dx, msg.patada.dz, 1.2); return }
       if (e.modo === 'castigo' || e.modo === 'dialogo') return
+      choque({ quien: 'madre', silencio: 0.25 })
       // el empujón y, en el acto, el rayo
       if (e.modo === 'curiosa') terminarCuriosa(false)
       e.modo = 'castigo'

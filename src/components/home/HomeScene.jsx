@@ -245,6 +245,13 @@ import FrustumCulledGroup from '../FrustumCulledGroup.jsx'
 import Environment from '../Environment.jsx'
 import FakeGrass from '../FakeGrass.jsx'
 import PastoPintado from './PastoPintado.jsx'
+import { zonasPiso } from '../../lib/pisoPintado.js'
+// El pasto fino no crece sobre las lozas: el claro casi hasta los pinos y la plaza
+// del glifo (Oscar, 2026-11-25: el pasto solo en las orillas).
+const HUECOS_PASTO = [
+  [zonasPiso.plaza[0], zonasPiso.plaza[1], zonasPiso.lozasClaro - 2, zonasPiso.lozasClaro + 1],
+  [zonasPiso.plazaGlifo[0], zonasPiso.plazaGlifo[1], 7, 9],
+]
 import BosquePintado from './BosquePintado.jsx'
 import PetalosCamino from './PetalosCamino.jsx'
 import BordeDelMundo from './BordeDelMundo.jsx'
@@ -685,6 +692,7 @@ export default function HomeScene({
           count={isMobilePerf ? 8000 : 180000}
           bladeHeight={0.42}
           bladeWidth={0.032}
+          huecos={HUECOS_PASTO}
           sway={isMobilePerf ? 0.02 : 0.045}
         />
         {/* Matas pintadas a mano (home/PastoPintado.jsx): del color del piso, se

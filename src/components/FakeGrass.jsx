@@ -55,6 +55,9 @@ export default function FakeGrass({
   lowPerf = false,
   // Mobile: even more aggressive reduction (separate from lowPerf which also affects desktop warm-up)
   isMobile = false,
+  // Donde no crece (las lozas del home): hasta dos círculos [x, z, desde, hasta];
+  // dentro de `desde` no hay pasto y hasta `hasta` va saliendo.
+  huecos = null,
 }) {
   const meshRef = useRef()
   const matRef = useRef()
@@ -251,6 +254,7 @@ export default function FakeGrass({
       shader.uniforms.uSway = { value: Math.max(0, sway) }
       shader.uniforms.uMask = { value: null }
       shader.uniforms.uUseMask = { value: 0 }
+      shader.uniforms.uHuecos = { value: [0, 1].map((i) => new THREE.Vector4(...(huecos?.[i] || [0, 0, -2, -1]))) }
 
       // Save refs for updating uniforms in useFrame
       matRef.current = { shader }
@@ -259,6 +263,7 @@ export default function FakeGrass({
       shader.vertexShader =
         `
         uniform vec3 uCenter;
+        uniform vec4 uHuecos[2];
         uniform vec3 uForward;
         uniform float uRadius;
         uniform float uFeather;
@@ -311,6 +316,10 @@ export default function FakeGrass({
             float dirFactor = mix(uRearMin, 1.0, backT);
             grow = g2 * dirFactor;
           }
+        }
+        // No crece sobre las lozas.
+        for (int i = 0; i < 2; i++) {
+          grow *= smoothstep(uHuecos[i].z, uHuecos[i].w, distance(worldOrigin.xz, uHuecos[i].xy));
         }
         // smooth curve
         grow = grow * grow * (3.0 - 2.0 * grow);

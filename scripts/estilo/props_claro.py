@@ -16,16 +16,27 @@ Oscar: todo se sostiene y todo está conectado, y se mide (`revisar_letrero`, `r
 - El cable de la Renderbox: un tomacorriente IEC en la placa de la fuente (atrás, abajo), la clavija
   metida en él, el cable que cae al piso, se tiende con curvas suaves ~2 m hacia atrás y se mete por la
   muesca (con su pasacables de hule) de un registro de concreto con tapa de lámina, a ras del piso.
+- La Wacom Cintiq Pro 27 de Oscar en el piso junto a la Renderbox (Oscar, 2026-11-25: "por ahí a un lado
+  en el suelo"): la misma de su escritorio del Estudio (props_taller.py: cintiq, cintiq_pantalla), parada
+  en sus patitas y su soporte, recostada 20°, con la pluma acostada enfrente. Va del lado -X (el
+  contrario del cable de corriente y su registro), a ~0.45 m de la Renderbox, de frente al centro del
+  claro y un poco girada hacia ella. Su cable sale de un conector USB-C en su canto, cae al piso, da la
+  vuelta por detrás y sube a un DisplayPort de la placa de la tarjeta de video, en la espalda de la
+  Renderbox (`revisar_cintiq` lo mide).
 
     "C:/Program Files/Blender Foundation/Blender 5.3/blender.exe" --background --factory-startup \
         --python scripts/estilo/props_claro.py -- todo [carpeta_fotos] [rapido]
 
-  armar     arma todo, lo mide, le da su atlas y guarda Character/Estilo_claro.blend
-  pintar    hornea el atlas (Cycles): Character/assets/props_claro.png (el maestro)
-  exportar  public/3dmodels/estilo/props_claro.glb (Draco, WebP, un material)
-  render    fotos de revisión (Eevee) en la carpeta que se le dé
-  todo      los cuatro
-  `rapido`  hornea a 1024 con pocas muestras (para iterar)
+  armar          arma todo, lo mide, le da su atlas y guarda Character/Estilo_claro.blend
+  pintar         hornea el atlas (Cycles): Character/assets/props_claro.png (el maestro)
+  exportar       public/3dmodels/estilo/props_claro.glb (Draco, WebP, un material)
+  render         fotos de revisión (Eevee) en la carpeta que se le dé (también las de la Cintiq)
+  todo           los cuatro
+  cintiq         agrega la Cintiq a lo que ya está armado y pintado sin tocarlo: abre Estilo_claro.blend,
+                 la arma, acomoda sus islas en los huecos del atlas (las de antes, fijas), hornea solo sus
+                 islas encima de props_claro.png y guarda (así se agregó; después, `exportar`)
+  render_cintiq  solo las fotos de la Cintiq con la Renderbox
+  `rapido`       hornea a 1024 con pocas muestras (para iterar; con `cintiq`, solo pocas muestras)
 
 props_claro.glb (metros, base en z = 0, el frente hacia -Y de Blender; los nodos con transformación
 identidad, cada malla en su propio marco):
@@ -37,6 +48,12 @@ identidad, cada malla en su propio marco):
                                    y el registro, en el marco de Prop_Estudio_Computadora (mismo origen
                                    y ejes, su frente en -Y): el sitio lo pone con la transformación de la
                                    Renderbox.
+  Prop_RenderboxCintiq             en el mismo marco: el cable de la Cintiq con sus dos conectores, la
+                                   placa de la tarjeta de video (puertos y rejilla) en la espalda de la
+                                   Renderbox y la pluma acostada en el piso
+    Prop_RenderboxCintiq_Cuerpo    (hija) la Cintiq: cuerpo, joroba, patitas y soporte (lo sólido)
+    Prop_RenderboxCintiq_Pantalla  (hija) la cara de la pantalla (62 × 37 cm), con la UV `Dibujo` 0–1
+                                   en su cara (TEXCOORD_1), como la del escritorio
 """
 import json
 import math
@@ -68,7 +85,10 @@ SEMILLA = 31
 LETRERO = 'Prop_LetreroOpen'
 CABLE = 'Prop_RenderboxCable'
 NEONES = [f'{LETRERO}_Neon_Open_{i}' for i in range(4)]
-PESOS = {LETRERO: 1.0, CABLE: 2.6, **{n: 0.05 for n in NEONES}}
+CINTIQ = 'Prop_RenderboxCintiq'
+CINTIQ_CUERPO = CINTIQ + '_Cuerpo'
+CINTIQ_PANTALLA = CINTIQ + '_Pantalla'
+PESOS = {LETRERO: 1.0, CABLE: 2.6, **{n: 0.05 for n in NEONES}, CINTIQ: 2.6, CINTIQ_CUERPO: 1.0, CINTIQ_PANTALLA: 0.25}
 
 # La lámina del letrero: azul marino casi negro sobre óxido (detrás del neón magenta se lee de noche)
 LAMINA_AZUL = {'oscura': '#11141f', 'base': '#1b2033', 'clara': '#2a3149', 'orilla': '#6b7491'}
@@ -107,12 +127,25 @@ REGISTRO = {'centro': (0.30, 2.62), 'lado': 0.30, 'pared': 0.04, 'arriba': 0.018
 CAMINO_PISO = [(0.085, 0.52), (0.125, 0.80), (0.215, 1.08), (0.27, 1.34), (0.19, 1.63), (0.175, 1.88), (0.255, 2.12),
                (0.30, 2.30), (0.30, 2.40)]
 
+# ---------------------------------------------------------------- la Cintiq en el piso (marco de la Renderbox)
+CINTIQ_LUGAR = (-1.06, -0.03, 15.0)   # el centro de su cuerpo en el piso (x, y) y su giro en grados: del lado -X,
+#                                       el frente hacia el centro del claro y un poco hacia la Renderbox
+CINTIQ_SEMILLA = 47        # su propio azar: armarla no le mueve el suyo a lo demás
+LINK_R = 0.0042            # su cable (8.4 mm), de la familia del de corriente (CORDON_R)
+PUERTO_CINTIQ_Z = 0.10     # el USB-C en su canto de la derecha (+X de la Cintiq), a lo alto de la pantalla
+TARJETA = (-0.135, 0.215, 0.044, 0.13)   # la placa de la tarjeta de video en la espalda: centro x, z, ancho, alto
+PUERTOS_Z = (0.035, 0.005, -0.025)       # sus tres DisplayPort (z sobre el centro de la placa); el cable va al de en medio
+# el camino del cable en el piso (x, y): de la tarjeta cae hacia atrás, da la vuelta flojo y llega de lado al canto
+CAMINO_CINTIQ = [(-0.15, 0.56), (-0.175, 0.665), (-0.26, 0.71), (-0.375, 0.665), (-0.435, 0.56), (-0.45, 0.43), (-0.475, 0.31),
+                 (-0.52, 0.235), (-0.57, 0.205)]
+
 
 # ---------------------------------------------------------------- ayudantes
 
-def tubo_rmf(nombre, pts, radio, material, lados=6, tapas=True):
+def tubo_rmf(nombre, pts, radio, material, lados=6, tapas=True, uv_tramo=None):
     """Un tubo por `pts` con marcos que no se tuercen (transporte paralelo): el cable baja vertical y
-    se acuesta sin que el anillo gire."""
+    se acuesta sin que el anillo gire. Con `uv_tramo` (metros) lleva su UV en metros: tiras derechas
+    (a lo largo y a la vuelta) cortadas cada `uv_tramo`, que caben en los huecos de un atlas ya hecho."""
     pts = [Vector(p) for p in pts]
     n = len(pts)
     tg = [(pts[min(i + 1, n - 1)] - pts[max(i - 1, 0)]).normalized() for i in range(n)]
@@ -131,13 +164,38 @@ def tubo_rmf(nombre, pts, radio, material, lados=6, tapas=True):
         b = tg[i].cross(a)
         r = radio[i] if isinstance(radio, (list, tuple)) else radio
         anillos.append([bm.verts.new(p + (a * math.cos(2 * math.pi * j / lados) + b * math.sin(2 * math.pi * j / lados)) * r) for j in range(lados)])
+    caras = []
     for i in range(n - 1):
         for j in range(lados):
             k = (j + 1) % lados
-            bm.faces.new((anillos[i][j], anillos[i][k], anillos[i + 1][k], anillos[i + 1][j]))
+            caras.append((i, j, bm.faces.new((anillos[i][j], anillos[i][k], anillos[i + 1][k], anillos[i + 1][j]))))
     if tapas:
-        bm.faces.new(list(reversed(anillos[0])))
-        bm.faces.new(anillos[-1])
+        tapa0 = bm.faces.new(list(reversed(anillos[0])))
+        tapa1 = bm.faces.new(anillos[-1])
+    if uv_tramo:
+        capa = bm.loops.layers.uv.new('UVMap')
+        s = [0.0]
+        for a, b in zip(pts, pts[1:]):
+            s.append(s[-1] + (b - a).length)
+        tira = [int(x / uv_tramo) for x in s]
+        inicio = {}
+        for i in range(n):
+            inicio.setdefault(tira[i], s[i])
+        origen = [inicio[t] for t in tira]           # dónde empieza la tira de la cara que sale de cada anillo
+        vuelta = 2 * math.pi * radio / lados
+        for i, j, f in caras:
+            u0 = origen[i]
+            for lp in f.loops:
+                ii = i if lp.vert in anillos[i] else i + 1
+                jj = anillos[ii].index(lp.vert)
+                if jj == 0 and j == lados - 1:
+                    jj = lados
+                lp[capa].uv = (s[ii] - u0, jj * vuelta)
+        if tapas:
+            for tapa, sx in ((tapa0, -0.02), (tapa1, -0.04)):
+                for lp in tapa.loops:
+                    jj = (anillos[0] if tapa is tapa0 else anillos[-1]).index(lp.vert)
+                    lp[capa].uv = (sx + radio * math.cos(2 * math.pi * jj / lados) * 0.9, radio * math.sin(2 * math.pi * jj / lados) * 0.9)
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     o = P.objeto(nombre, bm, material)
     o.data.polygons.foreach_set('use_smooth', np.ones(len(o.data.polygons), bool))
@@ -787,11 +845,606 @@ def revisar_cable(piezas, pts):
 Y_BOQUILLA = [0.0]   # donde empieza la boquilla de la clavija (para medir)
 
 
+# ---------------------------------------------------------------- la Cintiq en el piso
+
+def materiales_cintiq():
+    """Los de la Cintiq, con los de su escritorio (props_taller.materiales) y, para el cable, sus
+    conectores y la tarjeta, los del cable de corriente: nombres propios, así agregarla a un .blend ya
+    pintado no toca los materiales de lo demás."""
+    return {
+        'plastico': P.material_liso('Claro_Cintiq_Plastico', '#1e1f23', claro='#34363c', oscuro='#0f1012', orilla='#6a6e76'),
+        'goma': P.material_liso('Claro_Cintiq_Goma', '#151518', claro='#26272c', oscuro='#0a0a0c', orilla='#46484e'),
+        'aluminio': P.material_metal('Claro_Cintiq_Aluminio', paleta={'oscuro': '#3c4148', 'base': '#5e646d', 'claro': '#8a919b',
+                                                                       'orilla': '#d2d8de', 'oxido': '#5e646d'}, oxido=0.0),
+        'pantalla': P.material_brillo('Claro_Cintiq_Pantalla', '#2a3341'),
+        'cable': P.material_liso('Claro_Cintiq_Cable', '#141417', claro='#2a2b31', oscuro='#08080a', orilla='#4c4e55'),
+        'conector': P.material_liso('Claro_Cintiq_Conector', '#1c1d21', claro='#33353b', oscuro='#0e0f11', orilla='#666a72'),
+        'boquilla': P.material_liso('Claro_Cintiq_Boquilla', '#19191c', claro='#2b2c31', oscuro='#0b0b0d', orilla='#4a4c52'),
+        'lamina_negra': P.material_metal('Claro_Cintiq_LaminaNegra', paleta=T.LAMINA_NEGRA, oxido=0.0),
+    }
+
+
+def camino_cintiq(p_rb, p_ci, sale_ci):
+    """El camino del cable: de la boquilla del DisplayPort (`p_rb`, sale hacia +Y) cae al piso, se
+    tiende por CAMINO_CINTIQ y sube a la boquilla del USB-C (`p_ci`, que sale hacia `sale_ci`)."""
+    zc = LINK_R + SOBRE_PISO
+    piso = [Vector((q.x, q.y, zc)) for q in catmull([Vector(c) for c in CAMINO_CINTIQ], 0.02)]
+    d0 = (piso[1] - piso[0]).normalized()
+    d1 = (piso[-1] - piso[-2]).normalized()
+    cae = bezier(p_rb, p_rb + Vector((0, 0.09, 0)), piso[0] - d0 * 0.11, piso[0], 22)
+    sube = bezier(piso[-1], piso[-1] + d1 * 0.07, p_ci + sale_ci * 0.10, p_ci, 18)
+    return T.simplificar(cae + piso[1:-1] + sube, 0.0006)
+
+
+def cintiq_piso(corriente):
+    """La Cintiq parada en el piso con su pluma y su cable a la Renderbox (en el marco de la Renderbox).
+    `corriente` es Prop_RenderboxCable (para medir que no se crucen). Regresa (raíz, cuerpo, pantalla)."""
+    estado = random.getstate()
+    random.seed(CINTIQ_SEMILLA)
+    M = materiales_cintiq()
+    C = T.CINTIQ
+    W = C['ancho']
+    cx, cy, giro = CINTIQ_LUGAR
+    lugar = Matrix.Translation((cx, cy, 0.0)) @ Matrix.Rotation(math.radians(giro), 4, 'Z') @ \
+        Matrix.Translation((-C['centro'][0], -C['centro'][1], 0.0))
+    # la del escritorio con la cubierta en z = 0: sus patitas y la barra del soporte quedan en el piso
+    piezas = T.en_marco(T.cintiq(M, 0.0), lugar)
+    pantalla = T.en_marco([T.cintiq_pantalla(M, 0.0)], lugar)[0]
+    pluma = [o for o in piezas if o.name.startswith('pluma')]
+    cuerpo = [o for o in piezas if o not in pluma]
+    asentar_patitas(cuerpo)
+    # la pluma descansa en lo más gordo (el agarre de hule): en la cubierta el agarre se metía 0.6 mm
+    zp = min((o.matrix_world @ v.co).z for o in pluma for v in o.data.vertices)
+    T.en_marco(pluma, Matrix.Translation((0, 0, -zp)))
+    # el marco de la Cintiq: x a lo ancho, z a lo alto de la pantalla, la pantalla hacia -Y, centro del cuerpo
+    Mc = lugar @ T._marco_cintiq(0.0)
+    con = {}
+    # ---- el USB-C en el canto: el cuerpo del conector pegado al canto (dentro de lo plano entre los
+    # biseles) y la boquilla de hule hacia afuera
+    xs = W / 2 + 0.0002
+    zc_ = PUERTO_CINTIQ_Z
+    con['usb_cuerpo'] = T.caja_ab('usb_cuerpo', (xs, -0.0034, zc_ - 0.006), (xs + 0.021, 0.0034, zc_ + 0.006), M['conector'], bisel=0.0018, segmentos=2)
+    con['usb_boquilla'] = T.cilindro('usb_boquilla', 0.0052, 0.016, M['boquilla'], lados=8, radio2=LINK_R + 0.0006,
+                                     centro=(xs + 0.020, 0.0, zc_), rot=(0, math.pi / 2, 0))
+    T.en_marco([con['usb_cuerpo'], con['usb_boquilla']], Mc)
+    p_ci = Mc @ Vector((xs + 0.036 - 0.006, 0.0, zc_))
+    sale_ci = (Mc.to_3x3() @ Vector((1, 0, 0))).normalized()
+    # ---- la placa de la tarjeta de video en la espalda de la Renderbox: tres DisplayPort y la rejilla
+    tx, tz, tw, th = TARJETA
+    y0 = RB_ESPALDA + 0.0002
+    y1 = y0 + 0.002
+    lam = M['lamina_negra']
+    tarjeta = [T.caja_ab('tarjeta_placa', (tx - tw / 2, y0, tz - th / 2), (tx + tw / 2, y1, tz + th / 2), lam, bisel=0.0008)]
+    for sx in (-1, 1):
+        tarjeta.append(T.cilindro('tarjeta_tornillo', 0.0032, 0.0018, lam, lados=6, centro=(tx + sx * (tw / 2 - 0.0055), y1, tz + th / 2 - 0.0065),
+                                  rot=(-math.pi / 2, 0, 0)))
+    for k in range(8):
+        z = tz - th / 2 + 0.014 + k * 0.0125
+        tarjeta.append(T.caja_ab('tarjeta_rejilla', (tx + 0.005, y1, z - 0.0018), (tx + 0.018, y1 + 0.0008, z + 0.0018), M['boquilla']))
+    xp = tx - 0.0085
+    y2 = y1 + 0.0018
+    for dz in PUERTOS_Z:
+        tarjeta.append(placa_con_hueco('puerto', perfil_iec(0.0195, 0.0085, 0.0024, xp, tz + dz), perfil_iec(0.0165, 0.0055, 0.0014, xp, tz + dz),
+                                       y1, y2, M['conector']))
+    # ---- el DisplayPort metido en el de en medio
+    pz = tz + PUERTOS_Z[1]
+    con['dp_nariz'] = prisma('dp_nariz', perfil_iec(0.0165 - 0.0008, 0.0055 - 0.0008, 0.0012, xp, pz), y1, y2, M['conector'])
+    yb1 = y2 + 0.026
+    con['dp_cuerpo'] = T.caja_ab('dp_cuerpo', (xp - 0.0105, y2, pz - 0.0048), (xp + 0.0105, yb1, pz + 0.0048), M['conector'], bisel=0.0025, segmentos=2)
+    con['dp_boquilla'] = T.cilindro('dp_boquilla', 0.006, 0.018, M['boquilla'], lados=8, radio2=LINK_R + 0.0006,
+                                    centro=(xp, yb1 - 0.001, pz), rot=(-math.pi / 2, 0, 0))
+    p_rb = Vector((xp, yb1 - 0.001 + 0.018 - 0.006, pz))
+    pts = camino_cintiq(p_rb, p_ci, sale_ci)
+    cable = tubo_rmf('cintiq_cable', pts, LINK_R, M['cable'], lados=6, uv_tramo=0.22)
+    random.setstate(estado)
+    medidas = {'pts': pts, 'p_rb': p_rb, 'p_ci': p_ci, 'sale_ci': sale_ci, 'boquillas': ((xp, yb1 - 0.001, pz), Mc)}
+    revisar_cintiq(cuerpo, pantalla, pluma, con, tarjeta, cable, corriente, medidas)
+    raiz = T.unir([cable] + list(con.values()) + tarjeta + pluma, CINTIQ)
+    cuerpo_o = T.unir(cuerpo, CINTIQ_CUERPO, padre=raiz)
+    pantalla_o = T.unir([pantalla], CINTIQ_PANTALLA, padre=raiz)
+    return raiz, cuerpo_o, pantalla_o
+
+
+def asentar_patitas(cuerpo):
+    """Las patitas de hule hasta el cuerpo: con el bisel, la orilla de abajo del cuerpo queda 1.7 mm arriba
+    de ellas (en el escritorio también) y la Cintiq flotaba de enfrente. Sube la cara de arriba de cada
+    patita lo que mide el rayo más corto hacia el cuerpo, más 0.2 mm para que se toquen."""
+    caja = next(o for o in cuerpo if o.name.startswith('cin_cuerpo'))
+    arbol_c = arbol([caja])
+    for o in (p for p in cuerpo if p.name.startswith('cin_patita')):
+        co = np.array([v.co[:] for v in o.data.vertices])
+        lo, hi = co.min(0), co.max(0)
+        hueco = min((arbol_c.ray_cast(Vector((x, y, hi[2] - 1e-4)), Vector((0, 0, 1)))[3] or 1.0)
+                    for x in np.linspace(lo[0], hi[0], 9) for y in np.linspace(lo[1], hi[1], 9))
+        sube = hueco - 1e-4 + 0.0002
+        arriba = [v for v in o.data.vertices if v.co.z > hi[2] - 0.004]
+        for v in arriba:
+            v.co.z += sube
+        print(f'    {o.name}: subida {sube * 1000:.2f} mm hasta el cuerpo')
+
+
+def huella_cintiq(cuerpo):
+    """La huella del cuerpo de la Cintiq en el piso: centro (x, y) de su caja y el radio que lo encierra."""
+    co = np.array([(o.matrix_world @ v.co)[:2] for o in cuerpo for v in o.data.vertices])
+    c = (co.min(0) + co.max(0)) / 2
+    return c, float(np.linalg.norm(co - c, axis=1).max()), co
+
+
+def revisar_cintiq(cuerpo, pantalla, pluma, con, tarjeta, cable, corriente, m):
+    print('  revisar Cintiq:')
+    rb, borrar = malla_renderbox()
+    ci = cuerpo + [pantalla]
+
+    def zmin(objs):
+        return min((o.matrix_world @ v.co).z for o in objs for v in o.data.vertices)
+    for nombre in ('cin_patita', 'cin_barra', 'cin_pata', 'cin_cuerpo'):
+        ps = [o for o in cuerpo if o.name.startswith(nombre)]
+        print(f'    {nombre}: lo más bajo z={zmin(ps):+.4f}')
+    print(f'    pluma: lo más bajo z={zmin(pluma):+.5f} (acostada en el piso), Cintiq entera: z={zmin(ci + pluma):+.5f}')
+
+    def de(nombre):
+        return [o for o in cuerpo if o.name.startswith(nombre)]
+    print(f'    se tocan (traspasos > 0): patitas con el cuerpo {traspasos(de("cin_patita"), de("cin_cuerpo"))}, patas del soporte con la '
+          f'joroba {traspasos(de("cin_pata"), de("cin_joroba"))} y con la barra {traspasos(de("cin_pata"), de("cin_barra"))}')
+    c, r, co = huella_cintiq(cuerpo)
+    # el piso entre las dos: de cada vértice (cuerpo, pantalla, pluma y el USB-C de su canto) a la caja de la Renderbox
+    rbx, rby = 0.237, 0.25
+
+    def a_caja(p):
+        return math.hypot(max(abs(p[0]) - rbx, 0.0), max(abs(p[1]) - rby, 0.0))
+    todo_ci = np.array([(o.matrix_world @ v.co)[:2] for o in ci + pluma + [con['usb_cuerpo'], con['usb_boquilla']] for v in o.data.vertices])
+    atras = [a_caja(p) for p in co if p[1] > c[1]]
+    print(f'    huella del cuerpo: centro x={c[0]:+.3f} y={c[1]:+.3f}, x de {co[:, 0].min():+.3f} a {co[:, 0].max():+.3f}, '
+          f'y de {co[:, 1].min():+.3f} a {co[:, 1].max():+.3f}, radio que lo encierra {r:.3f} m')
+    print(f'    piso entre la Cintiq y la Renderbox: lo más cerca {min(a_caja(p) for p in todo_ci):.3f} m, '
+          f'de su mitad de atrás {min(atras):.3f} m')
+    frente = [p for p in todo_ci if abs(p[0]) < rbx and p[1] < -rby]
+    print(f'    vértices de la Cintiq enfrente de la cara de la Renderbox: {len(frente)}')
+    print(f'    traspasos con la Renderbox: Cintiq y pluma {traspasos(ci + pluma, [rb])}, conectores y tarjeta '
+          f'{traspasos(list(con.values()) + tarjeta, [rb])}, cable {traspasos([cable], [rb])}')
+    print(f'    tarjeta a la espalda: {distancia(tarjeta[:1], [rb]) * 1000:.2f} mm; USB-C al canto de la Cintiq: '
+          f'{distancia([con["usb_cuerpo"]], [o for o in cuerpo if o.name.startswith("cin_cuerpo")]) * 1000:.2f} mm')
+    print(f'    traspasos: cable contra la Cintiq {traspasos([cable], ci)}, contra la pluma {traspasos([cable], pluma)}, '
+          f'contra la tarjeta {traspasos([cable], tarjeta)}, contra los cuerpos de los conectores '
+          f'{traspasos([cable], [con["usb_cuerpo"], con["dp_cuerpo"], con["dp_nariz"]])}; '
+          f'conectores contra la Cintiq {traspasos([con["usb_boquilla"]], ci)}, nariz del DP contra su puerto '
+          f'{traspasos([con["dp_nariz"]], [o for o in tarjeta if o.name.startswith("puerto")])}')
+    print(f'    contra el cable de corriente, su clavija, la fuente y el registro: traspasos {traspasos([cable] + list(con.values()) + tarjeta + ci + pluma, [corriente])}, '
+          f'lo más cerca {distancia([cable], [corriente]):.3f} m (el cable), {distancia(tarjeta, [corriente]) * 1000:.1f} mm (la tarjeta a la fuente)')
+    pts = m['pts']
+    (bx, by, bz), Mc = m['boquillas']
+    print(f'    el cable empieza en la boquilla del DP: {punta_en_cilindro(pts[0], LINK_R, (bx, by, bz), (0, 1, 0), 0.018, LINK_R + 0.0006)}, '
+          f'acaba en la del USB-C: {punta_en_cilindro(pts[-1], LINK_R, Mc @ Vector((T.CINTIQ['ancho'] / 2 + 0.0202, 0, PUERTO_CINTIQ_Z)), m["sale_ci"], 0.016, LINK_R + 0.0006)}')
+    largo = sum((b - a).length for a, b in zip(pts, pts[1:]))
+    en_piso = sum((b - a).length for a, b in zip(pts, pts[1:]) if a.z < LINK_R + SOBRE_PISO + 1e-4 and b.z < LINK_R + SOBRE_PISO + 1e-4)
+    print(f'    cable: lo más bajo z={min(p.z for p in pts) - LINK_R:+.4f} (su cara de abajo), {en_piso:.2f} m tendido en el piso de {largo:.2f} m, '
+          f'lo más cerca de la Renderbox en el piso {min(a_caja(p) for p in pts if p.z < 0.01):.3f} m')
+    borrar()
+
+
+# ---- agregarla sin tocar lo de antes: sus islas en los huecos del atlas y su pintura encima
+
+def uvs(o):
+    uv = o.data.uv_layers[0].data
+    co = np.empty(len(uv) * 2, np.float64)
+    uv.foreach_get('uv', co)
+    return co.reshape(-1, 2)
+
+
+def mascara_uv(objs, tam, islas=False):
+    """Los pixeles del atlas cuyo centro cae en alguna cara de `objs` (como los marca el horneado). Con
+    `islas`, cuántas islas de `objs` caen en cada pixel (para ver si se enciman)."""
+    if islas:
+        cuenta = np.zeros((tam, tam), np.int32)
+        for o in objs:
+            co = uvs(o) * tam
+            for _, tris in islas_uv(o):
+                cuenta += raster(co[tris], tam, tam)
+        return cuenta
+    m = np.zeros((tam, tam), bool)
+    for o in objs:
+        me = o.data
+        co = uvs(o) * tam
+        me.calc_loop_triangles()
+        tri = np.empty(len(me.loop_triangles) * 3, np.int32)
+        me.loop_triangles.foreach_get('loops', tri)
+        m |= raster(co[tri.reshape(-1, 3)], tam, tam)
+    return m
+
+
+def raster(tris, alto, ancho, ensancha=0.0):
+    """Los pixeles (alto × ancho) cuyo centro cae en alguno de los triángulos `tris` (n × 3 × 2, en pixeles).
+    Con `ensancha`, también los que quedan a esa distancia de un triángulo (0.71 = todo pixel que toca)."""
+    m = np.zeros((alto, ancho), bool)
+    r = ensancha
+    for a, b, c in tris:
+        x0 = max(int(math.ceil(min(a[0], b[0], c[0]) - r - 0.5)), 0)
+        x1 = min(int(math.floor(max(a[0], b[0], c[0]) + r - 0.5)), ancho - 1)
+        y0 = max(int(math.ceil(min(a[1], b[1], c[1]) - r - 0.5)), 0)
+        y1 = min(int(math.floor(max(a[1], b[1], c[1]) + r - 0.5)), alto - 1)
+        if x1 < x0 or y1 < y0:
+            continue
+        X, Y = np.meshgrid(np.arange(x0, x1 + 1) + 0.5, np.arange(y0, y1 + 1) + 0.5)
+        d = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+        if abs(d) < 1e-12:
+            if r <= 0:
+                continue
+            d = 1e-12
+        sg = 1.0 if d > 0 else -1.0
+        dentro = np.ones(X.shape, bool)
+        for p, q in ((b, c), (c, a), (a, b)):
+            largo = math.hypot(q[0] - p[0], q[1] - p[1])
+            e = ((p[0] - X) * (q[1] - Y) - (p[1] - Y) * (q[0] - X)) * sg
+            dentro &= e >= -max(r * largo, 1e-6 * max(largo, 1.0))
+        if r > 0:   # un triángulo flaquito: lo de cerca de sus esquinas también
+            for p in (a, b, c):
+                dentro |= (X - p[0]) ** 2 + (Y - p[1]) ** 2 <= r * r
+        m[y0:y1 + 1, x0:x1 + 1] |= dentro
+    return m
+
+
+def islas_uv(o):
+    """Las islas de la UV de `o`: [(sus loops, sus triángulos como loops n × 3)], caras unidas por aristas con la misma UV."""
+    me = o.data
+    co = uvs(o)
+    vi = np.empty(len(me.loops), np.int32)
+    me.loops.foreach_get('vertex_index', vi)
+    padre = list(range(len(me.polygons)))
+
+    def raiz(i):
+        while padre[i] != i:
+            padre[i] = padre[padre[i]]
+            i = padre[i]
+        return i
+    aristas = {}
+    for p in me.polygons:
+        ls = list(p.loop_indices)
+        for k, li in enumerate(ls):
+            lj = ls[(k + 1) % len(ls)]
+            va, vb = vi[li], vi[lj]
+            ua, ub = (co[li], co[lj]) if va < vb else (co[lj], co[li])
+            clave = (min(va, vb), max(va, vb))
+            for q, qa, qb in aristas.get(clave, []):
+                if np.abs(qa - ua).max() < 1e-7 and np.abs(qb - ub).max() < 1e-7:
+                    padre[raiz(p.index)] = raiz(q)
+            aristas.setdefault(clave, []).append((p.index, ua, ub))
+    me.calc_loop_triangles()
+    tri = np.empty(len(me.loop_triangles) * 3, np.int32)
+    me.loop_triangles.foreach_get('loops', tri)
+    tri = tri.reshape(-1, 3)
+    tp = np.empty(len(me.loop_triangles), np.int32)
+    me.loop_triangles.foreach_get('polygon_index', tp)
+    raices = np.array([raiz(i) for i in range(len(me.polygons))])
+    ini = np.empty(len(me.polygons), np.int32)
+    tot = np.empty(len(me.polygons), np.int32)
+    me.polygons.foreach_get('loop_start', ini)
+    me.polygons.foreach_get('loop_total', tot)
+    out = []
+    for r in np.unique(raices):
+        polys = np.nonzero(raices == r)[0]
+        loops = np.concatenate([np.arange(ini[i], ini[i] + tot[i]) for i in polys])
+        out.append((loops, tri[raices[tp] == r]))
+    return out
+
+
+def girar_a_caja(pts):
+    """El giro (radianes) que deja la caja más chica alrededor de `pts` (calibres sobre su casco)."""
+    from mathutils.geometry import convex_hull_2d
+    casco = pts[convex_hull_2d([tuple(p) for p in pts])]
+    mejor = (1e18, 0.0)
+    for a, b in zip(casco, np.roll(casco, -1, axis=0)):
+        d = b - a
+        if math.hypot(d[0], d[1]) < 1e-9:
+            continue
+        ang = -math.atan2(d[1], d[0])
+        c, s_ = math.cos(ang), math.sin(ang)
+        q = casco @ np.array([[c, s_], [-s_, c]])
+        area = float(np.prod(q.max(0) - q.min(0)))
+        if area < mejor[0]:
+            mejor = (area, ang)
+    return mejor[1]
+
+
+def acomodar_en_huecos(nuevos, viejo, margen_px):
+    """Pone cada isla de `nuevos` (ya a su escala, en UV) en un hueco del atlas: lo ocupado es `viejo` más
+    `margen_px` alrededor (y la orilla del atlas). Trabaja a la mitad de resolución con máscaras que cubren de
+    más; de la isla más grande a la más chica, cada una en el primer lugar libre de abajo hacia arriba (busca
+    con FFT dónde no se enciman), derecha o girada 90°."""
+    N = viejo.shape[0]
+    n = N // 2
+    ocu = viejo.copy()
+    for _ in range(margen_px):
+        ocu = crecer(ocu)
+    ocu = ocu.reshape(n, 2, n, 2).any(axis=(1, 3))
+    borde = 3
+    ocu[:borde, :] = True
+    ocu[-borde:, :] = True
+    ocu[:, :borde] = True
+    ocu[:, -borde:] = True
+    paso_margen = int(math.ceil(margen_px / 2)) + 1
+    islas = []
+    for o in nuevos:
+        co = uvs(o)
+        for loops, tris in islas_uv(o):
+            v1, v2 = co[tris[:, 1]] - co[tris[:, 0]], co[tris[:, 2]] - co[tris[:, 0]]
+            area = 0.5 * np.abs(v1[:, 0] * v2[:, 1] - v1[:, 1] * v2[:, 0]).sum() * N * N
+            islas.append((area, o, loops, tris))
+    islas.sort(key=lambda t: -t[0])
+    nuevas = {o.name: uvs(o).copy() for o in nuevos}
+    for area, o, loops, tris in islas:
+        co = uvs(o) * N
+        ang = girar_a_caja(co[loops])
+        F = np.fft.rfft2(ocu.astype(np.float64))
+        mejor = None
+        for extra in (0.0, math.pi / 2):
+            c, s_ = math.cos(ang + extra), math.sin(ang + extra)
+            R = np.array([[c, s_], [-s_, c]])
+            todos = co @ R
+            lo = todos[loops].min(0)
+            local = (todos - lo) / 2 + 1.0       # a la mitad, con una celda de orilla
+            h, w = int(math.ceil(local[loops, 1].max())) + 2, int(math.ceil(local[loops, 0].max())) + 2
+            if h >= n or w >= n:
+                continue
+            K = crecer(raster(local[tris], h, w, ensancha=0.75))
+            Kp = np.zeros((n, n))
+            Kp[:h, :w] = K
+            enc = np.fft.irfft2(F * np.conj(np.fft.rfft2(Kp)), s=(n, n))
+            libre = enc[:n - h + 1, :n - w + 1] < 0.5
+            ys, xs = np.nonzero(libre)
+            if not len(ys):
+                continue
+            k = np.lexsort((xs, ys))[0]
+            cand = (int(ys[k]), int(xs[k]), R, lo, K)
+            if mejor is None or (cand[0], cand[1]) < (mejor[0], mejor[1]):
+                mejor = cand
+        if mejor is None:
+            raise RuntimeError(f'una isla de {o.name} ({area:.0f} px) no cabe en ningún hueco del atlas')
+        y, x, R, lo, K = mejor
+        # la celda (x, y) de la mitad es el pixel (2x, 2y); la celda de orilla son 2 px
+        nuevas[o.name][loops] = ((co[loops] @ R - lo) + 2.0 + np.array([2.0 * x, 2.0 * y])) / N
+        marca = K.copy()
+        for _ in range(paso_margen):
+            marca = crecer(np.pad(marca, 1))
+        y0, x0 = y - paso_margen, x - paso_margen
+        hh, ww = marca.shape
+        ya, xa = max(y0, 0), max(x0, 0)
+        yb, xb = min(y0 + hh, n), min(x0 + ww, n)
+        ocu[ya:yb, xa:xb] |= marca[ya - y0:yb - y0, xa - x0:xb - x0]
+    for o in nuevos:
+        o.data.uv_layers[0].data.foreach_set('uv', nuevas[o.name].ravel())
+    print(f'  acomodadas {len(islas)} islas de la Cintiq en los huecos del atlas')
+
+
+
+def mover(a, dy, dx):
+    """Como np.roll, pero sin dar la vuelta (lo de P.hornear_atlas)."""
+    b = np.zeros_like(a)
+    n0, n1 = a.shape[:2]
+    b[max(dy, 0):n0 + min(dy, 0), max(dx, 0):n1 + min(dx, 0)] = a[max(-dy, 0):n0 + min(-dy, 0), max(-dx, 0):n1 + min(-dx, 0)]
+    return b
+
+
+def crecer(mask):
+    g = mask.copy()
+    g[1:, :] |= mask[:-1, :]
+    g[:-1, :] |= mask[1:, :]
+    g[:, 1:] |= mask[:, :-1]
+    g[:, :-1] |= mask[:, 1:]
+    g[1:, 1:] |= mask[:-1, :-1]
+    g[:-1, :-1] |= mask[1:, 1:]
+    g[1:, :-1] |= mask[:-1, 1:]
+    g[:-1, 1:] |= mask[1:, :-1]
+    return g
+
+
+def distancia_px(mask, maximo):
+    """A cuántos pixeles (vecinos de 8) está cada pixel de `mask`, hasta `maximo` (más lejos: maximo + 1)."""
+    d = np.full(mask.shape, maximo + 1, np.int16)
+    d[mask] = 0
+    cur = mask
+    for k in range(1, maximo + 1):
+        g = crecer(cur)
+        d[g & ~cur] = k
+        cur = g
+    return d
+
+
+_TIRAS = {}   # la UV en metros del cable de la Cintiq (loops, uv), para volver a empezar si no cupo
+
+
+def uv_en_huecos(nuevos, fijos, densidad, margen=0.0022):
+    """Las islas de `nuevos` (con su densidad en px/m) en los huecos del atlas, sin mover las de `fijos`."""
+    antes = {o.name: uvs(o).copy() for o in fijos}
+    for o in nuevos:
+        if o.data.uv_layers:
+            o.data.uv_layers.active_index = 0
+    # el cable de la Cintiq ya trae su UV en metros (tiras derechas, tubo_rmf con uv_tramo): no pasa por
+    # smart_project, que lo partía en tiras curvas que no caben en los huecos
+    tiras = {}
+    for o in nuevos:
+        idx = [i for i, m in enumerate(o.data.materials) if m and m.name == 'Claro_Cintiq_Cable']
+        if not idx:
+            continue
+        mi = np.empty(len(o.data.polygons), np.int32)
+        o.data.polygons.foreach_get('material_index', mi)
+        caras = np.isin(mi, idx)
+        if o.name not in _TIRAS:
+            loops = np.concatenate([list(o.data.polygons[i].loop_indices) for i in np.nonzero(caras)[0]])
+            _TIRAS[o.name] = (loops, uvs(o)[loops].copy())
+        tiras[o.name] = (caras, idx) + _TIRAS[o.name]
+    bpy.ops.object.select_all(action='DESELECT')
+    for o in nuevos:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = nuevos[0]
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    for o in nuevos:
+        if o.name in tiras:
+            bm = bmesh.from_edit_mesh(o.data)
+            for f in bm.faces:
+                if f.material_index in tiras[o.name][1]:
+                    f.select_set(False)
+            bmesh.update_edit_mesh(o.data)
+    bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.0)
+    bpy.ops.object.mode_set(mode='OBJECT')
+    for o in nuevos:
+        me = o.data
+        uv = me.uv_layers.active.data
+        co = uvs(o)
+        caras = tiras[o.name][0] if o.name in tiras else np.zeros(len(me.polygons), bool)
+        a3, auv = 0.0, 0.0
+        for poly in me.polygons:
+            if caras[poly.index]:
+                continue
+            a3 += poly.area
+            idx = list(poly.loop_indices)
+            xs, ys = co[idx, 0], co[idx, 1]
+            auv += 0.5 * abs(np.dot(xs, np.roll(ys, 1)) - np.dot(ys, np.roll(xs, 1)))
+        k = math.sqrt(auv / max(a3, 1e-9))
+        co *= densidad[o.name] / TAM / max(k, 1e-9)
+        if o.name in tiras:
+            _, _, loops, metros = tiras[o.name]
+            co[loops] = metros * densidad[o.name] / TAM
+        uv.foreach_set('uv', co.ravel())
+    # el acomodo de Blender no respeta las islas fijadas (con pin LOCKED las encima desde la esquina):
+    # se acomodan a mano en los huecos de la máscara de lo de antes
+    viejo = mascara_uv(fijos, TAM)
+    acomodar_en_huecos(nuevos, viejo, round(margen * TAM))
+    movidas = [o.name for o in fijos if not np.array_equal(antes[o.name], uvs(o))]
+    if movidas:
+        raise RuntimeError(f'se movieron UV de lo de antes: {movidas}')
+    co = np.concatenate([uvs(o) for o in nuevos])
+    nuevo = mascara_uv(nuevos, TAM)
+    suma = sum(mascara_uv([o], TAM, islas=True) for o in nuevos)
+    holgura = int(distancia_px(viejo, 12)[nuevo].min())
+    print(f'  islas de la Cintiq: UV de {co.min(0).round(4)} a {co.max(0).round(4)}, {nuevo.sum()} px; '
+          f'encimadas con las de antes: {(viejo & nuevo).sum()} px, entre ellas: {int((suma > 1).sum())} px; '
+          f'lo más cerca de una isla de antes: {holgura} px; las de antes: sin mover')
+    if co.min() < 0 or co.max() > 1 or (viejo & nuevo).any() or (suma > 1).any():
+        raise RuntimeError('las islas de la Cintiq no cupieron en los huecos del atlas')
+    return viejo
+
+
+def hornear_encima(nuevos, fijos, viejo, png, tam=TAM, muestras=64, margen=16):
+    """Hornea solo `nuevos` (lo de antes no se dibuja: hide_render) y pone sus islas en el atlas que ya
+    existe: cada pixel que está más cerca de una isla nueva que de una vieja (y a ≤ `margen`) toma lo
+    nuevo, con el mismo margen que hace P.hornear_atlas; todo lo demás se queda como estaba."""
+    img = bpy.data.images.new('cintiq_horno', tam, tam, alpha=True)
+    img.colorspace_settings.name = 'sRGB'
+    img.pixels.foreach_set(np.tile(np.array([1.0, 0.0, 1.0, 0.0], np.float32), tam * tam))
+    mats = {m for o in nuevos for m in o.data.materials if m}
+    for m in mats:
+        n = m.node_tree.nodes.get('Horneado')
+        n.image = img
+        m.node_tree.nodes.active = n
+    ocultos = [o for o in bpy.data.objects if o not in nuevos and not o.hide_render]
+    for o in ocultos:
+        o.hide_render = True
+    sc = bpy.context.scene
+    sc.render.engine = 'CYCLES'
+    sc.cycles.samples = muestras
+    sc.cycles.device = 'CPU'
+    bpy.ops.object.select_all(action='DESELECT')
+    for o in nuevos:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = nuevos[0]
+    bpy.ops.object.bake(type='EMIT', margin=0, use_clear=False)
+    for o in ocultos:
+        o.hide_render = False
+    px = np.empty(tam * tam * 4, np.float32)
+    img.pixels.foreach_get(px)
+    px = px.reshape(tam, tam, 4)
+    lleno = (px[..., 3] > 0.5) | (np.abs(px[..., :3] - (1.0, 0.0, 1.0)).max(axis=2) > 0.02)
+    if (lleno & viejo).any():
+        raise RuntimeError(f'lo horneado de la Cintiq cae en {(lleno & viejo).sum()} px de las islas de antes')
+    col = np.where(lleno[..., None], px[..., :3], 0.0).astype(np.float32)
+    hay = lleno.astype(np.float32)
+    for _ in range(margen):   # el margen de P.hornear_atlas, solo desde las islas nuevas
+        suma = np.zeros_like(col)
+        cuenta = np.zeros_like(hay)
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                if dy or dx:
+                    suma += mover(col, dy, dx)
+                    cuenta += mover(hay, dy, dx)
+        nuevo = (hay == 0) & (cuenta > 0)
+        if not nuevo.any():
+            break
+        col[nuevo] = suma[nuevo] / cuenta[nuevo][:, None]
+        hay[nuevo] = 1.0
+    d_nuevo, d_viejo = distancia_px(lleno, margen), distancia_px(viejo, margen + 1)
+    toma = (d_nuevo <= margen) & (d_nuevo < d_viejo) & (hay > 0)
+    base = bpy.data.images.load(png, check_existing=False)
+    if tuple(base.size) != (tam, tam):
+        raise RuntimeError(f'{png} mide {tuple(base.size)}, no {tam}')
+    viejo_px = np.empty(tam * tam * 4, np.float32)
+    base.pixels.foreach_get(viejo_px)
+    viejo_px = viejo_px.reshape(tam, tam, 4)
+    out = viejo_px[..., :3].copy()
+    out[toma] = col[toma]
+    final = bpy.data.images.new(os.path.splitext(os.path.basename(png))[0] + '_con_cintiq', tam, tam, alpha=False)
+    final.colorspace_settings.name = 'sRGB'
+    final.pixels.foreach_set(np.concatenate([out, np.ones((tam, tam, 1), np.float32)], axis=2).ravel())
+    final.filepath_raw = png
+    final.file_format = 'PNG'
+    final.save()
+    # que lo de antes se quedó igual: se vuelve a leer el PNG guardado y se compara fuera de lo que tomó la Cintiq
+    rel = bpy.data.images.load(png, check_existing=False)
+    rel_px = np.empty(tam * tam * 4, np.float32)
+    rel.pixels.foreach_get(rel_px)
+    rel_px = rel_px.reshape(tam, tam, 4)
+    cambio = np.abs(rel_px[..., :3] - viejo_px[..., :3]).max(axis=2) > 1e-6
+    print(f'  horneado de la Cintiq: {int(lleno.sum())} px pintados, {int(toma.sum())} px del atlas tomados (con su margen); '
+          f'pixeles que cambiaron fuera de eso: {int((cambio & ~toma).sum())}, adentro de las islas de antes: {int((cambio & viejo).sum())}')
+    for m in mats:
+        m.node_tree.nodes['Horneado'].image = rel
+    for i in (img, base, final):
+        bpy.data.images.remove(i)
+
+
+def agregar_cintiq(tam=TAM, muestras=64):
+    abrir()
+    t0 = os.path.getmtime(BLEND)
+    p0 = os.path.getmtime(PNG)
+    for n in (CINTIQ_PANTALLA, CINTIQ_CUERPO, CINTIQ):   # por si se vuelve a correr
+        if n in bpy.data.objects:
+            bpy.data.objects.remove(bpy.data.objects[n])
+    for m in [m for m in bpy.data.materials if m.name.startswith('Claro_Cintiq_')]:
+        bpy.data.materials.remove(m)
+    fijos = [bpy.data.objects[LETRERO]] + [bpy.data.objects[n] for n in NEONES] + [bpy.data.objects[CABLE]]
+    raiz, cuerpo, pantalla = cintiq_piso(bpy.data.objects[CABLE])
+    nuevos = [raiz, cuerpo, pantalla]
+    # la misma densidad que lo de antes con su peso: lo del cable como el cable, lo demás por el letrero
+    base = T.densidad(bpy.data.objects[LETRERO]) / PESOS[LETRERO]
+    densidad = {CINTIQ: T.densidad(bpy.data.objects[CABLE]), CINTIQ_CUERPO: base * PESOS[CINTIQ_CUERPO],
+                CINTIQ_PANTALLA: base * PESOS[CINTIQ_PANTALLA]}
+    # el hueco libre más grande del atlas es de ~150 px: si las caras grandes del cuerpo no caben, se le
+    # bajan los pixeles por metro al cuerpo y a la pantalla (plástico negro y un color plano)
+    for factor in (1.0, 0.85, 0.72, 0.6, 0.5, 0.42):
+        d = dict(densidad, **{n: densidad[n] * factor for n in (CINTIQ_CUERPO, CINTIQ_PANTALLA)})
+        try:
+            viejo = uv_en_huecos(nuevos, fijos, d)
+            break
+        except RuntimeError as e:
+            print(f'  {e}: con {factor:.2f} de la densidad del cuerpo no cupo')
+    else:
+        raise RuntimeError('la Cintiq no cabe en los huecos del atlas')
+    print('  densidad de la Cintiq (px/m): ' + ', '.join(f'{k} {v:.0f}' for k, v in d.items()))
+    if os.path.getmtime(PNG) != p0:
+        raise RuntimeError(f'{PNG} cambió mientras se armaba: no se pinta encima')
+    hornear_encima(nuevos, fijos, viejo, PNG, tam=tam, muestras=muestras)
+    reporte(nuevos)
+    if os.path.getmtime(BLEND) != t0:
+        raise RuntimeError(f'{BLEND} cambió mientras se armaba: no se guarda')
+    bpy.ops.wm.save_as_mainfile(filepath=BLEND)
+    print('Cintiq agregada:', BLEND)
+
+
 # ---------------------------------------------------------------- comandos
 
 def objetos():
-    objs = [bpy.data.objects[LETRERO]] + [bpy.data.objects[n] for n in NEONES] + [bpy.data.objects[CABLE]]
-    return objs
+    nombres = [LETRERO] + NEONES + [CABLE, CINTIQ, CINTIQ_CUERPO, CINTIQ_PANTALLA]
+    return [bpy.data.objects[n] for n in nombres]
 
 
 def reporte(objs):
@@ -822,12 +1475,14 @@ def armar():
     print(f'  huella del letrero: x {co[:, 0].min():+.3f} a {co[:, 0].max():+.3f}, y {co[:, 1].min():+.3f} a {co[:, 1].max():+.3f}, '
           f'z {co[:, 2].min():+.3f} a {co[:, 2].max():+.3f} (corrido {dy:+.3f} en y)')
     cable, _ = cable_renderbox(E)
+    cintiq = cintiq_piso(cable)    # al final y con su propio azar: lo de antes sale igual que sin ella
     objs = objetos()
     T.uv_atlas_ponderado(objs, PESOS)
     os.makedirs(os.path.dirname(BLEND), exist_ok=True)
     bpy.ops.wm.save_as_mainfile(filepath=BLEND)
     total = reporte(objs)
-    print(f'armado: {total} triángulos ({P.triangulos(objs[:5])} el letrero, {P.triangulos([cable])} el cable)')
+    print(f'armado: {total} triángulos ({P.triangulos(objs[:5])} el letrero, {P.triangulos([cable])} el cable, '
+          f'{P.triangulos(list(cintiq))} la Cintiq)')
 
 
 def abrir():
@@ -835,9 +1490,15 @@ def abrir():
     bpy.context.preferences.filepaths.save_version = 0
 
 
+APARTE = 12.0   # el letrero se hornea apartado: la Cintiq queda donde está su dado izquierdo (los dos van en el origen)
+
+
 def pintar(tam=TAM, muestras=64):
     abrir()
+    let = bpy.data.objects[LETRERO]
+    let.location.x += APARTE
     P.hornear_atlas(objetos(), PNG, tam=tam, muestras=muestras)
+    let.location.x -= APARTE
     bpy.ops.wm.save_as_mainfile(filepath=BLEND)
     print('pintado:', PNG)
 
@@ -919,6 +1580,7 @@ def render(carpeta):
     RBX = 3.2
     traer_renderbox((RBX, 0.0, RB_Z))
     bpy.data.objects[CABLE].location = (RBX, 0.0, RB_Z)
+    bpy.data.objects[CINTIQ].location = (RBX + 0.0, 0.0, RB_Z)   # en el mismo marco (sus hijas lo siguen)
     os.makedirs(carpeta, exist_ok=True)
     rutas = []
     let = [bpy.data.objects[LETRERO]] + [bpy.data.objects[n] for n in NEONES]
@@ -965,6 +1627,77 @@ def render(carpeta):
     print('render:', *rutas, sep='\n  ')
 
 
+def _dir(az, el):
+    """De dónde se ve: azimut 0 = desde el frente de la Renderbox (-Y), positivo hacia +X; elevación en grados."""
+    a, e = math.radians(az), math.radians(el)
+    return Vector((math.sin(a) * math.cos(e), -math.cos(a) * math.cos(e), math.sin(e)))
+
+
+def render_cintiq(carpeta):
+    """La Cintiq con la Renderbox (en su marco, sin el letrero), su cable y el de corriente: desde arriba
+    (de cerca y con el registro), alta a ~55° en tres cuartos de frente desde el lado de la Cintiq, desde
+    donde la ve la cámara del juego (que mira hacia +z del mundo: en este marco, desde +X y un poco del
+    frente, azimut 72°), el cable por detrás, de frente a ras del piso, de perfil y el USB-C."""
+    abrir()
+    objs = objetos()
+    m = P.material_final(PNG, 'revision_claro')
+    for o in objs:
+        o.data.materials.clear()
+        o.data.materials.append(m)
+    sc = bpy.context.scene
+    sc.render.engine = 'BLENDER_EEVEE'
+    sc.view_settings.view_transform = 'Standard'
+    w = bpy.data.worlds.new('fondo')
+    fondo = w.node_tree.nodes['Background']
+    fondo.inputs['Color'].default_value = P.srgb('#3a3f52')
+    fondo.inputs['Strength'].default_value = 0.9
+    sc.world = w
+    sol = bpy.data.objects.new('sol', bpy.data.lights.new('sol', 'SUN'))
+    sol.data.energy = 2.4
+    sol.rotation_euler = (math.radians(50), 0, math.radians(-35))
+    sc.collection.objects.link(sol)
+    relleno = bpy.data.objects.new('relleno', bpy.data.lights.new('relleno', 'SUN'))
+    relleno.data.energy = 1.3
+    relleno.data.use_shadow = False
+    relleno.rotation_euler = (math.radians(60), 0, math.radians(150))
+    sc.collection.objects.link(relleno)
+    cam = bpy.data.objects.new('cam', bpy.data.cameras.new('cam'))
+    sc.collection.objects.link(cam)
+    sc.camera = cam
+    bpy.ops.mesh.primitive_plane_add(size=40, location=(0, 0, 0))
+    piso = bpy.context.active_object
+    mp = bpy.data.materials.new('piso')
+    mp.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = P.srgb('#27306a')
+    mp.node_tree.nodes['Principled BSDF'].inputs['Roughness'].default_value = 1.0
+    piso.data.materials.append(mp)
+    for o in [bpy.data.objects[LETRERO]] + [bpy.data.objects[n] for n in NEONES]:   # también va en el origen
+        o.hide_render = True
+    traer_renderbox((0.0, 0.0, RB_Z))
+    os.makedirs(carpeta, exist_ok=True)
+    rutas = []
+
+    def arriba(nombre, centro, lado, res):
+        cam.data.type = 'ORTHO'
+        cam.data.ortho_scale = lado
+        cam.data.clip_end = 50
+        cam.location = (centro[0], centro[1], 10.0)
+        cam.rotation_euler = (0, 0, 0)
+        sc.render.resolution_x, sc.render.resolution_y = res
+        sc.render.filepath = os.path.join(carpeta, nombre)
+        bpy.ops.render.render(write_still=True)
+        rutas.append(sc.render.filepath)
+    arriba('cintiq_arriba.png', (-0.42, 0.18), 2.1, (1600, 1200))
+    arriba('cintiq_arriba_registro.png', (-0.45, 1.22), 3.45, (1150, 1500))
+    mira = Vector((-0.45, 0.12, 0.12))
+    rutas.append(T._toma(sc, cam, os.path.join(carpeta, 'cintiq_camara.png'), mira + _dir(-35, 55) * 4.6, mira, lente=45))
+    rutas.append(T._toma(sc, cam, os.path.join(carpeta, 'cintiq_camara_juego.png'), mira + _dir(72, 55) * 4.6, mira, lente=45))
+    rutas.append(T._toma(sc, cam, os.path.join(carpeta, 'cintiq_cable.png'), (-0.95, 1.55, 0.95), (-0.3, 0.38, 0.08), lente=35))
+    rutas.append(T._toma(sc, cam, os.path.join(carpeta, 'cintiq_frente_bajo.png'), (-0.85, -1.6, 0.22), (-0.8, 0.0, 0.07), lente=40))
+    rutas.append(T._toma(sc, cam, os.path.join(carpeta, 'cintiq_perfil.png'), (-2.45, 0.05, 0.16), (-1.0, 0.0, 0.08), lente=45))
+    rutas.append(T._toma(sc, cam, os.path.join(carpeta, 'cintiq_conector.png'), (-0.42, -0.14, 0.3), (-0.70, 0.16, 0.10), lente=50))
+    print('render:', *rutas, sep='\n  ')
+
+
 if __name__ == '__main__':
     args = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else ['todo']
     cmd = args[0]
@@ -977,5 +1710,9 @@ if __name__ == '__main__':
         pintar(1024, 16) if rapido else pintar()
     if cmd in ('exportar', 'todo'):
         exportar()
+    if cmd == 'cintiq':
+        agregar_cintiq(TAM, 16) if rapido else agregar_cintiq()
     if cmd in ('render', 'todo'):
         render(carpeta)
+    if cmd in ('render', 'todo', 'render_cintiq'):
+        render_cintiq(carpeta)

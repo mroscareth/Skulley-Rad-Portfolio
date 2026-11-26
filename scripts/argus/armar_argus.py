@@ -582,9 +582,29 @@ def cara(arm=None, malla=None):
                 b.use_connect = True
             padre = b
     hueso("esfera", Vector((0.3, -0.5, 1.2)), U, X, 0.15, eb["raiz"], deforma=False)
+    for lado, ua in AXILA_BRAZO.items():
+        nombre = f"axila_mitad.{lado}"
+        if nombre in eb:
+            eb.remove(eb[nombre])
+        b = eb.new(nombre)
+        b.head = eb[ua].head.copy()
+        b.tail = eb[ua].head + (eb[ua].tail - eb[ua].head) * 0.5
+        b.roll = eb[ua].roll
+        b.parent = eb[ua].parent
+        b.use_deform = True
     bpy.ops.object.mode_set(mode="OBJECT")
     for pb in arm.pose.bones:
         pb.rotation_mode = "QUATERNION"
+    # el ayudante de la axila gira la mitad que el brazo (las acciones lo hornean al
+    # exportar: export_force_sampling evalúa el constraint)
+    for lado, ua in AXILA_BRAZO.items():
+        pb = arm.pose.bones[f"axila_mitad.{lado}"]
+        for c in list(pb.constraints):
+            pb.constraints.remove(c)
+        c = pb.constraints.new("COPY_TRANSFORMS")
+        c.target, c.subtarget = arm, ua
+        c.owner_space = c.target_space = "WORLD"
+        c.influence = 0.5
 
     _pesar_cara(malla, info, lids, antenas)
     _giro_antebrazo(arm, malla)
@@ -595,7 +615,14 @@ def cara(arm=None, malla=None):
     banda = _banda_semirrigida(malla)
     print("BANDA", len(banda))
     print("CINTURA", _cintura_sin_brazo(malla, excluir=banda))
-    print("CHAMARRA_BANDA", _chamarra_con_banda(malla, banda))
+    print("AXILAS", _suavizar_axilas(malla, excluir=banda))
+    # el ayudante antes de amarrar la chamarra a la banda: si no, la de junto a la
+    # banda giraba con él y se asomaba por la orilla de arriba de la banda
+    print("AXILA_MITAD", _axila_mitad(malla, excluir=banda))
+    print("CHAMARRA_BANDA", _chamarra_con_banda(malla, banda, radio=0.24))
+    # y otra pasada corta: junta la chamarra amarrada a la banda con la que gira con
+    # el ayudante (sin ella, la orilla entre las dos colgaba sobre la banda)
+    print("AXILAS_2", _suavizar_axilas(malla, excluir=banda, pasadas=12))
     soldados = _soldar_costuras(malla, sin_brazo=banda)
     print("COSTURAS", len(soldados))
     print("CAPAS", _pesar_capas(malla, fijos=soldados, sin_brazo=banda))
@@ -660,7 +687,7 @@ def _giro_antebrazo(arm, malla):
             g_g.add([v.index], w * f, "REPLACE")
 
 
-COSTURA_PREF = ("shoulder", "upper_arm", "lower_arm", "antebrazo_giro", "chest", "spine", "neck", "hand")
+COSTURA_PREF = ("shoulder", "upper_arm", "lower_arm", "antebrazo_giro", "chest", "spine", "neck", "hand", "axila_mitad")
 
 
 def _soldar_costuras(malla, radio=0.012, suavizar=0.05, pasadas=4, sin_brazo=()):
@@ -779,7 +806,7 @@ def _soldar_costuras(malla, radio=0.012, suavizar=0.05, pasadas=4, sin_brazo=())
     return set(soldados)
 
 
-CAPA_PREF = ("shoulder", "upper_arm", "lower_arm", "antebrazo_giro", "chest", "spine", "neck", "hips", "upper_leg")
+CAPA_PREF = ("shoulder", "upper_arm", "lower_arm", "antebrazo_giro", "chest", "spine", "neck", "hips", "upper_leg", "axila_mitad")
 
 
 def _normales_vertice(me, co_n=None):
@@ -1214,6 +1241,120 @@ def _cintura_sin_brazo(malla, z0=1.25, z1=1.52, excluir=()):
                 malla.vertex_groups[gid].add([v.index], x / tot, "REPLACE")
         n += 1
     return n
+
+
+AXILA_BRAZO = {"R": "upper_arm.R_025", "L": "upper_arm.L_09"}
+
+
+def _axila_mitad(malla, excluir=(), alcance=0.6, z0=0.9, z1=1.05):
+    """Al subir el brazo casi 150° (saludo, festejo), lo que mezcla torso y brazo se
+    aplastaba: la mezcla lineal de dos giros tan distintos encoge la tela y hace
+    pliegues duros bajo la manga. Cada vértice que mezcla brazo con lo demás pasa por
+    el ayudante que gira la mitad (`axila_mitad.*`): de 0 a 50 % de brazo va de lo
+    que tenía al ayudante, de 50 a 100 % del ayudante al brazo. Así el giro se
+    reparte en dos mitades que sí se interpolan bien (lo mismo que la ingle de los
+    pantalones de Skulley). No toca el antebrazo ni la banda."""
+    me = malla.data
+    arm = malla.find_armature()
+    gi = {g.name: g.index for g in malla.vertex_groups}
+    gn = {g.index: g.name for g in malla.vertex_groups}
+    excluir = set(excluir)
+    n = 0
+    for lado, ua in AXILA_BRAZO.items():
+        nombre = f"axila_mitad.{lado}"
+        if nombre not in gi:
+            gi[nombre] = malla.vertex_groups.new(name=nombre).index
+            gn[gi[nombre]] = nombre
+        g_brazo, g_mitad = gi[ua], gi[nombre]
+        hombro = arm.matrix_world @ arm.data.bones[ua].head_local
+        antebrazo = ("lower_arm." + lado, "antebrazo_giro_" + lado, "hand." + lado)
+        for v in me.vertices:
+            if v.index in excluir or not v.groups or (v.co - hombro).length > alcance:
+                continue
+            w = {g.group: g.weight for g in v.groups}
+            if sum(x for g, x in w.items() if gn[g].startswith(antebrazo)) > 0.1:
+                continue
+            a = w.get(g_brazo, 0.0)
+            tot = sum(w.values()) or 1.0
+            s = a / tot
+            if not 0.02 < s < 0.98:
+                continue
+            # se apaga abajo, en la cadera, donde la tela ya va con la banda (la orilla
+            # entre las dos la suavizan `_chamarra_con_banda` y la segunda pasada de
+            # `_suavizar_axilas`; sin eso colgaba sobre la banda como un labio negro)
+            r = _suave((v.co.z - z0) / (z1 - z0))
+            if r <= 1e-3:
+                continue
+            resto = {g: x / tot for g, x in w.items() if g != g_brazo}
+            k = max(0.0, 1.0 - 2.0 * s) / max(1e-6, 1.0 - s)
+            nuevo = {g: x * k for g, x in resto.items()}
+            nuevo[g_brazo] = max(0.0, 2.0 * s - 1.0)
+            nuevo[g_mitad] = nuevo.get(g_mitad, 0.0) + 1.0 - abs(2.0 * s - 1.0)
+            for g, x in w.items():
+                nuevo[g] = nuevo.get(g, 0.0) * r + x / tot * (1.0 - r)
+            nuevo[g_mitad] = nuevo.get(g_mitad, 0.0) if g_mitad in w else nuevo[g_mitad] * r
+            top = sorted(nuevo.items(), key=lambda kv: -kv[1])[:4]
+            t2 = sum(x for _, x in top) or 1.0
+            for g in list(v.groups):
+                malla.vertex_groups[g.group].remove([v.index])
+            for gid, x in top:
+                if x / t2 > 1e-4:
+                    malla.vertex_groups[gid].add([v.index], x / t2, "REPLACE")
+            n += 1
+    return n
+
+
+def _suavizar_axilas(malla, excluir=(), pasadas=30, x0=0.3, z0=0.95, z1=1.62):
+    """Bajo las axilas, la manga y el costado de la chamarra son la misma pieza y
+    quedaban vecinos de 2 cm con pesos opuestos: uno todo brazo y el de junto todo
+    espalda (la cintura le quita el brazo al torso, no a la manga). Al subir el brazo
+    esa orilla se estiraba hasta 30 veces y la tela hacía un pliegue duro bajo la
+    manga (Oscar: "la axila sigue mal pesada"). Aquí los pesos se suavizan por las
+    aristas en la zona de las dos axilas, para que la tela estire pareja de la manga
+    a la cintura. Los vecinos de fuera de la zona no cambian y sirven de orilla; el
+    antebrazo y la banda no entran."""
+    me = malla.data
+    gn = {g.index: g.name for g in malla.vertex_groups}
+    excluir = set(excluir)
+    ANTEBRAZO = ("lower_arm", "antebrazo", "hand")
+
+    def en_zona(v):
+        if v.index in excluir or not v.groups or abs(v.co.x) <= x0 or not z0 < v.co.z < z1:
+            return False
+        if not gn[max(v.groups, key=lambda g: g.weight).group].startswith(CAPA_PREF):
+            return False
+        return sum(g.weight for g in v.groups if gn[g.group].startswith(ANTEBRAZO)) < 0.15
+    zona = [v.index for v in me.vertices if en_zona(v)]
+    zset = set(zona)
+    vecinos = {i: [] for i in zona}
+    for e in me.edges:
+        a_, b_ = e.vertices
+        if a_ in zset:
+            vecinos[a_].append(b_)
+        if b_ in zset:
+            vecinos[b_].append(a_)
+    pesos = {}
+    for i in zset | {j for js in vecinos.values() for j in js}:
+        pesos[i] = {g.group: g.weight for g in me.vertices[i].groups}
+    for _ in range(pasadas):
+        nuevos = {}
+        for i in zona:
+            acc = dict(pesos[i])
+            for j in vecinos[i]:
+                for g, x in pesos[j].items():
+                    acc[g] = acc.get(g, 0.0) + x
+            n = 1 + len(vecinos[i])
+            nuevos[i] = {g: x / n for g, x in acc.items()}
+        pesos.update(nuevos)
+    for i in zona:
+        top = sorted(pesos[i].items(), key=lambda kv: -kv[1])[:4]
+        tot = sum(x for _, x in top) or 1.0
+        for g in list(me.vertices[i].groups):
+            malla.vertex_groups[g.group].remove([i])
+        for gid, x in top:
+            if x / tot > 1e-4:
+                malla.vertex_groups[gid].add([i], x / tot, "REPLACE")
+    return len(zona)
 
 
 def _chamarra_con_banda(malla, banda, pegada=0.03, radio=0.16, z0=1.35, z1=1.45):

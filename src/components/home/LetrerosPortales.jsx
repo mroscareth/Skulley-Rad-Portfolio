@@ -210,7 +210,8 @@ export default function LetrerosPortales({ portales, portalMixMap, visible = tru
         const paso = LETREROS.solido * 1.4
         for (let x = x0 + LETREROS.solido; x <= x1 - LETREROS.solido + 1e-6; x += paso) {
           v.set(x, 0, 0).applyMatrix4(g.matrixWorld)
-          solidos.push({ x: v.x, z: v.z, r: LETREROS.solido * LETREROS.escala })
+          // `esfera`: las esferas también rebotan en ellos (orbPhysics `obstaculoBounce`), no solo Skulley
+          solidos.push({ x: v.x, z: v.z, r: LETREROS.solido * LETREROS.escala, esfera: true })
         }
       }
       raiz.updateMatrixWorld(true)

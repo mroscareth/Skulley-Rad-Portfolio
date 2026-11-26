@@ -9,6 +9,9 @@ grieta que las cruza. Gris = el valor (0.5 es el azul de siempre), alfa = dónde
 hay piedra o junta (fuera de eso se ve la tierra).
 
     python scripts/piso/pintar_piedras.py public/textures/piso-piedras.webp [semilla]
+
+La del claro entero (hasta la orilla del bosque), en dos grises:
+    python scripts/piso/pintar_piedras.py --claro public/textures/piso-claro-gris.webp public/textures/piso-claro-alfa.webp [semilla]
 """
 import math
 import os
@@ -24,7 +27,7 @@ S = 2048
 # de abajo están pensadas para 11 unidades; E las lleva a los pixeles de ahora,
 # así un área más grande no agranda las piedras.
 MUNDO = 26
-E = 11 / MUNDO
+E = (S / MUNDO) / (2048 / 11)
 # Tamaños de piedra: (intentos, radio mínimo, radio máximo) en pixeles a 11
 # unidades; las grandes se acomodan primero y las chicas llenan huecos.
 # Lozas grandes, sin piedritas alrededor (Oscar, su referencia 2 de lozas de piedra).
@@ -56,12 +59,15 @@ CENTRO_GRANDE = 1.25
 ORILLA_CHICA = 0.75
 
 
-def pintar(semilla=11):
+def pintar(semilla=11, radio=0.4, onda=(0.04, 0.12), suelta=0.45, desvanece=None):
+    """radio: el de la mancha, en fracción del lienzo; onda: qué tanto ondula su
+    orilla; suelta: en qué fracción del radio se empiezan a soltar las piedras;
+    desvanece: en qué fracción se desvanecen (DESVANECE si no se da)."""
     rng = np.random.default_rng(semilla)
     cx = cy = S / 2
-    radio_mancha = 0.4 * S
+    radio_mancha = radio * S
     # Orilla de la mancha irregular: un radio que cambia con el ángulo.
-    armonicos = [(k, rng.uniform(0.04, 0.12) / k ** 0.6, rng.uniform(0, 6.3)) for k in range(2, 8)]
+    armonicos = [(k, rng.uniform(*onda) / k ** 0.6, rng.uniform(0, 6.3)) for k in range(2, 8)]
 
     def radio_en(th):
         return radio_mancha * (1 + sum(a * math.cos(k * th + f) for k, a, f in armonicos))
@@ -79,7 +85,7 @@ def pintar(semilla=11):
             rad = rng.uniform(rmin, rmax) * E * (CENTRO_GRANDE + (ORILLA_CHICA - CENTRO_GRANDE) * min(dist / radio_mancha, 1))
             px, py = cx + dist * math.cos(ang), cy + dist * math.sin(ang)
             borde = radio_en(ang)
-            queda = np.clip((borde * 1.02 - dist) / (borde * 0.45), 0, 1)
+            queda = np.clip((borde * 1.02 - dist) / (borde * suelta), 0, 1)
             if rng.uniform() > queda ** 1.2:
                 continue
             if any(math.hypot(px - q[0], py - q[1]) < (rad + q[2]) * SEPARA + junta for q in semillas):
@@ -87,7 +93,7 @@ def pintar(semilla=11):
             semillas.append((px, py, rad, rng.uniform(-0.035, 0.035)))
 
     gris, alfa = pintar_lozas(rng, semillas, (S, S), junta)
-    return desvanecer_mancha(rng, gris, alfa, cx, cy, radio_mancha, armonicos), len(semillas)
+    return desvanecer_mancha(rng, gris, alfa, cx, cy, radio_mancha, armonicos, desvanece or DESVANECE), len(semillas)
 
 
 def pintar_lozas(rng, semillas, forma, junta, envolver_y=False):
@@ -146,26 +152,33 @@ def pintar_lozas(rng, semillas, forma, junta, envolver_y=False):
     valido = ide >= 0
     k = np.clip(ide, 0, None)
     propia = f1 + PESO * sem[k, 2]
-    yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
-    dx = xx - sem[k, 0]
-    dy = yy - (sem[k, 1] + corrida)
-    del yy, xx, corrida
-    th = np.mod(np.arctan2(dy, dx), 2 * np.pi)
     # El radio del polígono en la dirección de cada pixel: el lado que cruza ese
-    # ángulo, intersectado con el rayo desde el centro.
-    ang_k = angulos[k]
-    j = (ang_k <= th[..., None]).sum(-1) % ESQUINAS
-    ja = (j - 1) % ESQUINAS
-    ax = np.take_along_axis(vx[k], ja[..., None], -1)[..., 0]
-    ay = np.take_along_axis(vy[k], ja[..., None], -1)[..., 0]
-    bx = np.take_along_axis(vx[k], j[..., None], -1)[..., 0]
-    by = np.take_along_axis(vy[k], j[..., None], -1)[..., 0]
-    del ang_k, j, ja
-    ux, uy = np.cos(th), np.sin(th)
-    ex, ey = bx - ax, by - ay
-    r_px = (ax * ey - ay * ex) / np.where(np.abs(ux * ey - uy * ex) < 1e-6, 1e-6, ux * ey - uy * ex)
-    r_px = np.where(valido, np.abs(r_px), 0)
-    del ux, uy, ex, ey, ax, ay, bx, by, th, dx, dy
+    # ángulo, intersectado con el rayo desde el centro. Por bandas de renglones:
+    # con la calcomanía del claro (4096 px) los arreglos de (alto, ancho, esquinas)
+    # no cabían en memoria.
+    r_px = np.zeros((H, W), np.float32)
+    banda = 256
+    xx = np.arange(W, dtype=np.float32)[None, :]
+    for y0 in range(0, H, banda):
+        y1 = min(y0 + banda, H)
+        kb = k[y0:y1]
+        yy = np.arange(y0, y1, dtype=np.float32)[:, None]
+        dx = xx - sem[kb, 0]
+        dy = yy - (sem[kb, 1] + corrida[y0:y1])
+        th = np.mod(np.arctan2(dy, dx), 2 * np.pi)
+        ang_k = angulos[kb]
+        j = (ang_k <= th[..., None]).sum(-1) % ESQUINAS
+        ja = (j - 1) % ESQUINAS
+        ax = np.take_along_axis(vx[kb], ja[..., None], -1)[..., 0]
+        ay = np.take_along_axis(vy[kb], ja[..., None], -1)[..., 0]
+        bx = np.take_along_axis(vx[kb], j[..., None], -1)[..., 0]
+        by = np.take_along_axis(vy[kb], j[..., None], -1)[..., 0]
+        ux, uy = np.cos(th), np.sin(th)
+        ex, ey = bx - ax, by - ay
+        den = ux * ey - uy * ex
+        rb = (ax * ey - ay * ex) / np.where(np.abs(den) < 1e-6, 1e-6, den)
+        r_px[y0:y1] = np.where(valido[y0:y1], np.abs(rb), 0)
+    del corrida
     # Piedra: dentro de su celda (lejos de la junta) y dentro de su polígono.
     # La junta cambia de grueso a lo largo (Oscar: que no se sienta como un trazo
     # del mismo grueso): un ruido la abre y la cierra, y cada loza va un poco más o
@@ -299,13 +312,13 @@ def pintar_lozas(rng, semillas, forma, junta, envolver_y=False):
     return gris, alfa
 
 
-def desvanecer_mancha(rng, gris, alfa, cx, cy, radio_mancha, armonicos):
+def desvanecer_mancha(rng, gris, alfa, cx, cy, radio_mancha, armonicos, desvanece=DESVANECE):
     """Hacia la orilla de la mancha las piedras se desvanecen hasta perderse en la
     tierra (Oscar), siguiendo la orilla irregular y con un poco de ruido."""
     yy, xx = np.mgrid[0:S, 0:S].astype(np.float32)
     th = np.arctan2(yy - cy, xx - cx)
     borde = radio_mancha * (1 + sum(a * np.cos(kk * th + f) for kk, a, f in armonicos))
-    llega = (borde - np.hypot(xx - cx, yy - cy)) / (borde * DESVANECE) + ruido_periodico(rng, 90 * E) * 0.18
+    llega = (borde - np.hypot(xx - cx, yy - cy)) / (borde * desvanece) + ruido_periodico(rng, 90 * E, forma=(S, S)) * 0.18
     llega = np.clip(llega, 0, 1)
     alfa *= llega * llega * (3 - 2 * llega)
     return gris, alfa
@@ -323,8 +336,46 @@ def guardar(gris, alfa, ruta):
         im.save(ruta)
 
 
+# Las lozas del claro (Oscar, 2026-11-25: que el piso de piedra de los portales
+# llegue hasta la orilla, antes de los pinos, pero no pegado a ellos). Una mancha
+# de 25 unidades de radio (el bosque empieza en 30: quedan ~5 de tierra) con la
+# orilla casi redonda, que se suelta y se desvanece en sus últimas ~4 unidades. En
+# 54 unidades a 4096 px quedan 76 px por unidad (la del centro de antes, 79). Va en dos imágenes de un solo canal (gris y alfa), así en la
+# GPU son R8 y no un RGBA de 4096 (89 MB con mipmaps): el alfa casi no tiene
+# detalle fino y va a la mitad.
+CLARO = dict(lienzo=4096, mundo=54, radio=25.0, onda=(0.012, 0.035), suelta=0.2, desvanece=0.17)
+
+
+def pintar_claro(semilla=31):
+    global S, MUNDO, E
+    S, MUNDO = CLARO['lienzo'], CLARO['mundo']
+    E = (S / MUNDO) / (2048 / 11)
+    return pintar(semilla, radio=CLARO['radio'] / MUNDO, onda=CLARO['onda'],
+                  suelta=CLARO['suelta'], desvanece=CLARO['desvanece'])
+
+
+def guardar_claro(gris, alfa, ruta_gris, ruta_alfa):
+    """El gris a lienzo completo y el alfa a la mitad, cada uno en un canal."""
+    from PIL import Image
+    g = Image.fromarray(np.round(np.clip(gris, 0, 1) * 255).astype(np.uint8), 'L')
+    a = Image.fromarray(np.round(np.clip(alfa, 0, 1) * 255).astype(np.uint8), 'L')
+    a = a.resize((a.width // 2, a.height // 2), Image.LANCZOS)
+    for im, ruta, q in ((g, ruta_gris, 85), (a, ruta_alfa, 80)):
+        if ruta.lower().endswith('.webp'):
+            im.save(ruta, quality=q, method=6)
+        else:
+            im.save(ruta)
+
+
 if __name__ == '__main__':
     args = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else sys.argv[1:]
+    if args and args[0] == '--claro':
+        # python scripts/piso/pintar_piedras.py --claro gris.webp alfa.webp [semilla]
+        semilla = int(args[3]) if len(args) > 3 else 31
+        (gris, alfa), n = pintar_claro(semilla)
+        guardar_claro(gris, alfa, args[1], args[2])
+        print('listo', args[1], args[2], n, 'piedras')
+        sys.exit(0)
     ruta = args[0] if args else 'piso-piedras.png'
     semilla = int(args[1]) if len(args) > 1 else 11
     (gris, alfa), n = pintar(semilla)

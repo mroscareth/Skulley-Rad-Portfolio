@@ -20,7 +20,24 @@ export const RENDERBOX_CLARO = {
   // vaca (Oscar). Se queda el detalle fino (la rejilla, las orillas) sobre un gris pizarra parejo.
   pizarra: '#4a4f5c',
   detalle: 1.5,
+  // Oscar, 2026-11-25: aun así "se ven manchadas". El promedio se toma de más cerca (`mip`: el detalle
+  // que queda es más fino) y solo pasa el detalle fuerte (la rejilla, las orillas, los tornillos): lo
+  // que se aparta del promedio menos que `umbral` (las pinceladas de la acuarela) se queda en el gris.
+  mip: 3,
+  umbral: 0.07,
   oye: [4, 22],    // a qué distancia de Skulley se oye a todo y deja de oírse
+}
+
+// Donde no crece el pasto pintado: la Renderbox y su Cintiq (Oscar, 2026-11-25: "el pasto atraviesa la
+// Wacom"). La Cintiq va en el marco de la Renderbox (props_claro.glb, su cuerpo en x −1.06, z +0.03 m).
+export function zonasSinPasto() {
+  const C = RENDERBOX_CLARO
+  const lx = -1.06 * C.escala, lz = 0.03 * C.escala
+  const cs = Math.cos(C.giro), sn = Math.sin(C.giro)
+  return [
+    { x: C.x, z: C.z, r: 2.2 },
+    { x: C.x + cs * lx + sn * lz, z: C.z - sn * lx + cs * lz, r: 2.2 },
+  ]
 }
 
 export const renderboxClaro = {

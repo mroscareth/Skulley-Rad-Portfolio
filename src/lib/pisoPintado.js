@@ -30,7 +30,13 @@ import * as THREE from 'three'
 // azules oscuros y las manchas claras grandes.
 
 const URL_TIERRA = `${import.meta.env.BASE_URL}textures/piso-tierra.webp`
-const URL_PIEDRAS = `${import.meta.env.BASE_URL}textures/piso-piedras.webp`
+// Las lozas del claro, hasta la orilla del bosque (Oscar, 2026-11-25; antes una
+// mancha de ~10 unidades de radio al centro, piso-piedras.webp): gris y alfa en
+// dos imágenes de un canal, que en la GPU van como R8 (ver pintar_piedras.py
+// --claro). La versión va en la URL: con el mismo nombre el CDN servía la de antes.
+const VERSION_CLARO = 2
+const URL_CLARO_GRIS = `${import.meta.env.BASE_URL}textures/piso-claro-gris.webp?v=${VERSION_CLARO}`
+const URL_CLARO_ALFA = `${import.meta.env.BASE_URL}textures/piso-claro-alfa.webp?v=${VERSION_CLARO}`
 const URL_CAMINO = `${import.meta.env.BASE_URL}textures/piso-camino.webp`
 const URL_PIEDRAS_GLIFO = `${import.meta.env.BASE_URL}textures/piso-piedras-glifo.webp`
 // El área de lozas bajo el portal de SKULLEYGLYPH (x, z, lo que mide en el mundo).
@@ -47,8 +53,9 @@ const CAMINO_TRAMOS = [[3, 7.5], [11.5, 29], [38, 41.5], [46.5, 61], [69, 72], [
 // Lo que mide la tira en el mundo (ancho, largo): 560 × 2520 px a 2048/26 px por unidad.
 const CAMINO_TAM = [560 / (2048 / 26), 2520 / (2048 / 26)]
 const CAMPO_RES = 4
-// La mancha de piedras: centro (x, z) y lo que mide en el mundo.
-const PLAZA = [0, 0, 26]
+// La mancha de piedras: centro (x, z) y lo que mide en el mundo (las lozas llegan
+// a ~25 de radio y los pinos empiezan en 30: Oscar quiso tierra entre las dos).
+const PLAZA = [0, 0, 54]
 // Lo que mide la textura en el mundo, en unidades.
 const TAM_TIERRA = 5.5
 const PORTALES_MAX = 6
@@ -59,7 +66,9 @@ const RADIO_DESGASTE = 6.5
 // visibles del camino (Oscar: que se vea en la textura del inicio y en el camino).
 const RADIO_DESGASTE_PLAZA = 11.0
 // Para que lo que crece en el piso (las matas de PastoPintado) sepa dónde hay lozas y camino.
-export const zonasPiso = { plaza: PLAZA, plazaGlifo: PLAZA_GLIFO, camino: CAMINO, caminoTramos: CAMINO_TRAMOS, caminoLargo: 90 }
+// `lozasClaro`: desde qué radio se deshacen las lozas del claro; de ahí a los pinos
+// crece el pasto (Oscar, 2026-11-25: el pasto solo en las orillas).
+export const zonasPiso = { plaza: PLAZA, plazaGlifo: PLAZA_GLIFO, camino: CAMINO, caminoTramos: CAMINO_TRAMOS, caminoLargo: 90, lozasClaro: 21.5 }
 
 export const uniformsPiso = {
   uPisoFuerza: { value: 1 },
@@ -73,6 +82,7 @@ export const uniformsPiso = {
   uPisoFino: { value: 0.8 },
   uPisoPortales: { value: Array.from({ length: PORTALES_MAX }, () => new THREE.Vector3()) },
   uPisoPiedras: { value: null },
+  uPisoPiedrasAlfa: { value: null },
   uPisoPlaza: { value: new THREE.Vector3(...PLAZA) },
   // Las piedras llevan su propio contraste: con el de la tierra casi no leían.
   uPisoPiedrasContraste: { value: 1.9 },
@@ -166,12 +176,14 @@ function armarCamino() {
 
 if (import.meta.env.DEV && typeof window !== 'undefined') window.__pisoPintado = uniformsPiso
 
-function cargarTextura(gl, url, envolver) {
+function cargarTextura(gl, url, envolver, formato) {
   const t = new THREE.TextureLoader().load(url, (tex) => {
     // Subirla en cuanto llega (con sus mipmaps), no en el primer cuadro que la dibuja.
     try { gl?.initTexture?.(tex) } catch { }
   })
   t.wrapS = t.wrapT = envolver
+  // Un solo canal (R8): la imagen se sube tomando su rojo, sin gastar RGBA.
+  if (formato) t.format = formato
   t.colorSpace = THREE.NoColorSpace
   t.minFilter = THREE.LinearMipmapLinearFilter
   t.magFilter = THREE.LinearFilter
@@ -278,6 +290,7 @@ uniform float uPisoDesgaste;
 uniform float uPisoFino;
 uniform vec3 uPisoPortales[${PORTALES_MAX}];
 uniform sampler2D uPisoPiedras;
+uniform sampler2D uPisoPiedrasAlfa;
 uniform vec3 uPisoPlaza;
 uniform float uPisoPiedrasContraste;
 uniform sampler2D uPisoPiedrasGlifo;
@@ -328,8 +341,10 @@ const GLSL_PISO = /* glsl */ `
   g += (pisoTierra(p * (2.7 / uPisoTam), 37.0) - 0.5) * uPisoFino;
   // Las piedras del centro tapan la tierra. Fuera de la calcomanía se lee su
   // orilla (sin piedra, alfa 0): no hace falta preguntar si está adentro.
-  vec4 piedra = texture2D(uPisoPiedras, (p - uPisoPlaza.xy) / uPisoPlaza.z + 0.5);
-  g = mix(g, 0.5 + (piedra.r - 0.5) * uPisoPiedrasContraste, piedra.a);
+  vec2 uvPlaza = (p - uPisoPlaza.xy) / uPisoPlaza.z + 0.5;
+  float piedra = texture2D(uPisoPiedras, uvPlaza).r;
+  float piedraA = texture2D(uPisoPiedrasAlfa, uvPlaza).r;
+  g = mix(g, 0.5 + (piedra - 0.5) * uPisoPiedrasContraste, piedraA);
   vec4 piedraGlifo = texture2D(uPisoPiedrasGlifo, (p - uPisoPlazaGlifo.xy) / uPisoPlazaGlifo.z + 0.5);
   g = mix(g, 0.5 + (piedraGlifo.r - 0.5) * uPisoPiedrasContraste, piedraGlifo.a);
   // El camino escondido: el campo da de qué lado y a qué distancia de la curva
@@ -388,7 +403,8 @@ const GLSL_PISO = /* glsl */ `
 export function aplicarPisoPintado(material, gl) {
   if (!material || material.userData.pisoPintado) return material
   if (!uniformsPiso.uPisoTierra.value) uniformsPiso.uPisoTierra.value = cargarTextura(gl, URL_TIERRA, THREE.RepeatWrapping)
-  if (!uniformsPiso.uPisoPiedras.value) uniformsPiso.uPisoPiedras.value = cargarTextura(gl, URL_PIEDRAS, THREE.ClampToEdgeWrapping)
+  if (!uniformsPiso.uPisoPiedras.value) uniformsPiso.uPisoPiedras.value = cargarTextura(gl, URL_CLARO_GRIS, THREE.ClampToEdgeWrapping, THREE.RedFormat)
+  if (!uniformsPiso.uPisoPiedrasAlfa.value) uniformsPiso.uPisoPiedrasAlfa.value = cargarTextura(gl, URL_CLARO_ALFA, THREE.ClampToEdgeWrapping, THREE.RedFormat)
   if (!uniformsPiso.uPisoPiedrasGlifo.value) uniformsPiso.uPisoPiedrasGlifo.value = cargarTextura(gl, URL_PIEDRAS_GLIFO, THREE.ClampToEdgeWrapping)
   if (!uniformsPiso.uPisoCaminoCampo.value) armarCamino()
   if (!uniformsPiso.uPisoCamino.value) {
@@ -411,7 +427,7 @@ export function aplicarPisoPintado(material, gl) {
   }
   const llavePrevia = material.customProgramCacheKey
   material.customProgramCacheKey = function () {
-    return `piso-pintado-1|${llavePrevia.call(this)}`
+    return `piso-pintado-2|${llavePrevia.call(this)}`
   }
   material.userData.pisoPintado = true
   material.needsUpdate = true

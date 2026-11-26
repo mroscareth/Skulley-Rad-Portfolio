@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { zonasPiso } from '../../lib/pisoPintado.js'
+import { zonasSinPasto } from '../../lib/renderboxHome.js'
 
 // Matas de pasto pintadas a mano en el home (Oscar, 2026-11-19, con su referencia
 // de hojas largas y afiladas): unas por aquí y otras por allá, y Skulley las dobla
@@ -44,23 +45,27 @@ const PASTO = {
 }
 
 function crearZonas() {
-  const { plaza, plazaGlifo, camino, caminoTramos } = zonasPiso
+  const { plaza, plazaGlifo, camino, caminoTramos, lozasClaro } = zonasPiso
   const z0 = camino[0][1]
   const dir = Math.sign(camino[1][1] - z0)
-  return { plaza, plazaGlifo, x: camino[0][0], z0, dir, tramos: caminoTramos }
+  return { plaza, plazaGlifo, x: camino[0][0], z0, dir, tramos: caminoTramos, lozasClaro }
 }
 
-// ¿Puede crecer una mata aquí? Fuera de los portales, del centro de las lozas y
-// de los tramos visibles del camino (en los tapados sí: ayuda a esconderlo).
+// ¿Puede crecer una mata aquí? Fuera de los portales, de las lozas del claro (que
+// llegan casi hasta los pinos: solo crece en su orilla, Oscar 2026-11-25), de las
+// del glifo y de los tramos visibles del camino (en los tapados sí: ayuda a esconderlo).
+const SIN_PASTO = zonasSinPasto()
 function libre(x, z, portales, zonas) {
   for (const p of portales) {
     const dx = x - p[0], dz = z - p[1]
     if (dx * dx + dz * dz < 4.6 * 4.6) return false
   }
   const dc = Math.hypot(x - zonas.plaza[0], z - zonas.plaza[1])
-  if (dc < 8.5) return false
+  if (dc < zonas.lozasClaro) return false
   const dg = Math.hypot(x - zonas.plazaGlifo[0], z - zonas.plazaGlifo[1])
   if (dg < 8) return false
+  // ni debajo de la Renderbox y su Cintiq (se asomaba por la pantalla)
+  for (const s of SIN_PASTO) if (Math.hypot(x - s.x, z - s.z) < s.r) return false
   const s = (z - zonas.z0) * zonas.dir
   if (Math.abs(x - zonas.x) < 2.6) {
     for (const [a, b] of zonas.tramos) if (s > a - 1 && s < b + 1) return false
@@ -77,11 +82,13 @@ function sembrar(portales) {
   let manchones = 0
   while (manchones < PASTO.manchones && intentos < 4000) {
     intentos++
-    // La mayoría alrededor de la plaza y los portales; algunas por el camino al glifo.
+    // La mayoría en la orilla del claro, donde las lozas se deshacen antes de los
+    // pinos (repartidas por área); algunas por el camino al glifo.
     let cx, cz
     if (azar() < 0.8) {
       const ang = azar() * Math.PI * 2
-      const r = 9 + Math.pow(azar(), 0.8) * 34
+      const r0 = zonas.lozasClaro, r1 = zonas.lozasClaro + 9.5
+      const r = Math.sqrt(r0 * r0 + azar() * (r1 * r1 - r0 * r0))
       cx = Math.cos(ang) * r
       cz = Math.sin(ang) * r
     } else {
