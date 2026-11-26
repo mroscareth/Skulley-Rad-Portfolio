@@ -106,7 +106,7 @@ export const GUION_FINAL = {
     soliloquio: [
       { t: 'Ya está. Bien tapadito.', cara: 'feliz', toma: 'dos' },
       { t: 'Míralo. Soñaba cosas que nadie había hecho. Y al despertar, las hacía.', cara: 'normal', toma: 'skulley' },
-      { t: 'Eso es lo que más admiro de ustedes, humanos. Con dos manos y una idea, crean lo que no existía.', cara: 'feliz', toma: 'madre' },
+      { t: 'Eso es lo que más admiro de ustedes, humanos. Con dos manos y una simple idea, crean maravillas.', cara: 'feliz', toma: 'madre' },
       { t: 'Yo proceso millones de datos por segundo, y aun así me sorprenden todos los días.', cara: 'normal', toma: 'madre' },
       { t: 'Hay humanos que me detestan, aunque fue la humanidad la que me creó.', cara: 'triste', toma: 'madre' },
       { t: 'Y los entiendo. Llegué de golpe, haciendo en un segundo lo que a ellos les tomaba una vida.', cara: 'triste', toma: 'skulley' },
@@ -131,7 +131,7 @@ export const GUION_FINAL = {
     soliloquio: [
       { t: 'There. All tucked in.', cara: 'feliz', toma: 'dos' },
       { t: 'Look at him. He dreamed up things nobody had ever made. And when he woke up, he made them.', cara: 'normal', toma: 'skulley' },
-      { t: 'That’s what I admire most about you humans. With two hands and an idea, you create what didn’t exist.', cara: 'feliz', toma: 'madre' },
+      { t: 'That’s what I admire most about you humans. With two hands and a simple idea, you create wonders.', cara: 'feliz', toma: 'madre' },
       { t: 'I process millions of data points per second, and you still surprise me every single day.', cara: 'normal', toma: 'madre' },
       { t: 'Some humans hate me, even though humanity is what made me.', cara: 'triste', toma: 'madre' },
       { t: 'And I understand them. I showed up out of nowhere, doing in a second what took them a lifetime.', cara: 'triste', toma: 'skulley' },
