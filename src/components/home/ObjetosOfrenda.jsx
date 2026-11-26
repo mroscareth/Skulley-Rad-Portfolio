@@ -10,6 +10,7 @@ import { ofrendaPuesta, ofrendasEnMano, ponerOfrenda, nivelOfrenda, TOTAL_OFREND
 import { setObstaculosExtra } from '../../lib/obstaculosHome.js'
 import { playSfx } from '../../lib/sfx.js'
 import { sonarOfrendaVuela, sonarOfrendaPuesta } from '../../lib/ofrendaSonidos.js'
+import { cine } from '../../lib/cinematicaOfrenda.js'
 import STICKER_IPAD from '../../assets/stickers/4-lineas.png'
 
 // Los objetos de la ofrenda del Día de los Skulleys (Oscar, 2026-11-24;
@@ -559,6 +560,8 @@ export default function ObjetosOfrenda({ playerRef, activo = true, mostrarCarga 
           aplasta = 1 - 0.18 * Math.exp(-r * 6) * Math.cos(r * 18)
         }
       }
+      // la cabeza de Skulley dormido en la cinemática del final (lib/cinematicaOfrenda.js) aplasta la almohada
+      if (o.id === CAMA.id && cine.aplasta > 0) aplasta *= 1 - 0.42 * cine.aplasta
       o.cuerpo.position.y = alto
       o.cuerpo.scale.set(esc * (2 - aplasta), esc * aplasta, esc * (2 - aplasta))
       o.sombra.scale.y = 1

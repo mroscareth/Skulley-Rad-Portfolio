@@ -7981,3 +7981,27 @@ div:has(> #privy-dialog-backdrop) {
 }
 /* Inventario → Objetos (ObjetosInventario.jsx): la banda del toast de la ofrenda, del ancho de la columna. */
 .ofr-toast__escena.inv-escena { width: 14rem; height: 11rem; margin: 0; }
+
+/* ── La cinemática del final de la ofrenda (CinematicaOfrenda.jsx) ──────────────
+   Las barras y el globo son los del diálogo de M.A.D.R.E. (.dlg-*). El título del final, SKULLEY RAD con
+   el glitch del preloader y la frase en Rock Salt que se escribe, centrado entre las barras. */
+.cin-titulo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(86vw, 72rem);
+  transform: translate(-50%, -58%);
+  text-align: center;
+  color: #fff;
+  pointer-events: none;
+  text-shadow: 0 0.05em 0 #000, 0 0 0.7em rgba(0, 0, 0, 0.5);
+  animation: cin-titulo-entra 900ms ease both;
+}
+.cin-titulo .cin-titulo__nombre { align-items: center; }
+.cin-titulo .cin-titulo__sub { margin-top: 0.6rem; opacity: 1; }
+.cin-raiz.is-sale .cin-titulo { animation: cin-titulo-sale 700ms ease both; }
+@keyframes cin-titulo-entra { from { opacity: 0; } to { opacity: 1; } }
+@keyframes cin-titulo-sale { from { opacity: 1; } to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .cin-titulo, .cin-raiz.is-sale .cin-titulo { animation: none; }
+}

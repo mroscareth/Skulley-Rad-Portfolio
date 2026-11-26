@@ -53,12 +53,32 @@ function leerMano() {
 }
 let enMano = leerMano()
 
-function guardar() {
+// `fusion`: el cambio vino de la cuenta (otra computadora), no de jugar: nadie dispara por él lo que
+// corresponde a poner una ofrenda en vivo (la cinemática del final, las piedras que se entierran).
+function guardar(fusion = false) {
   try {
     localStorage.setItem(LLAVE, JSON.stringify([...puestas]))
     localStorage.setItem(LLAVE_MANO, JSON.stringify(enMano))
   } catch { /* se queda en memoria */ }
-  try { window.dispatchEvent(new CustomEvent(EVENTO_OFRENDAS, { detail: { nivel: puestas.size } })) } catch { /* sin window */ }
+  try { window.dispatchEvent(new CustomEvent(EVENTO_OFRENDAS, { detail: { nivel: puestas.size, fusion } })) } catch { /* sin window */ }
+}
+
+/** Lo que trae la cuenta (lib/misionesOfrenda.js `fusionarQuest`): se suma, nunca quita. */
+export function fusionarOfrendas({ ganadas = [], puestas: p = [] } = {}) {
+  let cambio = false
+  for (const id of p) {
+    if (!VALIDAS.has(id) || puestas.has(id)) continue
+    puestas.add(id)
+    cambio = true
+  }
+  if (cambio) enMano = enMano.filter((x) => !puestas.has(x))
+  for (const id of ganadas) {
+    if (!VALIDAS.has(id) || puestas.has(id) || enMano.includes(id)) continue
+    enMano.push(id)
+    cambio = true
+  }
+  if (cambio) guardar(true)
+  return cambio
 }
 
 export const ofrendasPuestas = () => new Set(puestas)

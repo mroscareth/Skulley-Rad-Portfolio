@@ -10,7 +10,7 @@
 // Las misiones y cómo se sueltan, abajo ("las seis misiones").
 // Sin three: lo leen App, DialogoMadre y el toast.
 
-import { MISIONES_ABIERTAS, OFRENDAS, conseguirOfrenda, ofrendaPuesta, ofrendaEnMano } from './ofrendas.js'
+import { MISIONES_ABIERTAS, OFRENDAS, conseguirOfrenda, ofrendaPuesta, ofrendaEnMano, fusionarOfrendas, EVENTO_OFRENDAS } from './ofrendas.js'
 import { avisarDron } from './droneNpc.js'
 import { argus, avisarArgus } from './argusNpc.js'
 import { escuchar as escucharJuego } from './juegoEsferas.js'
@@ -36,6 +36,7 @@ export function ganarOfrenda(id) {
   if (!misionesAbiertas() || !OFRENDAS.some((o) => o.id === id)) return false
   if (!conseguirOfrenda(id)) return false
   try { window.dispatchEvent(new CustomEvent(EVENTO_GANADA, { detail: { id } })) } catch { /* sin window */ }
+  avisarQuest()
   return true
 }
 
@@ -156,6 +157,7 @@ export function pedirCosa(quien) {
     const primera = !ids.some((id) => pedidas.has(id) || yaObtenida(id))
     pedidas.add(sigue)
     guardarLista(LLAVE_PEDIDAS, pedidas)
+    avisarQuest()
     if (sigue === 'ipad') { vistos = new Set(); guardarLista(LLAVE_IPAD, vistos) }
     try { window.dispatchEvent(new CustomEvent(EVENTO_PEDIDA, { detail: { id: sigue } })) } catch { /* sin window */ }
     return { tipo: 'pista', id: sigue, nueva: true, primera }
@@ -169,6 +171,7 @@ export function misionHecha(id) {
   if (!ENTREGA[id] || hechas.has(id) || !misionActiva(id)) return false
   hechas.add(id)
   guardarLista(LLAVE_HECHAS, hechas)
+  avisarQuest()
   try { window.dispatchEvent(new CustomEvent(EVENTO_HECHA, { detail: { id } })) } catch { /* sin window */ }
   return true
 }
@@ -227,8 +230,61 @@ export function intentarEntrega(puede, abrir) {
   }
 }
 
+// ---------------------------------------------------------------- en la cuenta
+// (Oscar, 2026-11-26: "deberían guardarse en su cuenta, para que si regresan desde otra PC puedan seguir la
+// quest"). El progreso solo avanza (se suelta, se cumple, se gana, se pone), así que va como logros: una llave
+// por paso y por objeto (`of_p_ipad`, `of_h_...`, `of_g_...`, `of_v_...`) y `of_final` con la cinemática
+// vista. achievements.php acepta cualquier llave [a-z0-9_]{1,64} y Mi cuenta solo enseña las del catálogo.
+// App, con los logros cargados (invitado o cuenta), suma los de la cuenta a lo de aquí (`fusionarQuest`) y
+// sube lo de aquí que falte (`llavesQuest`); cada cambio avisa con EVENTO_QUEST para subirlo. Lo del
+// invitado se migra solo al iniciar sesión (useAchievements).
+export const EVENTO_QUEST = 'quest-ofrenda-cambio'
+const PASO = { pedida: 'of_p_', hecha: 'of_h_', ganada: 'of_g_', puesta: 'of_v_' }
+export const LLAVE_FINAL = 'of_final'
+const LLAVE_FINAL_VISTO = 'skulley_final_ofrenda'
+function avisarQuest() { try { window.dispatchEvent(new CustomEvent(EVENTO_QUEST)) } catch { /* sin window */ } }
+if (typeof window !== 'undefined') {
+  window.addEventListener(EVENTO_OFRENDAS, (e) => { if (!e?.detail?.fusion) avisarQuest() })
+}
+
+/** Las llaves de lo que se lleva aquí. */
+export function llavesQuest() {
+  const out = []
+  for (const { id } of OFRENDAS) {
+    if (pedidas.has(id)) out.push(PASO.pedida + id)
+    if (hechas.has(id)) out.push(PASO.hecha + id)
+    if (yaObtenida(id)) out.push(PASO.ganada + id)
+    if (ofrendaPuesta(id)) out.push(PASO.puesta + id)
+  }
+  try { if (localStorage.getItem(LLAVE_FINAL_VISTO) === '1') out.push(LLAVE_FINAL) } catch { /* sin almacenamiento */ }
+  return out
+}
+
+/** Lo que trae la cuenta se suma a lo de aquí (nunca quita). Regresa si cambió algo. */
+export function fusionarQuest(llaves) {
+  if (!llaves || typeof llaves.has !== 'function') return false
+  let cambio = false
+  const ganadas = []
+  const puestasC = []
+  for (const { id } of OFRENDAS) {
+    if (llaves.has(PASO.pedida + id) && !pedidas.has(id)) { pedidas.add(id); cambio = true }
+    if (llaves.has(PASO.hecha + id) && !hechas.has(id)) { hechas.add(id); cambio = true }
+    if (llaves.has(PASO.puesta + id)) puestasC.push(id)
+    else if (llaves.has(PASO.ganada + id)) ganadas.push(id)
+  }
+  if (cambio) { guardarLista(LLAVE_PEDIDAS, pedidas); guardarLista(LLAVE_HECHAS, hechas) }
+  if (fusionarOfrendas({ ganadas, puestas: puestasC })) cambio = true
+  if (llaves.has(LLAVE_FINAL)) {
+    try {
+      if (localStorage.getItem(LLAVE_FINAL_VISTO) !== '1') { localStorage.setItem(LLAVE_FINAL_VISTO, '1'); cambio = true }
+    } catch { /* sin almacenamiento */ }
+  }
+  return cambio
+}
+
 if (import.meta.env?.DEV && typeof window !== 'undefined') {
   window.__misiones = {
+    llaves: llavesQuest,
     ganar: ganarOfrenda,
     pedir: pedirCosa,
     hecha: misionHecha,

@@ -112,6 +112,8 @@ const ZoidianDialog = lazy(() => import('./components/ZoidianDialog.jsx'))
 const importDialogoMadre = () => import('./components/drone/DialogoMadre.jsx')
 const DialogoMadre = lazy(importDialogoMadre)
 const ToastOfrenda = lazy(() => import('./components/ToastOfrenda.jsx'))
+// La cinemática del final de la ofrenda (lib/cinematicaOfrenda.js)
+const CinematicaOfrenda = lazy(() => import('./components/CinematicaOfrenda.jsx'))
 // Los avisos de las trampas, con la cara del diálogo de M.A.D.R.E.
 const importAvisoMadre = () => import('./components/drone/AvisoMadre.jsx')
 const AvisoMadre = lazy(importAvisoMadre)
@@ -194,7 +196,9 @@ import { useShopCartCtx } from './lib/shopCartContext.jsx'
 import { startGameSession, endGameSession } from './lib/gameSession.js'
 import { iniciarJuego, detenerJuego, escuchar as escucharJuego } from './lib/juegoEsferas.js'
 import { castigarConDron, avisarDron } from './lib/droneNpc.js'
-import { EVENTO_GANADA, comentarProyecto, intentarEntrega } from './lib/misionesOfrenda.js'
+import { EVENTO_GANADA, EVENTO_QUEST, comentarProyecto, intentarEntrega, misionesAbiertas, llavesQuest, fusionarQuest } from './lib/misionesOfrenda.js'
+import { EVENTO_OFRENDAS, TOTAL_OFRENDAS } from './lib/ofrendas.js'
+import { finalVisto } from './lib/cinematicaOfrenda.js'
 import { argus } from './lib/argusNpc.js'
 import JuegoHUD from './components/JuegoHUD.jsx'
 import useDwellTimeTracking from './hooks/useDwellTimeTracking.js'
@@ -517,6 +521,8 @@ function SiteApp() {
   // Las ofrendas que se van ganando (lib/misionesOfrenda.js): una tarjeta por cada una, en orden.
   const [ofrendasGanadas, setOfrendasGanadas] = useState([])
   const [toastOfrendaAbierto, setToastOfrendaAbierto] = useState(false)
+  // la cinemática del final: arranca al quedar la ofrenda completa (la almohada va al último)
+  const [finalOfrenda, setFinalOfrenda] = useState(false)
   useEffect(() => {
     const alGanar = (e) => {
       const id = e?.detail?.id
@@ -558,6 +564,19 @@ function SiteApp() {
   // orb rojo dentro. Guests → sessionStorage; auth → persistente en DB
   // (ver src/hooks/useAchievements.js).
   const { has: hasAchievement, unlock: unlockAchievement, isLoaded: achievementsLoaded, achievements: achievementSet, unlockedAt: achievementDates } = useAchievements()
+  // La quest de la ofrenda en la cuenta (lib/misionesOfrenda.js): con los logros cargados, lo de la cuenta se
+  // suma a lo de este navegador y lo de aquí que falte se sube (cada paso es una llave de logro).
+  const [questN, setQuestN] = useState(0)
+  useEffect(() => {
+    const alCambiar = () => setQuestN((n) => n + 1)
+    window.addEventListener(EVENTO_QUEST, alCambiar)
+    return () => window.removeEventListener(EVENTO_QUEST, alCambiar)
+  }, [])
+  useEffect(() => {
+    if (!achievementsLoaded) return
+    fusionarQuest(achievementSet)
+    for (const k of llavesQuest()) if (!achievementSet.has(k)) unlockAchievement(k)
+  }, [achievementsLoaded, achievementSet, questN, unlockAchievement])
   // Los props que se ganan con un logro (los lentes 3D) leen de aquí si ya se ganaron (accesoriosEstado.js)
   useEffect(() => { setLogrosDeProps(achievementSet) }, [achievementSet])
   const section6Unlocked = hasAchievement('section6_unlocked')
@@ -1544,7 +1563,7 @@ function SiteApp() {
 
     if (inHome) {
       // In HOME: UI enters when homeLanded is true
-      if (dialogoDron || zoidianDialogOpen || bienvenidaPendiente || proyectoTapa) {
+      if (dialogoDron || zoidianDialogOpen || bienvenidaPendiente || proyectoTapa || finalOfrenda) {
         // hablando con el drone o con Argus (o esperando la bienvenida, o con la ficha de un proyecto): la UI sale animada y se queda escondida
         if (uiAnimPhase === 'visible' || uiAnimPhase === 'entering') {
           setUiAnimPhase('exiting')
@@ -1572,7 +1591,7 @@ function SiteApp() {
         clearTimeout(uiEnterTimerRef.current)
       }
     }
-  }, [section, homeLanded, transitionState.active, uiAnimPhase, dialogoDron, zoidianDialogOpen, bienvenidaPendiente, proyectoTapa])
+  }, [section, homeLanded, transitionState.active, uiAnimPhase, dialogoDron, zoidianDialogOpen, bienvenidaPendiente, proyectoTapa, finalOfrenda])
 
   // El deck de música se monta UNA vez (al primer aterrizaje, o al entrar
   // directo a una sección) y ya no se desmonta. Antes colgaba de `homeLanded`
@@ -2572,11 +2591,27 @@ function SiteApp() {
     abrirTrasTurno(() => setZoidianDialogOpen(true))
   }, [section, homeLanded, sphereGameActive, customizeOpen, transitionState.active, dialogoDron, tutorialOpen])
   // con una charla abierta (las barras de cine) los globos no hablan; al cerrarla, siguen
-  useEffect(() => { pausarTurnos(dialogoDron || zoidianDialogOpen || toastOfrendaAbierto) }, [dialogoDron, zoidianDialogOpen, toastOfrendaAbierto])
+  useEffect(() => { pausarTurnos(dialogoDron || zoidianDialogOpen || toastOfrendaAbierto || finalOfrenda) }, [dialogoDron, zoidianDialogOpen, toastOfrendaAbierto, finalOfrenda])
+  // La ofrenda quedó completa (la almohada va al último): cuando cae, la cinemática del final, una vez.
+  const seccionRef = useRef(section)
+  seccionRef.current = section
+  useEffect(() => {
+    let id = 0
+    const alCambiar = (e) => {
+      if (e?.detail?.fusion || (e?.detail?.nivel ?? 0) < TOTAL_OFRENDAS || finalVisto() || !misionesAbiertas()) return
+      clearTimeout(id)
+      // espera a que caiga la almohada y se entierren las piedras (HUNDE en HitosOfrenda)
+      id = setTimeout(() => { if (seccionRef.current === 'home') setFinalOfrenda(true) }, 5400)
+    }
+    window.addEventListener(EVENTO_OFRENDAS, alCambiar)
+    if (import.meta.env.DEV) window.__finalOfrenda = () => setFinalOfrenda(true)
+    return () => { clearTimeout(id); window.removeEventListener(EVENTO_OFRENDAS, alCambiar) }
+  }, [])
   // Las ofrendas que alguien ya te debe (lib/misionesOfrenda.js): se piden con la home libre, como el toast.
   const puedeEntregarRef = useRef(false)
   puedeEntregarRef.current = section === 'home' && homeLanded && !dialogoDron && !zoidianDialogOpen && !customizeOpen
     && !sphereGameActive && !gameOverOpen && !tutorialOpen && !transitionState.active && !proyectoRapido && !toastOfrendaAbierto
+    && !finalOfrenda
   useEffect(() => {
     const abrir = (quien, id) => {
       if (quien === 'madre') {
@@ -4174,9 +4209,19 @@ function SiteApp() {
             id={ofrendasGanadas[0]}
             lang={lang}
             puede={section === 'home' && homeLanded && !dialogoDron && !zoidianDialogOpen && !customizeOpen
-              && !sphereGameActive && !tutorialOpen && !transitionState.active && !proyectoRapido}
+              && !sphereGameActive && !tutorialOpen && !transitionState.active && !proyectoRapido && !finalOfrenda}
             onAbierto={setToastOfrendaAbierto}
             onClose={() => setOfrendasGanadas((l) => l.slice(1))}
+          />
+        </Suspense>
+      )}
+      {/* La cinemática del final de la ofrenda: el rayo de M.A.D.R.E. prende el portal y abre la sección 6 */}
+      {finalOfrenda && section === 'home' && (
+        <Suspense fallback={null}>
+          <CinematicaOfrenda
+            lang={lang}
+            onPortal={() => handleOfferingDelivered('section6')}
+            onFin={() => setFinalOfrenda(false)}
           />
         </Suspense>
       )}

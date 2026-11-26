@@ -89,10 +89,10 @@ Se probó crecer la home a un valle con lugares (el Foro, el Estudio de Skulley,
 ### Por hacer
 
 1. ~~Las misiones~~ Hechas el 2026-11-26 (`lib/misionesOfrenda.js`, detalle en CLAUDE.md): iPad (tres proyectos con M.A.D.R.E.), cámara (wallpaper 4K), teclado (rayar el disco) y álbum (leer una memoria) las da ella; cerillos (quemar pétalos) y almohada (1,000 puntos en una partida), Argus. Se piden en el diálogo de cada quien y se sueltan de una en una, con pistas. Antes decía: las misiones (con M.A.D.R.E. y con Argus); cada una llama `conseguirOfrenda(id)` al ganarse. Las que se diseñaron para el mapa grande (la pesca, la tocada, el castillo, el retrato, los recuerdos y el desvelo) dependían de sus lugares: hay que replantearlas en la home de producción, con Oscar (el diseño viejo está en el archivo del mapa grande).
-2. Dormir con la almohada: cinemática y soliloquio, con voz pregrabada como la historia.
-3. M.A.D.R.E. activa el portal con la esfera corrupta y aparecen las memorias. Hoy el portal prende cuando se desbloquea la sección 6 (la esfera corrupta que mete el jugador); en la historia lo hará ella.
+2. ~~Dormir con la almohada: cinemática y soliloquio~~ Hecha el 2026-11-26 sin voz (`CinematicaOfrenda.jsx`, `lib/cinematicaOfrenda.js`; detalle en CLAUDE.md). Falta la voz pregrabada como la historia, cuando Oscar cierre el guion.
+3. M.A.D.R.E. activa el portal: hecho el 2026-11-26 con su propio rayo (Oscar), dentro de la cinemática; abre la sección 6. Faltan las memorias que revela el portal (Oscar las define).
 4. Sección 6 → Goodies / Freebies.
-5. Al abrir las misiones: `MISIONES_ABIERTAS = true` (el reproductor enseña cuántas ofrendas van en lugar de "??") y guardar las ofrendas en la cuenta, no solo en el navegador.
+5. ~~Abrir las misiones y guardarlas en la cuenta~~ Hecho el 2026-11-26: `MISIONES_ABIERTAS = true` y la quest viaja como logros (`of_*`, CLAUDE.md).
 6. Decidir si la canción sigue sonando dentro de la sección 6. Hoy, al entrar, regresa la música del reproductor.
 7. Medir en el Brave de Oscar lo que cuestan los rayos, la oscuridad y los objetos (en el navegador integrado la resolución adaptable cambiaba de escalón y no se pudo comparar).
 

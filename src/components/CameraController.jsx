@@ -5,6 +5,7 @@ import * as THREE from 'three'
 import { dron } from '../lib/droneNpc.js'
 import { argus } from '../lib/argusNpc.js'
 import { wallpaperEstado } from '../lib/wallpaperEscritorio.js'
+import { cine } from '../lib/cinematicaOfrenda.js'
 import { playSfx, preloadSfx } from '../lib/sfx.js'
 import { playCameraZoom, playCameraZoomStop } from '../lib/homeSounds.js'
 
@@ -604,9 +605,46 @@ export default function CameraController({
     if (sale.t >= 1) saliendoRef.current = null
   }
 
+  // La cinemática del final de la ofrenda (lib/cinematicaOfrenda.js) manda la toma: corte o movimiento
+  // suave hacia ella, con una deriva lenta. Al soltarla, el barrido de salida de Customize regresa a la
+  // cámara del juego.
+  const cineCamRef = useRef({ listo: false, n: -1, t: 0, pos: new THREE.Vector3(), mira: new THREE.Vector3(), meta: new THREE.Vector3(), metaMira: new THREE.Vector3() })
+
   // Keep camera following the player — reuse temp vectors
   useFrame((state, delta) => {
     if (!playerRef.current) return
+    if (cine.activo && cine.cam) {
+      const dt = Math.min(delta, 0.1)
+      const c = cineCamRef.current
+      const k = cine.cam
+      if (!c.listo) {
+        c.pos.copy(camera.position)
+        c.mira.copy(smoothTargetRef.current)
+        c.listo = true
+        c.n = -1
+      }
+      let corte = false
+      if (k.n !== c.n) { c.n = k.n; c.t = 0; corte = !!k.corte }
+      c.t += dt
+      const d = k.deriva || [0, 0, 0]
+      c.meta.set(k.pos[0] + d[0] * c.t, k.pos[1] + d[1] * c.t, k.pos[2] + d[2] * c.t)
+      c.metaMira.set(k.mira[0], k.mira[1], k.mira[2])
+      if (corte) { c.pos.copy(c.meta); c.mira.copy(c.metaMira) }
+      else {
+        const a = 1 - Math.exp(-(k.lambda || 1.6) * dt)
+        c.pos.lerp(c.meta, a)
+        c.mira.lerp(c.metaMira, a)
+      }
+      saliendoRef.current = null
+      camera.position.copy(c.pos)
+      camera.lookAt(c.mira)
+      smoothCamPosRef.current.copy(c.pos)
+      smoothTargetRef.current.copy(c.mira)
+      if (controlsRef.current) controlsRef.current.target.copy(c.mira)
+      enCustomizeRef.current = true
+      return
+    }
+    cineCamRef.current.listo = false
     if (!enabled && !deFrente) return
 
     const dt = Math.min(delta, 0.1) // cap to avoid jumps on tab-out

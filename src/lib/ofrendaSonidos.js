@@ -104,7 +104,7 @@ const destino = (d) => d || getSfxBus()
 // El nivel de cada uno, medido con ponderación K contra la música (~-23.6 LUFS, mezcla.js) con la cadena
 // del bus (volumen 0.5, refuerzo y limitador): el aviso y la puesta como la patada (+5 dB), el vuelo un
 // poco abajo (es la transición).
-export const NIVEL_OFRENDA = { ganado: 0.75, vuela: 4, puesta: 1.5 }
+export const NIVEL_OFRENDA = { ganado: 0.75, vuela: 4, puesta: 1.5, piedras: 1.6 }
 function salida(bus, nivel, vive) {
   const g = bus.ctx.createGain()
   g.gain.value = nivel
@@ -192,5 +192,57 @@ export function sonarOfrendaPuesta(d = null) {
     campana(ctx, out, t + 0.01, 659, 0.1, 1.6)
     campana(ctx, out, t + 0.01, 988, 0.06, 1.3)
     acorde(ctx, out, t + 0.04, [392, 523, 659], { pico: 0.045, ataque: 0.32, dura: 2.0, corte: 900, abre: 2200 })
+  } catch { /* sin audio */ }
+}
+
+/** Las piedras de la ofrenda se entierran (HitosOfrenda): un retumbo que tiembla y piedra que raspa (`dura` s). */
+export function sonarPiedrasSeHunden(dura = 3, d = null) {
+  const b0 = destino(d)
+  if (!b0) return
+  const bus = salida(b0, NIVEL_OFRENDA.piedras, (dura + 1) * 1000)
+  try {
+    const { ctx } = bus
+    const t = ctx.currentTime + 0.02
+    // el retumbo: ruido oscuro (nada debajo de 110 Hz) que tiembla a 13 Hz
+    const src = ctx.createBufferSource()
+    src.buffer = getNoiseBuffer(ctx)
+    src.loop = true
+    const hp = ctx.createBiquadFilter()
+    hp.type = 'highpass'
+    hp.frequency.value = 115
+    const lp = ctx.createBiquadFilter()
+    lp.type = 'lowpass'
+    lp.frequency.setValueAtTime(420, t)
+    lp.frequency.exponentialRampToValueAtTime(220, t + dura)
+    const g = ctx.createGain()
+    g.gain.setValueAtTime(0.0001, t)
+    g.gain.exponentialRampToValueAtTime(0.5, t + 0.25)
+    g.gain.setValueAtTime(0.5, t + dura * 0.7)
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dura)
+    const trem = ctx.createOscillator()
+    trem.frequency.value = 13
+    const tg = ctx.createGain()
+    tg.gain.value = 0.22
+    trem.connect(tg).connect(g.gain)
+    src.connect(hp); hp.connect(lp); lp.connect(g); g.connect(bus.out)
+    src.start(t, Math.random() * 0.5)
+    trem.start(t)
+    suelta([src, hp, lp, g], t + dura + 0.05)
+    suelta([trem, tg], t + dura + 0.05)
+    // la piedra que raspa: ruido de banda que sube y baja a saltos
+    const r = ctx.createBufferSource()
+    r.buffer = getNoiseBuffer(ctx)
+    r.loop = true
+    const bp = ctx.createBiquadFilter()
+    bp.type = 'bandpass'
+    bp.Q.value = 3
+    for (let k = 0; k * 0.11 < dura; k++) bp.frequency.setValueAtTime(700 + Math.random() * 900, t + k * 0.11)
+    const gr = ctx.createGain()
+    gr.gain.setValueAtTime(0.0001, t)
+    gr.gain.exponentialRampToValueAtTime(0.09, t + 0.3)
+    gr.gain.exponentialRampToValueAtTime(0.0001, t + dura)
+    r.connect(bp); bp.connect(gr); gr.connect(bus.out)
+    r.start(t, Math.random() * 0.5)
+    suelta([r, bp, gr], t + dura + 0.05)
   } catch { /* sin audio */ }
 }

@@ -53,6 +53,7 @@ import { EstelaTubo } from './fx/EsferaViaje.jsx'
 import { applyNeonOrb } from '../lib/applyNeonOrb.js'
 import { rayoTocaDron, bolaAlEscudo, golpeEscudo } from '../lib/droneNpc.js'
 import { pasoCaminata } from '../lib/caminataAuto.js'
+import { cine } from '../lib/cinematicaOfrenda.js'
 import { sacarDeObstaculos, sacarAlClaro } from '../lib/obstaculosHome.js'
 import { avisarExplosion } from '../lib/explosionesHome.js'
 import { caidaRetenida } from '../lib/caidaHome.js'
@@ -4321,8 +4322,9 @@ export default function Player({
     // mismo rayo, con su propio aviso para no desbloquear la skin de lava.
     const onMadreCastigo = (e) => {
       const d = e?.detail || {}
-      // el que le cae a Argus en sus escenas con ella no es para Skulley
-      if (d.blanco === 'argus') return
+      // el que le cae a Argus en sus escenas con ella, y el que se deja caer ella en el portal al final
+      // de la ofrenda (CinematicaOfrenda), no son para Skulley
+      if (d.blanco === 'argus' || d.blanco === 'madre') return
       const sx = Number.isFinite(d.x) ? d.x : 0
       const sz = Number.isFinite(d.z) ? d.z : 0
       shatterFrom(sx, sz, 'character-disassembled-by-madre', BOLT_STRIKE_DELAY_MS)
@@ -5898,6 +5900,29 @@ export default function Player({
       return
     }
     const frac = (a) => a.time / Math.max(1e-3, a.getClip().duration)
+    // la cinemática del final de la ofrenda (lib/cinematicaOfrenda.js): se acuesta ya, viendo hacia la
+    // cama y no a la cámara, y se acomoda en su lugar (la cabeza en la almohada) mientras se acuesta
+    if (cine.dormir && I.fase === 'nada' && permitido) {
+      idleEmpezar('entra', SIESTA.entraFundido)
+      I.giro = cine.dormir.yaw
+      I.acomoda = { x: cine.dormir.x, z: cine.dormir.z }
+      I.quieto = SIESTA.dormirTras
+      cine.dormir = null
+    }
+    if (I.acomoda && (I.fase === 'entra' || I.fase === 'dormido')) {
+      const sp = simPosRef.current, pp = simPrevPosRef.current
+      const k = 1 - Math.exp(-dt * 3)
+      const ax = (I.acomoda.x - sp.x) * k, az = (I.acomoda.z - sp.z) * k
+      sp.x += ax; sp.z += az; pp.x += ax; pp.z += az
+    } else if (I.acomoda && I.fase !== 'entra' && I.fase !== 'dormido') I.acomoda = null
+    if (cine.despertar) {
+      cine.despertar = false
+      I.acomoda = null
+      // que no se vuelva a dormir ni toque el solo en cuanto se levante
+      I.quieto = 0
+      I.toco = true
+      if (I.fase === 'dormido' || I.fase === 'entra') idleDespertar()
+    }
     if (!permitido) {
       I.quieto = 0
       I.toco = false

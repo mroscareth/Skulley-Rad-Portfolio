@@ -15,6 +15,7 @@ import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { argus, avisarArgus } from '../../lib/argusNpc.js'
 import { escenasArgusMadre } from '../../lib/escenasArgusMadre.js'
 import { siesta, pedirCobija } from '../../lib/siestaSkulley.js'
+import { cine } from '../../lib/cinematicaOfrenda.js'
 
 // El drone de M.A.D.R.E. como NPC de la home (Oscar, 2026-11-19). Anda por ahí
 // feliz y despacio entre los portales; al picarlo se abre su diálogo
@@ -1000,6 +1001,75 @@ export default function DroneNPC({
       pedir(e.pos.distanceTo(meta) > 6 ? 'Arrancar' : 'Avanzar')
     }
 
+    // ---- la cinemática del final de la ofrenda (lib/cinematicaOfrenda.js): al empezar suelta lo que hacía
+    // (la cobija la sigue haciendo sola, con Skulley dormido) y, cuando la cinemática la pide, entra a su
+    // modo 'guion': vuela a donde le digan, ve a quien le digan y pone la cara y la acción que le toquen.
+    if (cine.activo) {
+      cine.dronModo = e.modo
+      if (!e.cineVisto) {
+        e.cineVisto = true
+        if (e.modo === 'curiosa') terminarCuriosa(false)
+        else if (e.modo === 'conArgus') terminarEscenaRef.current?.()
+        else if (e.modo === 'oferta') { e.modo = 'deambular'; e.ofertaTexto = '' }
+        callar()
+      }
+      const cobijaPuesta = e.modo === 'cobija' && siesta.cobija.fase === 'puesta'
+      if (cine.dron && e.modo !== 'guion' && e.modo !== 'castigo' && e.modo !== 'quemada' && (e.modo !== 'cobija' || cobijaPuesta)) {
+        if (cobijaPuesta) e.tCobija = -1
+        e.modo = 'guion'
+        e.guionN = -1
+        e.ofertaTexto = ''
+        callar()
+      }
+    } else e.cineVisto = false
+    // sin nada que hacer en la escena (o ya sin escena): a lo suyo (con Skulley dormido, la cobija)
+    if (e.modo === 'guion' && (!cine.activo || !cine.dron)) {
+      e.modo = 'deambular'
+      e.guionQuema = null
+      caraRef.current?.mirar(0, 0)
+      caraRef.current?.poner('normal')
+      quieto(azar(1.5, 3))
+    }
+    if (e.modo === 'guion' && cine.dron && cine.dron.n !== e.guionN) {
+      const d = cine.dron
+      e.guionN = d.n
+      e.guionMira = d.mira
+      // `salta`: aparece ahí antes de volar (lejos y fuera de cuadro)
+      if (d.salta) { e.pos.set(d.salta[0], d.salta[1], d.salta[2]); e.v.set(0, 0, 0) }
+      if (d.pos) {
+        const meta = new THREE.Vector3(d.pos[0], d.pos[1], d.pos[2])
+        viajar(meta, d.vel, d.mira === 'skulley' ? 'skulley' : null)
+        e.fase = 'viaje'
+        if (!d.accion) pedir(e.pos.distanceTo(meta) > 6 ? 'Arrancar' : 'Avanzar')
+      } else e.mirar = d.mira === 'skulley' ? 'skulley' : null
+      // achicharrada por su propio rayo (el final de la ofrenda): hollín, tache y humo un rato, y se sacude
+      if (d.quema) {
+        e.guionQuema = { t: 0, dura: d.quema, sacude: 0 }
+        cara?.poner('tache')
+        cara?.quemar(1)
+        e.pos.y -= 0.35
+        e.ladeo.vx += (Math.random() - 0.5) * 9
+        e.ladeo.vz += (Math.random() < 0.5 ? -1 : 1) * 7
+        pedir('Detenerse')
+      }
+      const quemandose = e.guionQuema && e.guionQuema.t < e.guionQuema.dura
+      if (d.cara && !quemandose) cara?.poner(d.cara)
+      if (d.accion) pedir(d.accion)
+    }
+    if (e.guionQuema) {
+      const q = e.guionQuema
+      if (e.modo !== 'guion') e.guionQuema = null
+      else if (q.t < q.dura) q.t += dt
+      else {
+        if (q.sacude === 0) { cara?.quemar(0); cara?.poner(cine.dron?.cara || 'feliz') }
+        const antes = q.sacude
+        q.sacude += dt
+        const paso = 0.09
+        if (Math.floor(q.sacude / paso) !== Math.floor(antes / paso)) e.ladeo.vz += (Math.floor(q.sacude / paso) % 2 ? 1 : -1) * 5
+        if (q.sacude > QUEMADA.sacude) e.guionQuema = null
+      }
+    }
+
     // ---- decidir
     const ahora = performance.now() / 1000
     if (e.modo !== 'deambular') e.viendo = false
@@ -1323,6 +1393,15 @@ export default function DroneNPC({
     }
     // quemada y mareada: gira despacio sobre sí misma
     if (e.modo === 'quemada' && e.sacudida === 0) yawMeta = e.yaw + 0.35
+    // en la cinemática: a la cámara o a un punto ('skulley' ya lo hace `e.mirar` arriba), con los ojos
+    // a donde le pidan
+    if (e.modo === 'guion' && quietoEnSitio) {
+      const m = e.guionMira
+      if (m === 'camara') yawMeta = Math.atan2(camera.position.x - e.pos.x, camera.position.z - e.pos.z)
+      else if (Array.isArray(m)) yawMeta = Math.atan2(m[0] - e.pos.x, m[2] - e.pos.z)
+      const o = cine.dron?.ojos
+      if (o && cara) cara.mirar(o[0], o[1])
+    }
     // viendo la esfera corrupta: de frente y con los ojos abajo, hacia ella
     if (e.modo === 'curiosa' && corrupta && quietoEnSitio && cara) {
       const hacia = Math.atan2(corrupta.pos.x - e.pos.x, corrupta.pos.z - e.pos.z)
@@ -1353,7 +1432,8 @@ export default function DroneNPC({
     H.pos.set(e.pos.x, e.pos.y + 0.2, e.pos.z)
     H.nivel = e.modo === 'quemada' && e.sacudida === 0
       ? Math.max(0.35, 1 - 0.65 * (e.tQuemada / QUEMADA.dura))
-      : (cara ? cara.estado.quemado * 0.35 : 0)
+      : e.guionQuema && e.guionQuema.t < e.guionQuema.dura ? 1
+        : (cara ? cara.estado.quemado * 0.35 : 0)
 
     // la viñeta: lo que esté diciendo manda sobre el pregón de la tienda
     let texto = ''

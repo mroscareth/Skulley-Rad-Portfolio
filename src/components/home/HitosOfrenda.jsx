@@ -6,7 +6,8 @@ import { compileAsyncSafe } from '../../lib/compileAsyncSafe.js'
 import { cargarGrupoEstilo, copiaLocal } from '../../lib/cargarEstilo.js'
 import { setObstaculosExtra } from '../../lib/obstaculosHome.js'
 import { LUGARES } from '../../lib/plazaOfrenda.js'
-import { ofrendaPuesta, ofrendaEnMano } from '../../lib/ofrendas.js'
+import { ofrendaPuesta, ofrendaEnMano, ofrendaCompleta, EVENTO_OFRENDAS } from '../../lib/ofrendas.js'
+import { sonarPiedrasSeHunden } from '../../lib/ofrendaSonidos.js'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 
 // Un hito labrado detrás de cada lugar de la plaza de la ofrenda (Oscar, 2026-11-25: "las piedras del
@@ -36,6 +37,9 @@ export const HITOS_OFRENDA = {
   llamaFuerza: 1.8,
   llamaHz: 1.6,
 }
+// Con la ofrenda completa se entierran temblando, uno tras otro (Oscar, 2026-11-26), justo después de que
+// cae la almohada; antes de la cinemática del final (App la arranca cuando ya se hundieron).
+export const HUNDE = { espera: 1.4, escalon: 0.18, dura: 2.6, hondo: 3.2, tiembla: 0.06, temblores: 7 }
 
 export default function HitosOfrenda({ visible = true, playerRef }) {
   const { gl, camera, scene } = useThree()
@@ -73,7 +77,7 @@ export default function HitosOfrenda({ visible = true, playerRef }) {
           runas[idioma] = { pintado: r, mats }
         }
         raiz.add(g)
-        nuevos.push({ id: l.id, grupo: g, cuerpo, runas, brillo: ofrendaPuesta(l.id) ? 1 : 0, fase: nuevos.length * 1.3 })
+        nuevos.push({ id: l.id, grupo: g, cuerpo, runas, brillo: ofrendaPuesta(l.id) ? 1 : 0, fase: nuevos.length * 1.3, base: { x: l.estela.x, z: l.estela.z } })
         solidos.push({ x: l.estela.x, z: l.estela.z, r: H.solido * H.escala, esfera: true })
       }
       raiz.updateMatrixWorld(true)
@@ -82,7 +86,9 @@ export default function HitosOfrenda({ visible = true, playerRef }) {
       rt.dispose()
       if (!vivo) return
       hitos.current = nuevos
-      setObstaculosExtra('hitosOfrenda', solidos)
+      // ya completa al cargar: ya están enterrados
+      if (ofrendaCompleta()) hundeRef.current.desde = -Infinity
+      else setObstaculosExtra('hitosOfrenda', solidos)
       setArmado(raiz)
     }).catch((e) => console.warn('[hitos de la ofrenda] no se armaron', e))
     return () => { vivo = false; setObstaculosExtra('hitosOfrenda', []) }
@@ -95,6 +101,18 @@ export default function HitosOfrenda({ visible = true, playerRef }) {
     }
   }, [lang, armado])
 
+  const hundeRef = useRef({ desde: null, sono: false })
+  // si la ofrenda queda completa por lo que trae la cuenta (otra computadora), ya están enterrados: sin
+  // temblor ni retumbo
+  useEffect(() => {
+    const alCambiar = (e) => {
+      if (!e?.detail?.fusion || !ofrendaCompleta() || hundeRef.current.desde !== null) return
+      hundeRef.current.desde = -Infinity
+      setObstaculosExtra('hitosOfrenda', [])
+    }
+    window.addEventListener(EVENTO_OFRENDAS, alCambiar)
+    return () => window.removeEventListener(EVENTO_OFRENDAS, alCambiar)
+  }, [])
   const color = useRef(new THREE.Color(HITOS_OFRENDA.color))
   const _c = useRef(new THREE.Color())
   useFrame((state, delta) => {
@@ -103,7 +121,35 @@ export default function HitosOfrenda({ visible = true, playerRef }) {
     const dt = Math.min(delta, 0.05)
     const t = state.clock.elapsedTime
     const p = playerRef?.current?.position
+    // se entierran: temblando, en cascada, con su retumbo y la cámara temblando
+    const Hd = hundeRef.current
+    const ahora = performance.now() / 1000
+    if (Hd.desde === null && ofrendaCompleta()) Hd.desde = ahora
+    if (Hd.desde !== null && Hd.desde !== -Infinity && !Hd.sono && ahora - Hd.desde >= HUNDE.espera) {
+      Hd.sono = true
+      setObstaculosExtra('hitosOfrenda', [])
+      sonarPiedrasSeHunden(HUNDE.dura + HUNDE.escalon * hitos.current.length)
+      for (let k = 0; k < HUNDE.temblores; k++) {
+        setTimeout(() => {
+          try { window.dispatchEvent(new CustomEvent('camera-temblor', { detail: { fuerza: 0.7 } })) } catch { }
+        }, k * ((HUNDE.dura * 1000) / HUNDE.temblores))
+      }
+    }
+    hitos.current.forEach((h, i) => {
+      if (Hd.desde === null) return
+      const u = Hd.desde === -Infinity ? 1 : Math.min(1, Math.max(0, (ahora - Hd.desde - HUNDE.espera - i * HUNDE.escalon) / HUNDE.dura))
+      const e = Math.pow(u, 1.6)
+      const tiembla = u > 0 && u < 1 ? HUNDE.tiembla * (1 - 0.4 * e) : 0
+      h.grupo.position.set(
+        h.base.x + tiembla * Math.sin(t * 61 + i * 1.7),
+        -HUNDE.hondo * e,
+        h.base.z + tiembla * Math.sin(t * 53 + i * 2.3),
+      )
+      h.grupo.rotation.z = tiembla * 0.6 * Math.sin(t * 37 + i)
+      if (u >= 1 && h.grupo.scale.x > NADA) h.grupo.scale.setScalar(NADA)
+    })
     for (const h of hitos.current) {
+      if (Hd.desde === -Infinity || (Hd.desde !== null && h.grupo.scale.x <= NADA)) continue
       h.cuerpo.medir(state)
       const meta = ofrendaPuesta(h.id) ? 1 : 0
       h.brillo += Math.max(-dt / H.apaga, Math.min(dt / H.prende, meta - h.brillo))

@@ -14,7 +14,8 @@ import * as THREE from 'three'
 // skinning lo pone three) y el dibujo sale de la posición del vértice en la
 // pantalla, no del UV (en el GLB el UV del domo va girado).
 
-export const EXPRESIONES = ['normal', 'feliz', 'enojada', 'confundida', 'tache']
+// 'triste' (Oscar, 2026-11-26): el soliloquio del final de la ofrenda; ojos caídos hacia afuera y una lágrima.
+export const EXPRESIONES = ['normal', 'feliz', 'enojada', 'confundida', 'tache', 'triste']
 
 const VERT_PARS = /* glsl */`
 uniform vec2 uPantCentro;
@@ -124,11 +125,23 @@ float ojo(vec2 e, float expr, float abierto, float der) {
       vec2 q = gira(e, -0.16);
       d = sdCapsulaV(q, OJO_H, OJO_R);
     }
-  } else {                     // tache: X X de caricatura, mareada (el rayo de la esfera corrupta)
+  } else if (expr < 4.5) {     // tache: X X de caricatura, mareada (el rayo de la esfera corrupta)
     vec2 q = gira(e, 0.18 * sin(uTiempo * 2.6 + der * 2.1));
     float b = 0.105;
     d = min(sdSegmento(q, vec2(-b, -b), vec2(b, b)), sdSegmento(q, vec2(-b, b), vec2(b, -b))) - 0.04;
     abierto = 1.0;
+  } else {                     // triste: la pastilla cortada arriba por una ceja que cae hacia afuera, y
+                               // una lágrima que escurre del ojo derecho (x > 0 es hacia el centro)
+    vec2 q = e - vec2(0.0, -0.035);
+    d = sdCapsulaV(q, OJO_H * 0.62, OJO_R);
+    d = max(d, q.y - (0.03 + 0.42 * q.x));
+    if (der > 0.5) {
+      float c = fract(uTiempo * 0.32);
+      vec2 l = e - vec2(-0.11, -0.2 - c * 0.42);
+      float gota = length(l * vec2(1.0, 0.8)) - 0.042 * (1.0 - c * 0.55);
+      gota = min(gota, max(sdSegmento(l, vec2(0.0, 0.0), vec2(0.0, 0.085)) - 0.026 * (1.0 - c * 0.55), -l.y));
+      d = min(d, gota + step(0.92, c));
+    }
   }
   return mix(cerrado, d, clamp(abierto, 0.0, 1.0));
 }
