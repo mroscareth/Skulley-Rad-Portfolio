@@ -24,14 +24,14 @@ const TEXTOS = {
     nombre: { ipad: 'el iPad', leica: 'la cámara', album: 'el álbum de fotos', teclado: 'el teclado MIDI', cerillos: 'la caja de cerillos', almohada: 'la almohada' },
     titulo: (n) => `¡Conseguiste ${n}!`,
     pista: (lo) => `Ya está en tu inventario. Lléva${lo} al portal que no funciona: sigue los pétalos de cempasúchil que salen de junto a Trabajo y déja${lo} junto a su piedra.`,
-    pistaAlmohada: 'Ya está en tu inventario. Va al último: cuando las otras cinco estén en su lugar, llévala atrás del portal que no funciona, junto a las barricadas.',
+    pistaAlmohada: 'Ya está en tu inventario. Llévala atrás del portal que no funciona, junto a las barricadas.',
     va: '¡Va!',
   },
   en: {
     nombre: { ipad: 'the iPad', leica: 'the camera', album: 'the photo album', teclado: 'the MIDI keyboard', cerillos: 'the matchbox', almohada: 'the pillow' },
     titulo: (n) => `You got ${n}!`,
     pista: () => "It's in your inventory. Take it to the broken portal: follow the marigold petals that start by Work, and leave it by its stone.",
-    pistaAlmohada: "It's in your inventory. It goes last: once the other five are in place, take it behind the broken portal, by the barricades.",
+    pistaAlmohada: "It's in your inventory. Take it behind the broken portal, by the barricades.",
     va: 'Got it!',
   },
 }

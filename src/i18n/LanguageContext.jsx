@@ -381,8 +381,8 @@ const resources = {
           'Saw the smoke from here, buddy. A deal’s a deal: Skulley’s matches. Only one’s burnt, the one he lit. Don’t use them up.',
         ],
         almohada: [
-          'Over a thousand, buddy! Now that’s playing. Here, Skulley’s pillow. That one goes last, behind the broken portal, once the other five are in place.',
-          'That game wore me out just watching. Here, Skulley’s pillow. It goes all the way behind the portal, and last, okay? The other five first.',
+          'Over a thousand, buddy! Now that’s playing. Here, Skulley’s pillow. That one goes behind the broken portal, by the barricades.',
+          'That game wore me out just watching. Here, Skulley’s pillow. It goes all the way behind the portal, by the barricades, okay?',
         ],
       },
       // Empujón por invadirle el espacio (distinto del rayo: acá el tema es
@@ -922,8 +922,8 @@ const resources = {
           'Vi el humo desde acá, compa. Trato es trato: los cerillos de Skulley. Nomás uno está quemado, el que prendió él. No me los gastes.',
         ],
         almohada: [
-          '¡Pasaste de mil, compa! Eso sí es jugar. Ten, la almohada de Skulley. Esa va al último, atrás del portal, cuando ya estén las otras cinco.',
-          'Con esa partida hasta yo me cansé de verte. Toma, la almohada de Skulley. Esa va hasta atrás del portal, y al último, ¿eh? Primero las otras cinco.',
+          '¡Pasaste de mil, compa! Eso sí es jugar. Ten, la almohada de Skulley. Esa va atrás del portal que no funciona, junto a las barricadas.',
+          'Con esa partida hasta yo me cansé de verte. Toma, la almohada de Skulley. Esa va hasta atrás del portal, junto a las barricadas, ¿eh?',
         ],
       },
       // Empujón por invadirle el espacio (distinto del rayo: acá el tema es

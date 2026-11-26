@@ -202,7 +202,7 @@ export function TextoObjeto({ lang = 'es', id, activo = false, compacta = false 
   const donde = puesta
     ? (L === 'es' ? 'Ya está en la ofrenda.' : "It's already on the ofrenda.")
     : id === 'almohada'
-      ? (L === 'es' ? 'Va al último, atrás del portal que no funciona, junto a las barricadas.' : 'It goes last, behind the broken portal, by the barricades.')
+      ? (L === 'es' ? 'Va atrás del portal que no funciona, junto a las barricadas.' : 'It goes behind the broken portal, by the barricades.')
       : (L === 'es' ? 'Va junto a su piedra, en el portal que no funciona: sigue los pétalos de cempasúchil.' : 'It goes by its stone at the broken portal: follow the marigold petals.')
   return (
     <div className={`@container flex flex-col ${compacta ? 'w-full max-w-sm items-center text-center' : 'w-full'}`}>
