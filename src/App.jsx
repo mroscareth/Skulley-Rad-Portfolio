@@ -625,6 +625,8 @@ function SiteApp() {
     gameToast,
     unlockAchievement,
   })
+  const setActiveSkinRef = useRef(setActiveSkin)
+  setActiveSkinRef.current = setActiveSkin
 
   // Modal "Mi Cuenta" (perfil / score / logros / pedidos). Se abre al hacer
   // click en el avatar cuando el user está autenticado.
@@ -1040,6 +1042,14 @@ function SiteApp() {
   // Helper único de desbloqueo de skin con toast (idempotente): si ya la tenías,
   // no hace nada; si es nueva, la desbloquea y muestra un toast con el nombre
   // localizado. Lo usan todos los triggers (lava / oil / slime / hologram).
+  // Al despertar del final de la ofrenda Skulley se vuelve Poltergeist (Oscar, 2026-11-26): se gana ahí y, en el
+  // punto más alto del remolino de runas, se la pone
+  const transformarEnPoltergeist = useCallback(() => {
+    unlockSkinRef.current?.('skin_poltergeist')
+    try { window.dispatchEvent(new CustomEvent('character-color-burst')) } catch { }
+    try { playSfx('magiaInicia', { volume: 0.9 }) } catch { }
+    setTimeout(() => { try { setActiveSkinRef.current?.('poltergeist') } catch { } }, 700)
+  }, [])
   const unlockSkin = useCallback((key) => {
     try { if (hasAchievement(key)) return } catch { }
     try { unlockAchievement(key) } catch { }
@@ -1053,6 +1063,8 @@ function SiteApp() {
       })
     } catch { }
   }, [hasAchievement, unlockAchievement, gameToast, lang])
+  const unlockSkinRef = useRef(unlockSkin)
+  unlockSkinRef.current = unlockSkin
 
   // LAVA: el rayo de la esfera corrupta debe DESARMAR/despiezar al personaje
   // (Player.jsx solo dispara el despiece si estabas dentro del radio y emite
@@ -3380,7 +3392,7 @@ function SiteApp() {
           handlePortalEnter={handlePortalEnter}
           handleCheatCapture={handleCheatCapture}
           handleBlockedDragAttempt={handleBlockedDragAttempt}
-          onOfferingDelivered={handleOfferingDelivered}
+          onOfferingDelivered={undefined}
           section6Unlocked={section6Unlocked}
           beginSectionTransition={beginSectionTransition}
           beginLiquidWipe={beginLiquidWipe}
@@ -4252,6 +4264,7 @@ function SiteApp() {
           <CinematicaOfrenda
             lang={lang}
             onPortal={() => handleOfferingDelivered('section6')}
+            onTransforma={transformarEnPoltergeist}
             onFin={() => setFinalOfrenda(false)}
           />
         </Suspense>

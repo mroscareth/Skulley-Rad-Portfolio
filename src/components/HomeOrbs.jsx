@@ -1759,7 +1759,9 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
         // previa convirtió la esfera a purified pero el unlock no se guardó (sin
         // esto el usuario quedaba atorado sin esfera roja). Post-unlock, la
         // purified ya NO ofrenda → invoca rayos como siempre.
-        const isOffering = isCursed && nearest.id === 'section6' && !section6UnlockedRef.current
+        // El portal de SKULLEYGLYPH ya no se abre con la esfera corrupta: solo con la cinemática del final de la
+        // ofrenda (Oscar, 2026-11-26). Ahí la corrupta suelta su rayo como en cualquier portal.
+        const isOffering = false
         // en la cinemática del final tampoco: su trueno se oía encima del soliloquio (Oscar, 2026-11-26)
         if ((sinRayo || cine.activo) && isCursed && !isOffering) continue
         // La ofrenda se captura AL INSTANTE — sin exigir que vaya lenta ni que

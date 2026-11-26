@@ -37,7 +37,9 @@ const quietoPreferido = () => {
 // lo que se queda un renglón ya escrito: lo que se tarda en leerlo
 const lectura = (t) => Math.min(6500, 1500 + t.split(/\s+/).length * 300)
 
-export default function CinematicaOfrenda({ lang = 'es', onPortal, onFin }) {
+export default function CinematicaOfrenda({ lang = 'es', onPortal, onFin, onTransforma }) {
+  const transformaRef = useRef(onTransforma)
+  transformaRef.current = onTransforma
   const G = GUION_FINAL[lang === 'en' ? 'en' : 'es']
   const [fase, setFase] = useState('entra')      // entra | texto | pausa | titulo | sale
   const [linea, setLinea] = useState(null)       // { t, n }
@@ -122,6 +124,8 @@ export default function CinematicaOfrenda({ lang = 'es', onPortal, onFin }) {
     cine.activo = false
     cine.fase = 'nada'
     setFase('sale')
+    // al despertar se vuelve Poltergeist (App: el remolino de runas y la skin)
+    setTimeout(() => { try { transformaRef.current?.() } catch { } }, 500)
     setTimeout(() => { cine.despertar = true }, 900)
     setTimeout(() => onFin?.(), quietoPreferido() ? 50 : 1100)
   }, [abrirPortal, onFin])
