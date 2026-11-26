@@ -8,9 +8,12 @@ rígida en su propio hueso.
 Se corre con Blender 5.3 en segundo plano:
   "C:/Program Files/Blender Foundation/Blender 5.3/blender.exe" --background --python scripts/alien/armar_alien.py -- todo
 
-  todo      armar + exportar + medir + fotos
-  armar     importa el GLB, arma huesos, pesos y cara; guarda el .blend (BLEND)
-  exportar  exporta el GLB del sitio (SALIDA) desde el .blend
+  todo      armar + animar + exportar + medir + fotos
+  armar     importa el GLB, arma huesos, pesos y cara, y anima; guarda el .blend (BLEND)
+  animar    rehace los clips (acciones_alien.py) en el .blend y exporta
+  exportar  exporta el GLB del sitio (SALIDA) desde el .blend, con sus clips
+  medir_anim  traspasos de manos y brazos y piso en los clips, cuadro por cuadro
+  fotos_anim  cuadros de cada clip en una carpeta (para tiras y GIFs)
   medir     cuánto se sale una capa de la que la tapa, en las poses de prueba
   fotos     renders de revisión (carpeta en el argumento, o FOTOS)
 
@@ -111,8 +114,8 @@ GRUESO_LABIO = 0.003
 MARGEN_ABIERTO = 4.0      # grados de más, abiertos, detrás de la orilla de la cuenca
 MEZCLA_CIERRE = 0.62      # dónde se juntan (0 = orilla de arriba, 1 = la de abajo)
 TRASLAPE = 2.0            # grados que cada párpado pasa de la junta al cerrar
-BANDA_CODO = 0.07         # largo de la banda de cada coyuntura (m), centrada en ella
-BANDA_RODILLA = 0.06
+BANDA_CODO = 0.10         # largo de la banda de cada coyuntura (m), centrada en ella
+BANDA_RODILLA = 0.08
 
 
 def ss(x, a, b):
@@ -722,7 +725,7 @@ def _pesos_cuerpo(P, J, H, mochila=None):
         for dedo, pts in dedos.items():
             d, u = _polilinea(Pm, pts)
             dist[dedo], us[dedo] = d, u
-            gs[dedo] = ss(u, -0.022, 0.006)
+            gs[dedo] = ss(u, -0.03, 0.012)
             seg = np.linalg.norm(np.diff(np.asarray(pts), axis=0), axis=1)
             largos[dedo] = (seg[0], seg[0] + seg[1])
         dmin = np.min(np.vstack(list(dist.values())), axis=0)
@@ -734,7 +737,7 @@ def _pesos_cuerpo(P, J, H, mochila=None):
             total_dedos += ex[dedo] / tot * gs[dedo]
             L1, L2 = largos[dedo]
             u = us[dedo]
-            b = 0.008
+            b = 0.011
             f2 = ss(u, L1 - b, L1 + b)
             f3 = ss(u, L2 - b, L2 + b)
             W[f"{dedo}_01_{lado}"] += share * (1 - f2)
@@ -1258,16 +1261,23 @@ def armar():
         rig[f"lower_leg_{lado}"] = np.concatenate([_ids(k) for k in G["rollo"][lado]])
     rig = {k: np.asarray(v, dtype=np.int64) for k, v in rig.items()}
     # el aro del codo y las piezas chicas junto a él van pegados a lo que los carga
-    pegar, base = [], []
+    # (el aro, al guantelete, que es lo que lo carga: pegado a la manga se metía en
+    # la boca del guante al doblar el codo)
+    pegar, base, aros, guantes = [], [], [], []
     for k, pz in piezas.items():
         n = len(pz["ids"])
         cerca = min(np.linalg.norm(pz["c"] - J["codo"] * np.array([s_, 1, 1])) for s_ in (1, -1))
-        if k in G["aro_codo"].values() or (n < 200 and cerca < 0.06):
+        if k in G["aro_codo"].values():
+            aros.extend(pz["ids"].tolist())
+        elif n < 200 and cerca < 0.06:
             pegar.extend(pz["ids"].tolist())
         elif n >= 500 and k != G["cabeza"] and k not in G["mochila"]:
             base.extend(pz["ids"].tolist())
-    print("PEGADOS", len(pegar))
-    _pegar_a_base(me, W, pegar, base)
+            if abs(pz["c"][0]) > 0.3 and pz["col"][1] < 0.35 and pz["col"][2] > 0.8:
+                guantes.extend(pz["ids"].tolist())
+    print("PEGADOS", len(pegar), "aros", len(aros), "guantes", len(guantes))
+    _pegar_a_base(me, W, aros, guantes)
+    _pegar_a_base(me, W, pegar, base + aros)
     _simetrizar(me, W)
     _soldar(me, W)
     _poner_pesos(obj, W, rig)
@@ -1324,14 +1334,21 @@ def exportar(ruta=SALIDA, comprimir=True):
         o.select_set(o.name in ("Alien", "Alien_malla", "Alien_ojos", "Alien_parpados"))
     arm = bpy.data.objects["Alien"]
     vl.objects.active = arm
-    arm.animation_data_clear()
     for pb in arm.pose.bones:
         pb.location = (0, 0, 0)
         pb.rotation_quaternion = (1, 0, 0, 0)
         pb.scale = (1, 1, 1)
+    clips = _clips()
+    # los clips son de 30 cuadros por segundo (con los 24 de Blender salían más lentos)
+    bpy.context.scene.render.fps, bpy.context.scene.render.fps_base = 30, 1
+    ad = arm.animation_data or arm.animation_data_create()
+    ad.action = bpy.data.actions.get("Idle") if clips else None
     bpy.ops.export_scene.gltf(
         filepath=ruta, export_format="GLB", use_selection=True,
-        export_animations=False, export_reset_pose_bones=True, export_rest_position_armature=True,
+        export_animations=bool(clips), export_animation_mode="ACTIONS",
+        export_force_sampling=True, export_frame_step=1, export_frame_range=False,
+        export_anim_slide_to_zero=True, export_optimize_animation_size=False,
+        export_reset_pose_bones=True, export_rest_position_armature=True,
         export_skins=True, export_def_bones=False, export_leaf_bone=False,
         export_morph=False, export_materials="EXPORT", export_image_format="AUTO",
         export_cameras=False, export_lights=False, export_extras=True,
@@ -1341,8 +1358,109 @@ def exportar(ruta=SALIDA, comprimir=True):
     if comprimir:
         import subprocess
         npx = "npx.cmd" if os.name == "nt" else "npx"
+        if clips:
+            subprocess.run([npx, "gltf-transform", "resample", ruta, ruta, "--tolerance", "0.0004"], cwd=REPO, check=True)
         subprocess.run([npx, "gltf-transform", "draco", ruta, ruta], cwd=REPO, check=True)
     return ruta
+
+
+# ---------------------------------------------------------------- animaciones
+
+def _clips():
+    return [a for a in bpy.data.actions if "ciclo" in a]
+
+
+def animar(nombres=None):
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import importlib
+    import acciones_alien as AN
+    importlib.reload(AN)
+    sc = bpy.context.scene
+    sc.render.fps, sc.render.fps_base = AN.FPS, 1
+    hechos = AN.animar(bpy.data.objects["Alien"], nombres)
+    print("CLIPS", hechos, "VEL_CAMINAR", round(AN.VEL_CAMINAR, 3))
+    return hechos
+
+
+def _poner_clip(arm, accion, f):
+    ad = arm.animation_data or arm.animation_data_create()
+    ad.action = accion
+    bpy.context.scene.frame_set(int(f))
+
+
+def medir_anim(nombres=None, cada=2, umbral=0.004):
+    """Cuadro por cuadro: cuánto se mete el antebrazo, la mano o los dedos en el
+    cuerpo (cabeza, torso, mochila, piernas) o en el otro brazo, y lo más bajo de la
+    malla contra el piso (cm)."""
+    arm = bpy.data.objects["Alien"]
+    malla = bpy.data.objects["Alien_malla"]
+    me = malla.data
+    P0 = _coords(me)
+    gi = {g.index: g.name for g in malla.vertex_groups}
+    dom = []
+    for v in me.vertices:
+        dom.append(gi[max(v.groups, key=lambda g: g.weight).group] if v.groups else "")
+    dom = np.array(dom)
+    BRAZO = ("upper_arm_", "lower_arm_", "hand_", "thumb_", "index_", "middle_", "ring_", "shoulder_")
+    MANO = ("lower_arm_", "hand_", "thumb_", "index_", "middle_", "ring_")
+    es_brazo = np.array([d.startswith(BRAZO) for d in dom])
+    isla = _islas(me)
+    caras = [list(p.vertices) for p in me.polygons]
+    bvh0 = BVHTree.FromPolygons([Vector(q) for q in P0], caras)
+    signo, _ = _signo_islas(me, P0, isla, bvh0)
+    afuera = np.array([signo[isla[c[0]]] > 0 for c in caras])
+    cuerpo = [c for c, a in zip(caras, afuera) if a and not any(es_brazo[j] for j in c)]
+    brazo_caras = {l: [c for c, a in zip(caras, afuera) if a and all(dom[j].endswith("_" + l) and es_brazo[j] for j in c)]
+                   for l in ("L", "R")}
+    muestra = {l: np.array([i for i in range(len(P0)) if dom[i].startswith(MANO) and dom[i].endswith("_" + l)])[::2]
+               for l in ("L", "R")}
+    res = {}
+    for a in _clips():
+        if nombres and a.name not in nombres:
+            continue
+        peor = {"cuerpo": (0.0, None, None), "brazo": (0.0, None, None)}
+        piso = (0.0, None)
+        for f in range(int(a.frame_range[0]), int(a.frame_range[1]) + 1, cada):
+            _poner_clip(arm, a, f)
+            dg = bpy.context.evaluated_depsgraph_get()
+            ev = malla.evaluated_get(dg)
+            co = _coords(ev.to_mesh())
+            ev.to_mesh_clear()
+            V = [Vector(q) for q in co]
+            zmin = float(co[:, 2].min())
+            if zmin < piso[0]:
+                piso = (zmin, f)
+            b_c = BVHTree.FromPolygons(V, cuerpo)
+            for l, otro in (("L", "R"), ("R", "L")):
+                b_o = BVHTree.FromPolygons(V, brazo_caras[otro])
+                for i in muestra[l]:
+                    for clave, b in (("cuerpo", b_c), ("brazo", b_o)):
+                        h = b.find_nearest(V[i], 0.08)
+                        if h[0] is None:
+                            continue
+                        d = (V[i] - h[0]).dot(h[1])
+                        if d < -umbral and -d > peor[clave][0]:
+                            peor[clave] = (-d, f, dom[i])
+        res[a.name] = {"cuerpo_cm": round(peor["cuerpo"][0] * 100, 2), "cuerpo_en": peor["cuerpo"][1:],
+                       "brazo_cm": round(peor["brazo"][0] * 100, 2), "brazo_en": peor["brazo"][1:],
+                       "piso_cm": round(piso[0] * 100, 2), "piso_en": piso[1]}
+        print("ANIM", a.name, json.dumps(res[a.name]))
+    return res
+
+
+def fotos_anim(carpeta, nombres=None, cada=2, res=(360, 360)):
+    """Cuadros de cada clip (cada `cada` cuadros) para la tira y el GIF de revisión."""
+    os.makedirs(carpeta, exist_ok=True)
+    arm = bpy.data.objects["Alien"]
+    for a in _clips():
+        if nombres and a.name not in nombres:
+            continue
+        sub = os.path.join(carpeta, a.name)
+        os.makedirs(sub, exist_ok=True)
+        for f in range(int(a.frame_range[0]), int(a.frame_range[1]) + 1, cada):
+            _poner_clip(arm, a, f)
+            foto(os.path.join(sub, f"{f:03d}.png"), (0, 0, 0.82), (0.75, -1, 0.12), 1.95, res)
+    arm.animation_data.action = None
 
 
 # ---------------------------------------------------------------- poses de prueba
@@ -1397,6 +1515,8 @@ def _cara_pose(arm, parp=(0.0, 0.0, 0.0, 0.0), quijada=0.0, lengua=(0.0, 0.0)):
 
 
 def posar(arm, pose):
+    if arm.animation_data:
+        arm.animation_data.action = None
     for pb in arm.pose.bones:
         pb.location = (0, 0, 0)
         pb.rotation_quaternion = (1, 0, 0, 0)
@@ -1619,7 +1739,21 @@ def guardar():
     if ahora != _MTIME.get("blend"):
         raise RuntimeError(f"{BLEND} cambió mientras corría (mtime {ahora} != {_MTIME.get('blend')})")
     os.makedirs(os.path.dirname(BLEND), exist_ok=True)
+    # sin respaldo .blend1: en Windows a veces el archivo está agarrado un instante
+    # y Blender deja lo guardado como .blend@ sin renombrarlo
+    bpy.context.preferences.filepaths.save_version = 0
     bpy.ops.wm.save_as_mainfile(filepath=BLEND)
+    import time
+    tmp = BLEND + "@"
+    for _ in range(20):
+        if not os.path.exists(tmp):
+            break
+        try:
+            os.replace(tmp, BLEND)
+        except OSError:
+            time.sleep(0.5)
+    if os.path.exists(tmp):
+        raise RuntimeError(f"no se pudo poner {tmp} en {BLEND}")
     _recordar_mtime()
 
 
@@ -1629,12 +1763,23 @@ def main():
     _recordar_mtime()
     if cmd in ("todo", "armar"):
         armar()
+        animar()
         guardar()
     else:
         bpy.ops.wm.open_mainfile(filepath=BLEND)
         _recordar_mtime()
-    if cmd in ("todo", "exportar"):
+    if cmd == "animar":
+        animar(argv[1].split(",") if len(argv) > 1 else None)
+        guardar()
+    if cmd == "exportar":
+        bpy.context.scene.render.fps, bpy.context.scene.render.fps_base = 30, 1
+        guardar()
+    if cmd in ("todo", "exportar", "animar"):
         print("GLB", exportar())
+    if cmd == "medir_anim":
+        medir_anim(argv[1].split(",") if len(argv) > 1 and argv[1] != "todas" else None)
+    if cmd == "fotos_anim":
+        fotos_anim(argv[1], argv[2].split(",") if len(argv) > 2 else None)
     if cmd == "medir":
         medir(argv[1].split(",") if len(argv) > 1 else None)
     if cmd == "todo":

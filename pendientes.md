@@ -1,7 +1,7 @@
 # Pendientes
 
 Hilo de lo que falta, para no perderlo entre sesiones.
-Última revisión: 2026-11-25.
+Última revisión: 2026-11-26.
 
 ---
 
@@ -362,6 +362,23 @@ frases de traducción automática ("se convirtió en influencia" por *leverage*,
 ---
 
 ## Trabajo técnico pendiente
+
+**Unemployed Alien: rehacer la caminata (26 nov, Oscar: "terrible").** En
+`Caminar` (scripts/alien/acciones_alien.py, `_ciclo_pasos`) el brazo y la
+pierna del mismo lado se ven yendo hacia el mismo lado, justo lo que Oscar
+pidió que no. Medido en el clip horneado (posición de mano y pie de cada lado
+por cuadro): la correlación mano izquierda ~ pie izquierdo es de solo −0.43
+(un braceo bien contrario anda por −0.9). El codo (`sw2`, 1.2 rad de retraso)
+y la mano (`sw3`, 1.9 rad) van tan atrasados que la mano se queda atrás
+mientras su pierna pasa por debajo del cuerpo y luego salta 55 cm al frente en
+7 cuadros; además llega 45 cm al frente contra 10 cm atrás (braceo de zombi,
+porque el codo se dobla más cuando el brazo va al frente). Corregir: braceo
+simétrico de ±15–20 cm, codo casi fijo (~25°, poca variación y en fase), la
+mano al frente justo cuando su pierna está atrás, y verificar con la misma
+medición (correlación ≤ −0.9) antes de enseñarlo. `Voltear` y `Detenerse` usan
+el mismo ciclo y se rehacen con él. Revisar también los demás clips del alien
+(Oscar no quedó contento con ninguno): palmas que miren hacia donde miran de
+verdad, nada de torceduras, y medir antes de enseñar.
 
 **"Conocer la historia": lo que falta.** Ya están los ojos de M.A.D.R.E. en
 la oscuridad, los rojos de la furia, el fondo (tema de M.A.D.R.E. al revés a
