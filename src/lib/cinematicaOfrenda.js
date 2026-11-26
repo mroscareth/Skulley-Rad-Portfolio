@@ -16,10 +16,8 @@
 import { CAMA, CENTRO } from './plazaOfrenda.js'
 
 export const EVENTO_FINAL = 'ofrenda-final'
-// Ya vista, se repite al picar la almohada con Skulley junto a la cama (ObjetosOfrenda lo avisa, App la abre;
-// Oscar, 2026-11-26). Más lejos, al caminar a la cama en línea recta cruzaría el portal de SKULLEYGLYPH.
+// Ya vista, se repite al picar la almohada o sus Zzz (ObjetosOfrenda lo avisa, App la abre; Oscar, 2026-11-26).
 export const EVENTO_REPETIR = 'ofrenda-repetir-final'
-export const REPETIR_CERCA = 6
 const LLAVE_VISTO = 'skulley_final_ofrenda'
 
 export const cine = {

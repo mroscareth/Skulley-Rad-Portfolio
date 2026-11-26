@@ -10,7 +10,7 @@ import { ofrendaPuesta, ofrendasEnMano, ponerOfrenda, nivelOfrenda, TOTAL_OFREND
 import { setObstaculosExtra } from '../../lib/obstaculosHome.js'
 import { playSfx } from '../../lib/sfx.js'
 import { sonarOfrendaVuela, sonarOfrendaPuesta } from '../../lib/ofrendaSonidos.js'
-import { cine, finalVisto, EVENTO_REPETIR, REPETIR_CERCA } from '../../lib/cinematicaOfrenda.js'
+import { cine, finalVisto, EVENTO_REPETIR } from '../../lib/cinematicaOfrenda.js'
 import { siesta } from '../../lib/siestaSkulley.js'
 import STICKER_IPAD from '../../assets/stickers/4-lineas.png'
 
@@ -586,13 +586,11 @@ export default function ObjetosOfrenda({ playerRef, activo = true, mostrarCarga 
 
   // la almohada, con la ofrenda completa y el final ya visto: picarla lo vuelve a dormir y repite el final
   const { gl } = useThree()
-  const almohadaLista = () => {
-    const p = playerRef?.current?.position
-    // dormido en su propia siesta no: la cinemática lo acuesta ella
-    return activo && !cine.activo && nivelOfrenda() >= TOTAL_OFRENDAS && finalVisto()
-      && !['entra', 'dormido', 'sale'].includes(siesta.estado)
-      && !!p && Math.hypot(p.x - CAMA.x, p.z - CAMA.z) < REPETIR_CERCA
-  }
+  // Desde cualquier distancia: en el primer corte la cinemática lo pone junto a la cama (`cine.salta`), así que
+  // ya no cruza el portal caminando; con la distancia, las Zzz se veían desde la plaza y el clic no hacía nada
+  // (Oscar, 2026-11-26). Dormido en su propia siesta no: la cinemática lo acuesta ella (ahí tampoco salen las Zzz).
+  const almohadaLista = () => activo && !cine.activo && nivelOfrenda() >= TOTAL_OFRENDAS && finalVisto()
+    && !['entra', 'dormido', 'sale'].includes(siesta.estado)
   const picarAlmohada = (ev) => {
     if (!almohadaLista()) return
     ev.stopPropagation()
