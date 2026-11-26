@@ -3,7 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import DroneModel, { INVOCAR_GOLPE_S } from './DroneModel.jsx'
 import SpeechBubble3D from '../SpeechBubble3D.jsx'
-import { pedirTurno, seguirTurno, soltarTurno, quitarDeFila, alCompletar, registrarCallar, escucharChoque, choque, TURNO } from '../../lib/turnoGlobos.js'
+import { pedirTurno, seguirTurno, soltarTurno, quitarDeFila, alCompletar, registrarCallar, escucharChoque, choque, TURNO, tiempoLinea } from '../../lib/turnoGlobos.js'
 import SilhouetteShadow from '../SilhouetteShadow.jsx'
 import DomeShield from '../fx/DomeShield.jsx'
 import HumoDron from './HumoDron.jsx'
@@ -596,12 +596,13 @@ export default function DroneNPC({
     const texto = propio?.t || T.proyectoGenerico.replace('{titulo}', titulo)
     // en trozos por frase: un globo de 8 renglones no se lee
     const [primero, ...resto] = trozos(texto)
-    decir(primero, 0, { prioridad: 1, espera: 10, cola: [...resto, p.url
+    const cola = [...resto, p.url
       ? escoger(T.pistaFuera, 'pistaFuera', { lang: langRef.current })
-      : escoger(T.pistaProyecto, 'pistaProyecto', { lang: langRef.current })] })
+      : escoger(T.pistaProyecto, 'pistaProyecto', { lang: langRef.current })]
+    decir(primero, 0, { prioridad: 1, espera: 10, cola })
     caraRef.current?.poner('feliz')
     if (e.fase === 'quieto') pedir('IdleJugueton')
-    recomendo({ slug: p.slug, titulo, url: p.url || null })
+    recomendo({ slug: p.slug, titulo, url: p.url || null }, [primero, ...cola].reduce((s, t) => s + tiempoLinea(t).total, 0) + 10)
     e.recomiendaEn = ahora + azar(RECOMIENDA.cada[0], RECOMIENDA.cada[1])
     e.saludaEn = Math.max(e.saludaEn, ahora + 30)
   }

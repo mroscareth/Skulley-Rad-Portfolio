@@ -124,10 +124,19 @@ export default function CinematicaOfrenda({ lang = 'es', onPortal, onFin, onTran
     cine.activo = false
     cine.fase = 'nada'
     setFase('sale')
-    // al despertar se vuelve Poltergeist (App: el remolino de runas y la skin)
-    setTimeout(() => { try { transformaRef.current?.() } catch { } }, 500)
     setTimeout(() => { cine.despertar = true }, 900)
-    setTimeout(() => onFin?.(), quietoPreferido() ? 50 : 1100)
+    // Ya de pie se deshace y se rearma Poltergeist (App, lib/transformaSkulley.js) y lo dice (Oscar, 2026-11-26).
+    // La cinemática sigue montada hasta entonces: su teclado en captura no deja moverlo a medias.
+    const pausa = (ms) => new Promise((ok) => setTimeout(ok, ms))
+    ;(async () => {
+      await pausa(1200)
+      const t0 = performance.now()
+      while (siesta.estado !== 'nada' && performance.now() - t0 < 6000) await pausa(100)
+      await pausa(250)
+      try { await transformaRef.current?.() } catch { }
+      try { window.dispatchEvent(new CustomEvent('speech-bubble-override', { detail: { text: G.despierta } })) } catch { }
+      onFin?.()
+    })()
   }, [abrirPortal, onFin])
 
   // la línea de tiempo

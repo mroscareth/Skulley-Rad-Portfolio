@@ -13,6 +13,7 @@ import ScoreHUD from './components/ScoreHUD.jsx'
 import CharacterCustomizer from './components/CharacterCustomizer.jsx'
 import DesktopWallpaper from './components/DesktopWallpaper.jsx'
 import { entrarAislado, salirAislado, leerFondo, wallpaperEstado, FONDO_KEY } from './lib/wallpaperEscritorio.js'
+import { transformarSkulley } from './lib/transformaSkulley.js'
 // CharacterPortrait y PostFX cargan @react-three/postprocessing.
 // Los lazy-cargamos para sacar esa librería del bundle inicial — Suspense
 // con fallback null no causa flicker porque ambos usos ya están condicionados
@@ -1046,9 +1047,13 @@ function SiteApp() {
   // punto más alto del remolino de runas, se la pone
   const transformarEnPoltergeist = useCallback(() => {
     unlockSkinRef.current?.('skin_poltergeist')
-    try { window.dispatchEvent(new CustomEvent('character-color-burst')) } catch { }
     try { playSfx('magiaInicia', { volume: 0.9 }) } catch { }
-    setTimeout(() => { try { setActiveSkinRef.current?.('poltergeist') } catch { } }, 700)
+    // se deshace en puntos y se rearma ya con ella, sin quitar el mundo (lib/transformaSkulley.js)
+    const poner = () => { try { setActiveSkinRef.current?.('poltergeist') } catch { } }
+    let quieto = false
+    try { quieto = window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch { }
+    if (quieto) { poner(); return Promise.resolve() }
+    return transformarSkulley(poner)
   }, [])
   const unlockSkin = useCallback((key) => {
     try { if (hasAchievement(key)) return } catch { }

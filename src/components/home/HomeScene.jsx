@@ -261,6 +261,7 @@ import LetrerosPortales from './LetrerosPortales.jsx'
 import ZonaOfrenda from './ZonaOfrenda.jsx'
 import PlazaOfrenda from './PlazaOfrenda.jsx'
 import ObjetosOfrenda from './ObjetosOfrenda.jsx'
+import TransformaSkulley from './TransformaSkulley.jsx'
 import HitosOfrenda from './HitosOfrenda.jsx'
 import SiluetasOfrenda from './SiluetasOfrenda.jsx'
 import { skulleyOculto, pideOculto, ponerOculto } from '../../lib/inventarioEscena.js'
@@ -733,6 +734,7 @@ export default function HomeScene({
             su GLB llega aparte; montados siempre, lo no puesto encogido a casi nada.
             Los que Skulley carga flotan sobre él solo con él a la vista en la home. */}
         <Suspense fallback={null}>
+          <TransformaSkulley playerRef={playerRef} />
           <ObjetosOfrenda
             playerRef={playerRef}
             mostrarCarga={Boolean(section === 'home' && homeLanded && !saliendoDeHome && !orbActiveUi && !customizeActive)}

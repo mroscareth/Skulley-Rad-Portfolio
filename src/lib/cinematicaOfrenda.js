@@ -123,6 +123,8 @@ export const GUION_FINAL = {
       { t: 'Recuerda ser muy feliz.', cara: 'feliz' },
     ],
     titulo: 'El último diseñador de la humanidad',
+    // lo que dice Skulley al levantarse ya Poltergeist (las palabras de Oscar)
+    despierta: 'Carajo, me trajeron de vuelta, espero no me pongan a trabajar.',
     saltar: 'Saltar',
   },
   en: {
@@ -146,6 +148,7 @@ export const GUION_FINAL = {
       { t: 'Remember to be very happy.', cara: 'feliz' },
     ],
     titulo: 'The last designer of humanity',
+    despierta: 'Oh my fucking god... they brought me back. I hope they don’t put me to work.',
     saltar: 'Skip',
   },
 }

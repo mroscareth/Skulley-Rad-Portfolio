@@ -76,6 +76,7 @@ export default function CharacterNormalPass({ playerRef, enabled = true, target 
   }, [])
 
   const _clearColor = useRef(new THREE.Color())
+  const vacioRef = useRef(false)
   const _footPos = useRef(new THREE.Vector3())
   const _headPos = useRef(new THREE.Vector3())
 
@@ -139,7 +140,24 @@ export default function CharacterNormalPass({ playerRef, enabled = true, target 
   // el render final (evita el "fantasma" duplicado al caminar).
   useFrame(() => {
     const root = playerRef?.current
-    if (!enabled || !root || !root.visible) return
+    if (!enabled || !root) return
+    // oculto (el Inventario, la transformación del final): el buffer queda vacío; si no, la tinta seguía
+    // dibujando el contorno del último cuadro en que se vio (Oscar, 2026-11-26)
+    if (!root.visible) {
+      if (!vacioRef.current) {
+        const prev = gl.getRenderTarget()
+        const prevAlpha = gl.getClearAlpha()
+        _clearColor.current.copy(gl.getClearColor(new THREE.Color()))
+        gl.setRenderTarget(fbo)
+        gl.setClearColor(0x000000, 0)
+        gl.clear(true, true, true)
+        gl.setRenderTarget(prev)
+        gl.setClearColor(_clearColor.current, prevAlpha)
+        vacioRef.current = true
+      }
+      return
+    }
+    vacioRef.current = false
 
     // Escala por TAMAÑO EN PANTALLA del personaje (robusto, sin adivinar
     // distancia/FOV). Chico en pantalla → escala baja → limpieza agresiva.

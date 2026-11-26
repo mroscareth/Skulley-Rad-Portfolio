@@ -118,9 +118,11 @@ export function siguienteProyecto(textos) {
   }
   return null
 }
-// Ya lo dijo en su viñeta: por un rato, picarla abre la charla de ese proyecto.
-export function recomendo(proyecto) {
-  animoMadre.recomendo = proyecto ? { ...proyecto, hasta: performance.now() / 1000 + RECOMENDO_S } : null
+// Ya lo dijo en su viñeta: por un rato, picarla abre la charla de ese proyecto. `hablaS`: lo que tarda en decirlo
+// todo (va en trozos); la ventana corre desde que termina de hablar: contada desde el primer trozo, al llegar a
+// "dame un click" casi no quedaba y la charla abría con su saludo normal (Oscar, 2026-11-26)
+export function recomendo(proyecto, hablaS = 0) {
+  animoMadre.recomendo = proyecto ? { ...proyecto, hasta: performance.now() / 1000 + hablaS + RECOMENDO_S } : null
 }
 
 // ---- Skulley contra M.A.D.R.E. (Oscar, 2026-11-19): sus bolas de fuego nunca la
