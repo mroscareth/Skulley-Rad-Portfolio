@@ -4269,6 +4269,7 @@ function SiteApp() {
           <CinematicaOfrenda
             lang={lang}
             onPortal={() => handleOfferingDelivered('section6')}
+            yaAbierto={section6Unlocked}
             onTransforma={transformarEnPoltergeist}
             onFin={() => setFinalOfrenda(false)}
           />

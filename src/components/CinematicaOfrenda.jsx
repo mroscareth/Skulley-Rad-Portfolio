@@ -37,7 +37,7 @@ const quietoPreferido = () => {
 // lo que se queda un renglón ya escrito: lo que se tarda en leerlo
 const lectura = (t) => Math.min(6500, 1500 + t.split(/\s+/).length * 300)
 
-export default function CinematicaOfrenda({ lang = 'es', onPortal, onFin, onTransforma }) {
+export default function CinematicaOfrenda({ lang = 'es', onPortal, onFin, onTransforma, yaAbierto = false }) {
   const transformaRef = useRef(onTransforma)
   transformaRef.current = onTransforma
   const G = GUION_FINAL[lang === 'en' ? 'en' : 'es']
@@ -63,8 +63,9 @@ export default function CinematicaOfrenda({ lang = 'es', onPortal, onFin, onTran
   const finRef = useRef(false)
   const nRef = useRef(0)
   const calladaRef = useRef(false)
-  // la primera vez no se salta (Oscar, 2026-11-26); ya vista, Saltar y Esc la terminan
-  const [saltable] = useState(() => finalVisto())
+  // la primera vez no se salta (Oscar, 2026-11-26); ya vista, Saltar y Esc la terminan. Con SKULLEYGLYPH ya
+  // abierto (solo lo abre esta cinemática) también: nadie se queda atrapado en una que ya vio en otra compu.
+  const [saltable] = useState(() => finalVisto() || yaAbierto)
   const regresaMusica = (segundos) => {
     if (!calladaRef.current) return
     calladaRef.current = false
@@ -106,6 +107,9 @@ export default function CinematicaOfrenda({ lang = 'es', onPortal, onFin, onTran
   const abrirPortal = useCallback(() => {
     if (portalRef.current) return
     portalRef.current = true
+    // Con el portal prendido ya cuenta como vista (y sube a la cuenta): si la pestaña se cierra antes del
+    // final, en esta u otra computadora no vuelve a arrancar sola.
+    marcarFinalVisto()
     try { onPortal?.() } catch { }
   }, [onPortal])
 

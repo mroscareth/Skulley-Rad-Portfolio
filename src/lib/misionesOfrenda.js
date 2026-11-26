@@ -275,7 +275,11 @@ export function fusionarQuest(llaves) {
   }
   if (cambio) { guardarLista(LLAVE_PEDIDAS, pedidas); guardarLista(LLAVE_HECHAS, hechas) }
   if (fusionarOfrendas({ ganadas, puestas: puestasC })) cambio = true
-  if (llaves.has(LLAVE_FINAL)) {
+  // Las seis puestas con SKULLEYGLYPH abierto también es haberla visto: solo la cinemática abre el portal, y
+  // una cuenta que la vio sin que `of_final` alcanzara a subir (la pestaña cerrada antes del final) la
+  // repetía en otra computadora (Oscar, 2026-11-26).
+  const vista = llaves.has(LLAVE_FINAL) || (puestasC.length === OFRENDAS.length && llaves.has('section6_unlocked'))
+  if (vista) {
     try {
       if (localStorage.getItem(LLAVE_FINAL_VISTO) !== '1') { localStorage.setItem(LLAVE_FINAL_VISTO, '1'); cambio = true }
     } catch { /* sin almacenamiento */ }
