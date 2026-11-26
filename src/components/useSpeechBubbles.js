@@ -1,17 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
+import { pedirTurno, soltarTurno, tiempoLinea, alCompletar, hablando, TURNO } from '../lib/turnoGlobos.js'
 
-function computeVisibleMs(txt, typingCps = 14) {
-  try {
-    const text = String(txt || '')
-    const len = text.length
-    const typingMs = Math.ceil((len / Math.max(1, typingCps)) * 1000)
-    const readingMs = 1500 + len * 35
-    const total = typingMs + readingMs
-    return Math.max(6500, Math.min(18000, total))
-  } catch {
-    return 8000
-  }
+// Lo que dura un globo sale del turno de palabra (lib/turnoGlobos.js): se escribe a TURNO.letras y,
+// ya completo, se queda lo que se tarda en leerlo. Las frases de Skulley piden turno como las de
+// Argus y M.A.D.R.E.: no cortan a nadie ni se cortan.
+function computeVisibleMs(txt) {
+  return tiempoLinea(txt).total * 1000
 }
 
 // Chained phrase pairs: when phrase at key index finishes, the value index follows.
@@ -82,7 +77,7 @@ export default function useSpeechBubbles({
     typingIdxRef.current = 0
     setDisplayText('')
     if (!text) return
-    const stepMs = Math.max(12, Math.round(1000 / Math.max(1, typingCps)))
+    const stepMs = Math.max(12, Math.round(1000 / TURNO.letras))
     const myEpoch = epochRef.current
     typingTimerRef.current = setInterval(() => {
       if (myEpoch !== epochRef.current) return
@@ -113,7 +108,12 @@ export default function useSpeechBubbles({
         } catch {}
       }
       if (!resolved) return
+      pedirTurno({ quien: 'skulley', texto: resolved, prioridad: 3, espera: 8, iniciar: () => mostrarOverride(k, idx, resolved, dur) })
+    } catch {}
+  }
 
+  const mostrarOverride = (k, idx, resolved, dur) => {
+    try {
       bumpEpoch()
       try {
         // Egg theme: only when the override comes from i18n egg phrases `portrait.eggPhrases`
@@ -134,16 +134,24 @@ export default function useSpeechBubbles({
         setFullText('')
         setDisplayText('')
         try { setTheme('normal') } catch {}
+        soltarTurno('skulley')
         scheduleNext()
       }, visibleFor)
     } catch {}
   }
 
-  // Show a specific phrase by index then schedule next (used by chaining logic)
-  const showPhraseByIdx = (idx) => {
+  // Show a specific phrase by index then schedule next (used by chaining logic). Pide turno.
+  const pendienteRef = useRef(0)
+  const showPhraseByIdx = (idx, { prioridad = 1, espera = 8 } = {}) => {
     const list = phrasesRef.current || []
     const next = list[idx] || list[0] || ''
     if (!next) { scheduleNext(); return }
+    pendienteRef.current = performance.now() + espera * 1000
+    pedirTurno({ quien: 'skulley', texto: next, prioridad, espera, iniciar: () => { pendienteRef.current = 0; mostrarFrase(idx, next) } })
+  }
+
+  const mostrarFrase = (idx, next) => {
+    bumpEpoch()
     idxRef.current = idx
     shownOnceRef.current = true
     try { setTheme('normal') } catch {}
@@ -158,14 +166,16 @@ export default function useSpeechBubbles({
       setFullText('')
       setDisplayText('')
       try { setTheme('normal') } catch {}
+      soltarTurno('skulley')
       // If this phrase triggers a chained follow-up, show it after a short pause
       if (PHRASE_CHAINS[idx] != null) {
         const followerIdx = PHRASE_CHAINS[idx]
-        // Fijo, no derivado de delayMinMs: el remate del chain debe ser rápido y no escalar con el delay ambient.
-        const chainDelay = 1100 + Math.random() * 600
+        // Fijo, no derivado de delayMinMs: el remate del chain debe ser rápido y no escalar con el delay
+        // ambient. El remate va primero en la fila del turno de palabra.
+        const chainDelay = 600 + Math.random() * 400
         showTimerRef.current = setTimeout(() => {
           if (myEpoch !== epochRef.current) return
-          showPhraseByIdx(followerIdx)
+          showPhraseByIdx(followerIdx, { prioridad: 5, espera: 10 })
         }, chainDelay)
       } else {
         scheduleNext()
@@ -293,8 +303,17 @@ export default function useSpeechBubbles({
     if (!visible) libreDesdeRef.current = performance.now() + pausaMs
   }, [visible, pausaMs])
   const ocupada = () => visibleRef.current || performance.now() < libreDesdeRef.current
+    || performance.now() < pendienteRef.current || hablando() === 'skulley'
 
   // Una frase al azar ahora mismo, sin repetir la última.
+  const fullTextRef = useRef(fullText)
+  fullTextRef.current = fullText
+  useEffect(() => alCompletar(() => {
+    if (!typingTimerRef.current) return
+    try { clearInterval(typingTimerRef.current) } catch {}
+    typingTimerRef.current = null
+    setDisplayText(fullTextRef.current)
+  }), [])
   const enabledRef = useRef(enabled)
   enabledRef.current = enabled
   const decir = () => {

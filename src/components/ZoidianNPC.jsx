@@ -17,6 +17,7 @@ import { crearMaterialMochila, crearCaraMochila } from './argus/pantallaMochila.
 import { crearRelojHolograma } from './argus/relojHolograma.js'
 import { argus, escucharArgus, avisarArgus, picarArgus, picarArgusLejos, argusEnojado, animoArgus } from '../lib/argusNpc.js'
 import { dron, avisarDron } from '../lib/droneNpc.js'
+import { pedirTurno, soltarTurno, tiempoLinea, alCompletar, TURNO } from '../lib/turnoGlobos.js'
 import HumoDron from './drone/HumoDron.jsx'
 
 // Zoidian (Argus) — NPC dueño del juego de las esferas. Vive donde antes flotaba
@@ -1169,7 +1170,8 @@ export default function ZoidianNPC({
       argus.escena = d.escena
       if (!d.escena && !d.on) { d.cara = null; d.mirar = null }
     }
-    if (msg.dice) decirRef.current?.(null, { texto: msg.dice, delay: 0, dura: (msg.dura || 3) * 1000, tecleo: msg.tecleo || 30 })
+    // el turno ya lo pidió la escena (DroneNPC): aquí solo se escribe
+    if (msg.dice) decirRef.current?.(null, { texto: msg.dice, delay: 0, tomado: true })
     if (msg.quemar) {
       quemaRef.current.t0 = performance.now()
       d.cara = 'apretados'
@@ -1180,7 +1182,7 @@ export default function ZoidianNPC({
       const como = msg.reclamo
       clearTimeout(reclamoRef.current)
       reclamoRef.current = setTimeout(() => {
-        decirRef.current?.(`zoidian.harto.${como}`, { delay: 0, dura: 3600, tecleo: 40 })
+        decirRef.current?.(`zoidian.harto.${como}`, { delay: 0, prioridad: 2, espera: 10 })
         d.furiaHasta = performance.now() / 1000 + 3.5
         d.furiaCara = como === 'cortada' ? 'furia' : 'sospecha'
       }, 900)
@@ -1213,19 +1215,25 @@ export default function ZoidianNPC({
   const cuerpoVineta = useMemo(() => ({ abajo: targetHeight * 0.55, arriba: targetHeight * 0.45 + 1.3, radio: targetHeight * 0.41 }), [targetHeight])
   const [mock, setMock] = useState({ on: false, typed: '', full: '' })
   const mockTimersRef = useRef([])
+  const pendientesRef = useRef([])
+  const completarRef = useRef(null)
+  useEffect(() => alCompletar(() => completarRef.current?.()), [])
+  useEffect(() => () => { for (const id of pendientesRef.current) clearTimeout(id) }, [])
   useEffect(() => {
     const clearTimers = () => {
       for (const id of mockTimersRef.current) { clearTimeout(id); clearInterval(id) }
       mockTimersRef.current = []
     }
-    const sayMock = (key, { delay = 700, dura = 5600, tecleo = 60, texto = null } = {}) => {
-      clearTimers()
+    // Pide turno (lib/turnoGlobos.js): no corta su frase ni la de nadie; cuando le toca se escribe a
+    // TURNO.letras y se queda lo que se tarda en leerla. `tomado`: el turno ya lo pidió una escena.
+    const sayMock = (key, { delay = 700, texto = null, prioridad = 0, espera = TURNO.esperaDef, tomado = false } = {}) => {
       // La key puede resolver a un string o a un POOL de frases (rayo.skulley); las
       // escenas con M.A.D.R.E. mandan el `texto` ya escrito.
       const resolved = texto ?? t(key)
       const full = Array.isArray(resolved) ? resolved[Math.floor(Math.random() * resolved.length)] : resolved
       if (!full) return
-      mockTimersRef.current.push(setTimeout(() => {
+      const mostrar = (d) => {
+        clearTimers()
         let i = 0
         setMock({ on: true, typed: '', full })
         const typeId = setInterval(() => {
@@ -1234,17 +1242,24 @@ export default function ZoidianNPC({
           // la quijada se mueve mientras escribe (no en espacios ni puntuación)
           if (/[\p{L}\p{N}]/u.test(full[i - 1] || '')) hablaRef.current.ultimo = performance.now()
           if (i >= full.length) clearInterval(typeId)
-        }, tecleo)
+        }, 1000 / TURNO.letras)
         mockTimersRef.current.push(typeId)
+        // si alguien abre una charla a media frase, se completa de golpe
+        completarRef.current = () => { clearInterval(typeId); i = full.length; setMock({ on: true, typed: full, full }) }
         mockTimersRef.current.push(setTimeout(() => {
+          completarRef.current = null
           setMock({ on: false, typed: '', full: '' })
-        }, dura))
-      }, delay))
+          soltarTurno('argus')
+        }, d.total * 1000))
+      }
+      const pedir = () => (tomado ? mostrar(tiempoLinea(full)) : pedirTurno({ quien: 'argus', texto: full, espera, prioridad, iniciar: mostrar }))
+      if (delay > 0) pendientesRef.current.push(setTimeout(pedir, delay))
+      else pedir()
     }
-    const burla = (key) => { sayMock(key); reaccionar('Risa', 450) }
+    const burla = (key) => { sayMock(key, { prioridad: 1 }); reaccionar('Risa', 450) }
     decirRef.current = sayMock
     // desarrollo: window.__argusDice('texto') le pone una frase (probar los globos)
-    if (import.meta.env.DEV) window.__argusDice = (texto, dura = 6000) => sayMock(texto, { delay: 0, dura })
+    if (import.meta.env.DEV) window.__argusDice = (texto) => sayMock(null, { delay: 0, texto })
     // Los rayos (Oscar, 2026-11-19): solo comenta si le pegan a alguien. A
     // Skulley, cualquiera que lo despiece (la esfera que cae en un portal, el
     // castigo de M.A.D.R.E., el easter egg); a M.A.D.R.E., el de la esfera del
@@ -1316,7 +1331,7 @@ export default function ZoidianNPC({
       if (celebra) reaccionar('Impresionado')
       if (!grande && ahora < ocupadoHasta) return
       ocupadoHasta = ahora + 2400
-      sayMock(`zoidian.juego.${key}`, { delay: 0, dura: 2600, tecleo: 35 })
+      sayMock(`zoidian.juego.${key}`, { delay: 0, prioridad: grande ? 2 : 1, espera: 4 })
     }
     const quitarJuego = escucharJuego((tipo, d) => {
       if (tipo === 'captura') {
@@ -1469,12 +1484,12 @@ export default function ZoidianNPC({
       const ahora = performance.now()
       if (ahora - lejosRef.current < 2500) return
       lejosRef.current = ahora
-      decirRef.current?.('zoidian.harto.lejos', { delay: 0, dura: 2800, tecleo: 40 })
+      decirRef.current?.('zoidian.harto.lejos', { delay: 0, prioridad: 2, espera: 5 })
       reaccionar('Saludo')
       return
     }
     const clave = r.tipo === 'rechazo' ? (r.por === 'clics' ? 'clics' : 'cortes') : 'insiste'
-    decirRef.current?.(`zoidian.harto.${clave}`, { delay: 0, dura: 3600, tecleo: 40 })
+    decirRef.current?.(`zoidian.harto.${clave}`, { delay: 0, prioridad: 2, espera: 10 })
     const d = dialogoRef.current
     d.furiaHasta = performance.now() / 1000 + 4
     d.furiaCara = 'furia'

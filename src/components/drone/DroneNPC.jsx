@@ -3,6 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import DroneModel, { INVOCAR_GOLPE_S } from './DroneModel.jsx'
 import SpeechBubble3D from '../SpeechBubble3D.jsx'
+import { pedirTurno, seguirTurno, soltarTurno, quitarDeFila, alCompletar, TURNO } from '../../lib/turnoGlobos.js'
 import SilhouetteShadow from '../SilhouetteShadow.jsx'
 import DomeShield from '../fx/DomeShield.jsx'
 import HumoDron from './HumoDron.jsx'
@@ -89,7 +90,6 @@ const PATADA = { empuje: 4.5, sube: 0.3, invoca: 0.3 }
 // y altura sobre ella se queda, cuánto la mira y cuánto dura su viñeta.
 const CURIOSA = { primera: [55, 100], cada: [160, 280], dist: 2.3, alto: 1.7, vel: 3, mira: 7.5, dice: 5.5 }
 // Las viñetas se escriben a este paso (letras por segundo).
-const LETRAS = 34
 // El rayo de la esfera corrupta: le pega si cae a menos de `radio` (en el piso,
 // bajo ella); queda quemada `dura` segundos, más abajo y meciéndose, y al final
 // se sacude (`sacude` segundos) y el hollín se va solo.
@@ -175,8 +175,8 @@ export default function DroneNPC({
   useEffect(() => {
     if (!import.meta.env.DEV) return undefined
     window.__dronOferta = () => { est.current.ofertaEspera = 0; setProbarOferta((n) => n + 1) }
-    // y window.__dronDice('texto', segundos) le pone una frase (probar los globos)
-    window.__dronDice = (texto, dura = 6) => { est.current.dice = { texto, t: 0, dura } }
+    // y window.__dronDice('texto', 'trozo 2', …) le pone una frase, en trozos si se quiere (probar los globos)
+    window.__dronDice = (texto, ...trozos) => decirRef.current?.(texto, 0, { cola: trozos })
     return () => { delete window.__dronOferta; delete window.__dronDice }
   }, [])
   const onHablarRef = useRef(onHablar)
@@ -295,7 +295,27 @@ export default function DroneNPC({
   }, [activo]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // dice algo en su viñeta (se escribe letra por letra)
-  const decir = (texto, dura) => { est.current.dice = { texto, t: 0, dura }; est.current.diceCola = [] }
+  // Pide turno (lib/turnoGlobos.js): no corta su frase ni la de nadie; cuando le toca se escribe a
+  // TURNO.letras y se queda lo que se tarda en leerla. `cola`: los trozos que siguen (una frase larga).
+  const decir = (texto, _dura, { prioridad = 0, espera = TURNO.esperaDef, cola = [] } = {}) => {
+    if (!texto) return
+    pedirTurno({
+      quien: 'madre', texto, espera, prioridad,
+      iniciar: (d) => { const e = est.current; e.dice = { texto, t: 0, dura: d.total }; e.diceCola = cola },
+    })
+  }
+  const decirRef = useRef(decir)
+  decirRef.current = decir
+  // calla lo que dice y lo que tenga en la fila (empieza una escena, la charla, la cobija…)
+  const callar = () => {
+    const e = est.current
+    e.dice = null
+    e.diceCola = []
+    soltarTurno('madre')
+    quitarDeFila('madre')
+  }
+  // si alguien abre una charla a media frase, se completa de golpe
+  useEffect(() => alCompletar(() => { const d = est.current.dice; if (d) d.t = Math.max(d.t, d.texto.length / TURNO.letras) }), [])
   const reclamoRef = useRef(0)
   useEffect(() => () => clearTimeout(reclamoRef.current), [])
   const comentaRef = useRef(0)
@@ -310,7 +330,7 @@ export default function DroneNPC({
     const regreso = e.regreso > 0
     const texto = escoger(regreso ? T.regreso : T.veCerca, regreso ? 'regreso' : 'veCerca', { seg: e.regreso, lang: langRef.current })
     e.regreso = 0
-    decir(texto, 2.6 + texto.length / LETRAS)
+    decir(texto, 0, { espera: 4 })
     cara?.poner('feliz')
     if (yaQuieta) pedir('IdleJugueton')
     e.saludaEn = ahora + azar(SALUDA.cada[0], SALUDA.cada[1])
@@ -356,7 +376,7 @@ export default function DroneNPC({
           const e2 = est.current
           if (e2.modo !== 'deambular') return
           const texto = escoger(textosRef.current[como], como, { lang: langRef.current })
-          decir(texto, 2.4 + texto.length / LETRAS)
+          decir(texto, 0, { prioridad: 2, espera: 10 })
           caraRef.current?.poner(como === 'cortada' ? 'enojada' : 'confundida')
           const ahora = performance.now() / 1000
           e2.alertaHasta = ahora + 4
@@ -379,8 +399,7 @@ export default function DroneNPC({
         const texto = escoger(lista, `uso-${propios ? slug : tipo || 'generico'}`, { lang: langRef.current })
         if (!texto) return
         const [primero, ...resto] = trozos(texto)
-        decir(primero, 2.4 + primero.length / LETRAS)
-        e2.diceCola = resto
+        decir(primero, 0, { prioridad: 1, espera: 10, cola: resto })
         caraRef.current?.poner('feliz')
         if (e2.fase === 'quieto') pedir('IdleJugueton')
         const ahora = performance.now() / 1000
@@ -406,12 +425,12 @@ export default function DroneNPC({
       if (n >= 3) {
         // la tercera: se enoja y va por él
         e.golpesEscudo = 0
-        decir(T.escudo[2], 2.6)
+        decir(T.escudo[2], 0, { prioridad: 2, espera: 10 })
         if (e.modo === 'curiosa') terminarCuriosa(false)
         dron.castigo = { alGolpe: rayoASkulley, pedido: performance.now() }
         return
       }
-      decir(T.escudo[n - 1], 4.6)
+      decir(T.escudo[n - 1], 0, { prioridad: 2, espera: 10 })
       cara?.poner(n === 1 ? 'feliz' : 'enojada')
       e.alertaHasta = performance.now() / 1000 + 6
       if (e.modo === 'curiosa') terminarCuriosa(false)
@@ -433,7 +452,7 @@ export default function DroneNPC({
       e.pos.y += PATADA.sube
       ladear(msg.patada.dx, msg.patada.dz, 1.4)
       cara?.poner('enojada')
-      decir(T.patada, 2.8)
+      decir(T.patada, 0, { prioridad: 2, espera: 10 })
       pedir('Detenerse')
     }
   }), []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -535,10 +554,9 @@ export default function DroneNPC({
     const texto = propio?.t || T.proyectoGenerico.replace('{titulo}', titulo)
     // en trozos por frase: un globo de 8 renglones no se lee
     const [primero, ...resto] = trozos(texto)
-    decir(primero, 2.4 + primero.length / LETRAS)
-    e.diceCola = [...resto, p.url
+    decir(primero, 0, { prioridad: 1, espera: 10, cola: [...resto, p.url
       ? escoger(T.pistaFuera, 'pistaFuera', { lang: langRef.current })
-      : escoger(T.pistaProyecto, 'pistaProyecto', { lang: langRef.current })]
+      : escoger(T.pistaProyecto, 'pistaProyecto', { lang: langRef.current })] })
     caraRef.current?.poner('feliz')
     if (e.fase === 'quieto') pedir('IdleJugueton')
     recomendo({ slug: p.slug, titulo, url: p.url || null })
@@ -596,8 +614,7 @@ export default function DroneNPC({
     e.meta = null
     e.mirar = null
     e.ofertaTexto = ''
-    e.dice = null
-    e.diceCola = []
+    callar()
     e.v.set(0, 0, 0)
     e.pos.y -= 0.35
     e.ladeo.vx += (Math.random() - 0.5) * 9
@@ -697,7 +714,6 @@ export default function DroneNPC({
     const fz = Math.cos(argus.rotY)
     return new THREE.Vector3(argus.pos.x + fx * CHARLA.frente + fz * CHARLA.lado, CHARLA.alto, argus.pos.z + fz * CHARLA.frente - fx * CHARLA.lado)
   }
-  const durLinea = (t) => Math.max(1.6, t.length / LETRAS + 0.9 + t.length / 45)
   const sacarEscena = () => {
     const e = est.current
     const lista = escenasArgusMadre(langRef.current).ambiente
@@ -744,8 +760,7 @@ export default function DroneNPC({
     e.modo = 'conArgus'
     e.escena = { pasos, i: -1, t: 0, hasta: CHARLA.antes, rayoEn: -1, tipo }
     e.ofertaTexto = ''
-    e.dice = null
-    e.diceCola = []
+    callar()
     e.viendo = false
     caraRef.current?.poner(tipo === 'venganza' ? 'enojada' : 'normal')
     caraRef.current?.mirar(0, 0)
@@ -795,20 +810,29 @@ export default function DroneNPC({
       return
     }
     const texto = paso.t || ''
-    const dura = durLinea(texto)
-    if (paso.quien === 'madre') {
-      // le habla al humano: lo voltea a ver; si no, a Argus
-      e.mirar = paso.mirar === 'skulley' ? 'skulley' : 'argus'
-      decir(texto, dura)
-      cara?.poner(paso.cara || 'normal')
-      if (paso.accion) pedir(paso.accion)
-      if (paso.oye !== undefined) avisarArgus({ cara: paso.oye })
-    } else {
-      e.mirar = 'argus'
-      avisarArgus({ dice: texto, dura, tecleo: 1000 / LETRAS, cara: paso.cara ?? null, accion: paso.accion, mirar: paso.mirar || 'dron' })
-      if (paso.oye) cara?.poner(paso.oye)
-    }
-    sc.hasta = sc.t + dura + CHARLA.entre
+    // cada renglón pide turno (si alguien está a media frase, la escena espera a que acabe)
+    sc.hasta = Infinity
+    const quien = paso.quien === 'madre' ? 'madre' : 'argus'
+    pedirTurno({
+      quien, texto, espera: 15, prioridad: 4,
+      iniciar: (d) => {
+        if (est.current.escena !== sc) { soltarTurno(quien); return }
+        if (quien === 'madre') {
+          // le habla al humano: lo voltea a ver; si no, a Argus
+          e.mirar = paso.mirar === 'skulley' ? 'skulley' : 'argus'
+          e.dice = { texto, t: 0, dura: d.total }
+          e.diceCola = []
+          cara?.poner(paso.cara || 'normal')
+          if (paso.accion) pedir(paso.accion)
+          if (paso.oye !== undefined) avisarArgus({ cara: paso.oye })
+        } else {
+          e.mirar = 'argus'
+          avisarArgus({ dice: texto, cara: paso.cara ?? null, accion: paso.accion, mirar: paso.mirar || 'dron' })
+          if (paso.oye) cara?.poner(paso.oye)
+        }
+        sc.hasta = sc.t + d.total + CHARLA.entre
+      },
+    })
   }
 
   // ---- la siesta de Skulley: va sobre él con la cobija y lo tapa
@@ -819,8 +843,7 @@ export default function DroneNPC({
     e.tCobija = -1
     e.dijoCobija = false
     e.ofertaTexto = ''
-    e.dice = null
-    e.diceCola = []
+    callar()
     e.viendo = false
     caraRef.current?.poner('feliz')
     const c = siesta.cobijaCentro
@@ -894,8 +917,7 @@ export default function DroneNPC({
     if (dialogo) {
       e.modo = 'dialogo'
       e.ofertaTexto = ''
-      e.dice = null
-      e.diceCola = []
+      callar()
       const p = playerRef?.current
       if (!p) return
       const fy = p.rotation.y
@@ -951,7 +973,7 @@ export default function DroneNPC({
       const T = textosRef.current
       const texto = escoger(T.despierta, 'despierta', { seg: e.despiertaSeg, lang: langRef.current })
       if (texto) {
-        decir(texto, 2.6 + texto.length / LETRAS)
+        decir(texto, 0, { prioridad: 1 })
         cara?.poner('feliz')
       }
       e.despiertaEn = 0
@@ -1026,7 +1048,7 @@ export default function DroneNPC({
         } else if (!tapa && enCuadro()) {
           const bien = comoVa(ahora) > 0
           const texto = sacar(bien ? 'bien' : 'mal')
-          decir(texto, 3.2 + texto.length / LETRAS)
+          decir(texto, 0, { prioridad: 1, espera: 4 })
           if (bien) { cara?.poner('feliz'); pedir('IdleJugueton') }
           else if (Math.random() < 0.5) cara?.poner('confundida')
           else { cara?.poner('normal'); cara?.voltear() }
@@ -1064,7 +1086,7 @@ export default function DroneNPC({
         if (!e.dijoCobija && e.tCobija > COBIJA.dice) {
           e.dijoCobija = true
           const texto = escoger(textosRef.current.cobija, 'cobija', { lang: langRef.current })
-          if (texto) decir(texto, 2.8 + texto.length / LETRAS)
+          if (texto) decir(texto, 0, { prioridad: 1 })
         }
         if (e.tCobija > COBIJA.queda) terminarCobija()
       }
@@ -1297,14 +1319,19 @@ export default function DroneNPC({
     if (e.dice) {
       e.dice.t += dt
       if (e.dice.t < e.dice.dura) {
-        texto = e.dice.texto.slice(0, Math.min(e.dice.texto.length, Math.floor(e.dice.t * LETRAS)))
+        texto = e.dice.texto.slice(0, Math.min(e.dice.texto.length, Math.floor(e.dice.t * TURNO.letras)))
         layout = e.dice.texto
-      } else if (e.diceCola.length && e.modo === 'deambular') {
-        const sigue = e.diceCola.shift()
-        e.dice = { texto: sigue, t: 0, dura: 2.4 + sigue.length / LETRAS }
       } else {
-        e.dice = null
-        e.diceCola = []
+        // el siguiente trozo de una frase larga sigue con el mismo turno, en el mismo globo
+        const cola = e.modo === 'deambular' ? e.diceCola : []
+        if (cola.length) {
+          const [sigue, ...resto] = cola
+          seguirTurno({ quien: 'madre', texto: sigue, iniciar: (d) => { e.dice = { texto: sigue, t: 0, dura: d.total }; e.diceCola = resto } })
+        } else {
+          e.dice = null
+          e.diceCola = []
+          soltarTurno('madre')
+        }
       }
     }
     if (!e.dice && e.modo === 'oferta' && e.ofertaTexto) {
@@ -1333,7 +1360,7 @@ export default function DroneNPC({
     const T = textosRef.current
     const clave = r.tipo === 'rechazo' ? (r.por === 'clics' ? 'harta' : 'rechazo') : 'insiste'
     const texto = escoger(T[clave], clave, { lang: langRef.current })
-    decir(texto, 2.4 + texto.length / LETRAS)
+    decir(texto, 0, { prioridad: 2, espera: 10 })
     caraRef.current?.poner('enojada')
     e.reclamoHasta = performance.now() / 1000 + 4
     if (r.tipo === 'insiste' && r.n === OFENDIDA.seVaEn && e.modo === 'deambular') {

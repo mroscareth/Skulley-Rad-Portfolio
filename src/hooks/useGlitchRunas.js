@@ -32,7 +32,8 @@ export function useGlitchRunas(activo = true, { sonido = true, sostieneMs = SOST
   useEffect(() => limpia, [])
   useEffect(() => { if (!activo) { limpia(); setFase(null) } }, [activo])
 
-  const disparar = useCallback(() => {
+  // `conSonido: false` para un disparo sin el hechizo (el automático del marquee al pararse en un portal)
+  const disparar = useCallback(({ conSonido = true } = {}) => {
     if (!activo || timers.current.length) return
     const quieto = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
     const pasos = quieto
@@ -44,7 +45,7 @@ export function useGlitchRunas(activo = true, { sonido = true, sostieneMs = SOST
         if (letras == null) timers.current = []
       }, t))
     }
-    if (sonido) {
+    if (sonido && conSonido) {
       playHechizo(false)
       timers.current.push(setTimeout(() => playHechizo(true), sostieneMs))
     }

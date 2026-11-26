@@ -1,4 +1,5 @@
 import { isPhoneExperience, usePhoneExperience } from './lib/mobileExperience.js'
+import { abrirTrasTurno, pausarTurnos } from './lib/turnoGlobos.js'
 import { VERSION_RAPIDA, PUERTA_DE_LLEGADA, RUTA_COMPLETA, puertaDeRuta, salirDeRapida, entrarARapida } from './lib/versionRapida.js'
 import { cambiarDeVersion, cortinaDeLlegada, volverAlInicio } from './lib/cambioDeVersion.js'
 import { PALETAS_HOME, useMomentoHome } from './lib/momentoHome.js'
@@ -2165,7 +2166,11 @@ function SiteApp() {
   const [pageHidden, setPageHidden] = useState(false)
   // Measure marquee height to push section content and position exit button
   const marqueeRef = useRef(null)
-  const faseMarquee = useMarqueeGlitch({ activo: MARQUEE_EN_RUNAS, marqueeRef, zonaRef: sectionScrollRef })
+  // parado en un portal, el marquee entra en runas y luego se glitchea solo a letras y regresa
+  const faseMarquee = useMarqueeGlitch({
+    activo: MARQUEE_EN_RUNAS, marqueeRef, zonaRef: sectionScrollRef,
+    autoClave: section === 'home' && !sphereGameActive && !customizeOpen ? nearPortalId : null,
+  })
   const [marqueeHeight, setMarqueeHeight] = useState(0)
   useEffect(() => {
     const measure = () => {
@@ -2528,7 +2533,8 @@ function SiteApp() {
     && !transitionState.active && !zoidianDialogOpen && !tutorialOpen
   const abrirDialogoDron = useCallback(() => {
     try { playSfx('click', { volume: 0.8 }) } catch { }
-    setDialogoDron(true)
+    // si alguien está a media frase en su globo, se completa y la charla abre tras un respiro
+    abrirTrasTurno(() => setDialogoDron(true))
   }, [])
   useEffect(() => {
     if (!dialogoDron || !(section !== 'home' || sphereGameActive || customizeOpen || transitionState.active)) return
@@ -2544,8 +2550,10 @@ function SiteApp() {
     if (section !== 'home' || !homeLanded || sphereGameActive || customizeOpen || transitionState.active
       || dialogoDron || tutorialOpen || !argus.cerca) return
     try { playSfx('click', { volume: 0.8 }) } catch { }
-    setZoidianDialogOpen(true)
+    abrirTrasTurno(() => setZoidianDialogOpen(true))
   }, [section, homeLanded, sphereGameActive, customizeOpen, transitionState.active, dialogoDron, tutorialOpen])
+  // con una charla abierta (las barras de cine) los globos no hablan; al cerrarla, siguen
+  useEffect(() => { pausarTurnos(dialogoDron || zoidianDialogOpen) }, [dialogoDron, zoidianDialogOpen])
   useEffect(() => {
     if (!zoidianDialogOpen || !(section !== 'home' || sphereGameActive || customizeOpen || transitionState.active)) return
     setZoidianDialogOpen(false)
