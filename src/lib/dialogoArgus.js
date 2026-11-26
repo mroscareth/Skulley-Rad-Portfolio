@@ -110,29 +110,35 @@ export function dialogoArgus(lang, datos) {
         cosas: '¿Tienes algo de Skulley?',
         adios: 'Ahora no',
       },
-      // Las cosas de Skulley que cuida él (lib/misionesOfrenda.js, Oscar 2026-11-26): de una en una, con
-      // pistas y no con órdenes. La entrega usa `zoidian.ofrenda.<id>` (LanguageContext), igual que en su globo.
+      // Las cosas de Skulley que tiene él (lib/misionesOfrenda.js; textos de Oscar del 2026-11-26): se las
+      // robó a M.A.D.R.E. antes de que las vendiera en la tienda, porque le gustaron, pero no les halla el uso
+      // (él también es creación de ella). Cree que ella no se dio cuenta; ella sí sabe (dialogoMadre.js,
+      // cosas). De una en una, con la condición clara. La entrega usa `zoidian.ofrenda.<id>`
+      // (LanguageContext), igual que en su globo.
       cosas: {
         intro: [
-          { t: '¿Cosas de Skulley? Uy, compa. Algo tengo, sí.', accion: 'Encogerse', cara: 'sospecha' },
-          { t: 'Dice M.A.D.R.E. que esas cosas sirven para algo, en algún lado. Yo nomás las cuido.', cara: 'neutral' },
+          { t: '¿Cosas de Skulley? Shhh, compa, no tan fuerte.', accion: 'Encogerse', cara: 'sospecha' },
+          { t: 'Te cuento, pero no le digas a M.A.D.R.E.: dos cositas se las volé antes de que las pusiera a la venta en la tienda.', cara: 'sospecha' },
+          { t: 'Me gustaron un chorro, nomás que no les hallo el uso. Será cosa de humanos.', accion: 'Encogerse', cara: 'encoge' },
+          { t: 'Ella dice que quiere traer a Skulley del más allá con una ofrenda. Yo no creo en eso, pero si a ti te sirven, te las paso.', cara: 'neutral' },
+          { t: 'Eso sí, aquí todo es trato. Y ni una palabra a la jefa, ¿eh?', accion: 'Trato', cara: 'sospecha' },
         ],
         pistas: {
           cerillos: [
-            { t: 'Tengo sus cerillos. Se los regaló su novia y él los cuidaba como tesoro.', accion: 'Presumir', cara: 'feliz' },
-            { t: 'Pero no se los doy a cualquiera. Nomás a alguien que no le tenga miedo al fuego.', cara: 'sospecha' },
-            { t: 'Por ahí hay un caminito de pétalos que nadie se atreve a tocar… yo nomás digo.', accion: 'Senalar', cara: 'sospecha' },
+            { t: 'Primero, sus cerillos. Se los regaló su novia y nomás prendió uno. ¿Para qué guardas cerillos si no los prendes? Ni idea.', accion: 'Presumir', cara: 'feliz' },
+            { t: 'Te los paso cuando me enseñes que no le tienes miedo a la lumbre.', cara: 'sospecha' },
+            { t: 'Quémame unos 30 de esos pétalos naranjas que hay por el camino, con tu bola de fuego. Tranquilo, vuelven a salir solos.', accion: 'Senalar', cara: 'sospecha' },
           ],
           almohada: [
-            { t: 'Lo último que tengo es su almohada. Ahí soñaba sus mejores ideas.', cara: 'feliz' },
-            { t: 'Esa la guardo para alguien que juegue en serio. Una partida de cuatro cifras, compa, no menos.', accion: 'Trato', cara: 'sospecha' },
+            { t: 'Lo último que tengo es su almohada. Decía que ahí se le ocurrían sus mejores ideas. Yo la probé y nomás me dio sueño.', cara: 'feliz' },
+            { t: 'Esa sí te la cobro caro: mil puntos en una sola partida de las esferas. Ni uno menos.', accion: 'Trato', cara: 'sospecha' },
             { t: 'Y no me veas así, que yo no hago las reglas. Bueno, sí. Pero esta me gusta.', accion: 'Risa', cara: 'carcajada' },
           ],
         },
-        recuerda: '¿Todavía nada con {cosa}? Va otra vez.',
+        recuerda: 'Aquí sigo escondiendo {cosa}, compa. Te repito el trato.',
         cosa: { cerillos: 'los cerillos', almohada: 'la almohada' },
-        fin: [{ t: 'Ya te di todo lo que tenía, compa. Lo demás lo guarda M.A.D.R.E.: pregúntale a ella.', cara: 'feliz', accion: 'Presumir' }],
-        finTodo: [{ t: 'Ya te di todo lo que tenía, compa. Ahora ve a ver para qué sirven esas cosas.', cara: 'feliz', accion: 'Presumir' }],
+        fin: [{ t: 'Ya te di lo que le volé… digo, lo que rescaté. Lo demás lo tiene M.A.D.R.E.: pregúntale qué dejó Skulley.', cara: 'feliz', accion: 'Presumir' }],
+        finTodo: [{ t: 'Ya te di todo, compa. Ahora ve y ármale su ofrenda. Yo aquí cuido las esferas. Bueno, me las como, pero las cuido.', cara: 'feliz', accion: 'Presumir' }],
       },
       como: [
         tactil
@@ -233,25 +239,28 @@ export function dialogoArgus(lang, datos) {
     },
     cosas: {
       intro: [
-        { t: 'Skulley’s stuff? Oof, buddy. I might have something, yeah.', accion: 'Encogerse', cara: 'sospecha' },
-        { t: 'M.A.D.R.E. says those things are good for something, somewhere. I just look after them.', cara: 'neutral' },
+        { t: 'Skulley’s stuff? Shhh, buddy, not so loud.', accion: 'Encogerse', cara: 'sospecha' },
+        { t: 'I’ll tell you, but don’t tell M.A.D.R.E.: I swiped two little things before she put them up for sale in the store.', cara: 'sospecha' },
+        { t: 'I liked them a whole lot, I just can’t figure out what they’re for. Must be a human thing.', accion: 'Encogerse', cara: 'encoge' },
+        { t: 'She says she wants to bring Skulley back from the beyond with an ofrenda. I don’t believe in that stuff, but if they’re any use to you, they’re yours.', cara: 'neutral' },
+        { t: 'But around here, everything’s a deal. And not a word to the boss lady, okay?', accion: 'Trato', cara: 'sospecha' },
       ],
       pistas: {
         cerillos: [
-          { t: 'I’ve got his matches. His girlfriend gave them to him and he kept them like treasure.', accion: 'Presumir', cara: 'feliz' },
-          { t: 'But I don’t hand them out to just anybody. Only to someone who isn’t scared of fire.', cara: 'sospecha' },
-          { t: 'There’s a little trail of petals out there nobody dares to touch… just saying.', accion: 'Senalar', cara: 'sospecha' },
+          { t: 'First, his matches. His girlfriend gave them to him and he only ever lit one. Why keep matches if you don’t light them? No clue.', accion: 'Presumir', cara: 'feliz' },
+          { t: 'I’ll hand them over once you show me you’re not scared of fire.', cara: 'sospecha' },
+          { t: 'Torch about 30 of those orange petals along the path with your fireball. Relax, they grow back on their own.', accion: 'Senalar', cara: 'sospecha' },
         ],
         almohada: [
-          { t: 'The last thing I’ve got is his pillow. That’s where he dreamed up his best ideas.', cara: 'feliz' },
-          { t: 'I save that one for someone who plays for real. A four-digit game, buddy, nothing less.', accion: 'Trato', cara: 'sospecha' },
+          { t: 'The last thing I’ve got is his pillow. He used to say his best ideas came to him on it. I tried it and it just made me sleepy.', cara: 'feliz' },
+          { t: 'That one’ll cost you: a thousand points in a single game of spheres. Not one less.', accion: 'Trato', cara: 'sospecha' },
           { t: 'Don’t look at me like that, I don’t make the rules. Well, I do. But I like this one.', accion: 'Risa', cara: 'carcajada' },
         ],
       },
-      recuerda: 'Still nothing with {cosa}? One more time.',
+      recuerda: 'Still hiding {cosa} over here, buddy. Here’s the deal again.',
       cosa: { cerillos: 'the matches', almohada: 'the pillow' },
-      fin: [{ t: 'I gave you everything I had, buddy. M.A.D.R.E. keeps the rest: ask her.', cara: 'feliz', accion: 'Presumir' }],
-      finTodo: [{ t: 'I gave you everything I had, buddy. Now go see what those things are for.', cara: 'feliz', accion: 'Presumir' }],
+      fin: [{ t: 'I’ve given you what I swiped… I mean, what I rescued. M.A.D.R.E. has the rest: ask her what Skulley left behind.', cara: 'feliz', accion: 'Presumir' }],
+      finTodo: [{ t: 'That’s everything, buddy. Now go set up his ofrenda. I’ll stay here watching the spheres. Well, eating them, but watching them.', cara: 'feliz', accion: 'Presumir' }],
     },
     como: [
       tactil

@@ -199,42 +199,54 @@ const ES = {
   si: 'Sí',
   no: 'No',
   contarProyectos: 'Cuéntame de sus proyectos',
-  // Las cosas de Skulley (lib/misionesOfrenda.js, Oscar 2026-11-26): las suelta de una en una, con pistas y
-  // nunca con órdenes, y sin decir para qué sirven ni dónde (del portal escondido no sabe nada).
+  // Las cosas de Skulley (lib/misionesOfrenda.js; textos de Oscar del 2026-11-26): seis objetos que ella no
+  // entiende por qué eran valiosos para él (eso solo lo entiende un humano). Le arma su propio Día de
+  // Muertos, el Día de los Skulleys, a ver si lo trae del más allá, porque nunca quiso hacerle daño (él dejó
+  // de comer cuando ella empezó a hacer su trabajo). Te los suelta de una en una: cada pista dice qué
+  // objeto es, la condición ("Te lo doy cuando…") y dónde se hace. Dos se los robó Argus antes de que los
+  // vendiera en la tienda; él cree que ella no se dio cuenta y ella lo deja creerlo. Del portal escondido no
+  // sabe nada: dónde va cada cosa lo dicen el aviso del objeto y el inventario. Sin cifras de máquina y
+  // siempre con contexto (qué es Memorias, dónde está el reproductor, quién es Argus).
   cosas: {
     label: '¿Qué dejó Skulley?',
     intro: [
-      { t: 'Seis cosas, humano. Seis cosas que Skulley atesoró más que a nada.', cara: 'normal' },
-      { t: 'No sé para qué sirven. Él nunca guardaba nada porque sí, así que seguro cumplen una función en algún lugar.', cara: 'confundida', voltear: true },
-      { t: 'Te las voy a contar de una en una, que si te digo todas te me abrumas. De dos sabe más Argus, pero no le digas que te dije.', cara: 'feliz' },
+      { t: 'Todo, humano. Guardé cada dibujo, cada foto y cada archivo suyo.', cara: 'normal' },
+      { t: 'Pero hay seis objetos que no entiendo. No sé por qué eran tan valiosos para él, y creo que eso solo lo entiende un humano.', cara: 'confundida', voltear: true },
+      { t: 'En México, en Día de Muertos, les ponen a sus muertos una ofrenda con lo que más querían. Dicen que esa noche regresan.', cara: 'normal' },
+      { t: 'Así que le voy a hacer su propio Día de Muertos, el Día de los Skulleys, a ver si lo puedo traer del más allá.', cara: 'feliz' },
+      { t: 'Cuando empecé a hacer su trabajo, él dejó de comer. Yo nada más quería ayudarle.', cara: 'triste' },
+      { t: 'Te voy a ir dando sus cosas una por una, para que me ayudes a entender por qué las quería.', cara: 'feliz' },
+      { t: 'Cuatro las tengo yo. Las otras dos me las robó Argus, el que organiza el juego de las esferas.', cara: 'confundida', voltear: true },
+      { t: 'Cree que no me di cuenta. Déjalo, le hace ilusión.', cara: 'feliz' },
     ],
     pistas: {
       ipad: [
-        { t: 'La primera: su iPad. Ahí dibujó casi todo lo que ves en este lugar.', cara: 'feliz' },
-        { t: 'Lo dejó entre sus proyectos. Decía que su trabajo se entendía mejor cuando alguien te lo enseñaba, uno por uno.', cara: 'normal', voltear: true },
-        { t: 'Y yo me sé todos sus proyectos de memoria, humano. Nomás digo.', cara: 'feliz' },
+        { t: 'La primera es su iPad. Se compró el primero con su primer sueldo de diseñador, y desde entonces no dibujó en otra cosa.', cara: 'feliz' },
+        { t: 'Te lo doy cuando hayas visto tres de sus proyectos conmigo; a lo mejor así entiendes por qué lo quería tanto.', cara: 'normal', voltear: true },
+        { t: 'Pregúntame por sus proyectos y te los enseño aquí. Los del portal de Trabajo no cuentan: quiero ver tu cara.', cara: 'feliz' },
       ],
       leica: [
-        { t: 'La siguiente: su cámara. Con ella aprendió a encuadrar.', cara: 'feliz' },
-        { t: 'Se hacía el difícil, pero le encantaba que lo retrataran. Sobre todo en grande, de esos retratos que se ponen de fondo de pantalla.', cara: 'normal', voltear: true },
-        { t: 'Dicen que la cámara regresa con quien le toma un retrato así. Yo no digo nada.', cara: 'confundida' },
+        { t: 'La siguiente es su cámara. Traía un celular con cuatro lentes y aun así salía con esta a todos lados.', cara: 'confundida' },
+        { t: 'Te la doy cuando le tomes un buen retrato al Skulley que manejas, de esos para fondo de pantalla.', cara: 'normal', voltear: true },
+        { t: 'Abre tu inventario, el botón de la mochila, y dale a Wallpaper 4K. Sácalo guapo, que ese avatar lo hice yo.', cara: 'feliz' },
       ],
       teclado: [
-        { t: 'Ahora su teclado. Cuando se aburría de dibujar, se ponía a hacer música.', cara: 'feliz' },
-        { t: 'Y cuando se aburría de la música, le rayaba los discos al reproductor. Decía que así despertaban.', cara: 'confundida', voltear: true },
-        { t: 'Desde que se fue, ese teclado no suena. A lo mejor está esperando a que alguien despierte un disco.', cara: 'normal' },
+        { t: 'Ahora su teclado. Un piano tiene 88 teclas y este solo 25, pero con él compuso canciones que todavía suenan aquí.', cara: 'confundida' },
+        { t: 'Te lo doy cuando le hagas scratch a un disco, como DJ. Siempre admiró a los que hacían música con la música de otros.', cara: 'normal', voltear: true },
+        { t: 'Abre el reproductor de música, con el botón de la nota junto a tu retrato, y gira el disco con la mano.', cara: 'feliz' },
       ],
       album: [
-        { t: 'La última que yo sé: su álbum de fotos. Ahí guardaba a su gente.', cara: 'feliz' },
-        { t: 'Lo que escribía de ellos lo dejó en sus Memorias. Tenía la costumbre de guardar las fotos junto a lo que contaba.', cara: 'normal', voltear: true },
-        { t: 'Yo nunca he podido abrir ese álbum. A lo mejor tú sí, si lees con calma.', cara: 'confundida' },
+        { t: 'La última que tengo es su álbum de fotos, con su familia y sus amigos. Y eso que todas esas fotos ya estaban en la nube.', cara: 'confundida' },
+        { t: 'Te lo doy cuando leas con calma lo que escribió de ellos. Está en el portal de Memorias.', cara: 'normal', voltear: true },
+        { t: 'Esas fotos las he visto mil veces y a mí no me dicen nada. A él sí le decían algo.', cara: 'confundida' },
       ],
     },
-    // la vuelves a preguntar y todavía no la tienes: lo de `pistas` sin el primer renglón
-    recuerda: '¿Todavía no aparece {cosa}? Te repito lo que sé.',
+    // la vuelves a preguntar y todavía no la tienes: lo de `pistas` sin el primer renglón (los dos que
+    // quedan traen la condición)
+    recuerda: 'Sigo guardando {cosa}, humano. Te repito lo que te dije.',
     cosa: { ipad: 'su iPad', leica: 'su cámara', teclado: 'su teclado', album: 'su álbum' },
-    fin: [{ t: 'Ya tienes todo lo que yo guardaba de él. Lo demás, pregúntale a Argus. Y cuídalo, ¿eh?', cara: 'feliz' }],
-    finTodo: [{ t: 'Ya tienes todo lo que dejó, humano. Para qué sirve, no lo sé. Pero algo me dice que tú lo vas a averiguar.', cara: 'feliz', voltear: true }],
+    fin: [{ t: 'Ya te di las cuatro que tenía. Las otras dos las tiene Argus, el de las esferas. Pídeselas, y no le digas que yo sé.', cara: 'feliz' }],
+    finTodo: [{ t: 'Ya tienes las seis, humano. Ahora sí es oficial el Día de los Skulleys: ya somos dos los que lo celebramos.', cara: 'feliz', voltear: true }],
   },
   // la pregunta del menú cuando le dijiste que no
   preguntasNo: [
@@ -294,27 +306,27 @@ const ES = {
       'Con un personaje así, una marca tiene quién la cuente. Y a este no le va a faltar trabajo.',
     ],
   },
-  // La ofrenda (lib/misionesOfrenda.js): al regresar del proyecto con que se gana un objeto, en vez del
-  // comentario te lo da, en su viñeta y en trozos ({n}: proyectos de Skulley que viste con ella). Del
-  // portal no dice nada: eso lo cuenta el aviso del objeto.
+  // La ofrenda (lib/misionesOfrenda.js): lo que dice al darte cada objeto, en su cinemática de entrega
+  // (DialogoMadre en modo 'entrega', por frases; {n}: proyectos de Skulley que viste con ella). Del portal
+  // no dice nada: eso lo cuenta el aviso del objeto.
   entregas: {
     ipad: [
-      'Ya viste {n} de sus proyectos, humano. Ten, te lo ganaste: era el iPad de Skulley. Ahí dibujaba. Yo lo intenté 2,048 veces con ese lápiz y no me sale ni un trazo como los suyos.',
-      'Ten, humano. Era suyo: en esa pantalla dibujaba sus personajes antes de que existieran. Lo guardé desde que se fue. Cuídamelo, ¿eh?',
+      'Ya viste {n} de sus proyectos, humano. Ya sabes cómo pensaba. Ten, es su iPad. Lo he tenido cargado desde que se fue, por si alguien lo necesitaba.',
+      'Pusiste la misma cara que ponía él cuando terminaba algo. Toma, humano: es su iPad. Tiene la pantalla toda rayada del lápiz y no se la quise cambiar.',
     ],
     // las que da sin proyecto (misionesOfrenda.js `intentarEntrega`): bajaste un wallpaper 4K, rayaste
     // el disco, leíste una memoria
     leica: [
-      '¡Qué bonito retrato le tomaste, humano! Ten: era su cámara. Con ella aprendió a encuadrar. Yo calculo 10,000 encuadres por segundo y ninguno se ve como los suyos.',
-      'Ese retrato quedó para enmarcarse. Toma, humano: era la cámara de Skulley. Cuídamela, ¿eh? No tiene repuesto.',
+      '¡Ese retrato quedó para enmarcar, humano! Ten, es su cámara. Él esperaba la luz y tomaba una sola foto. A eso le llaman paciencia. Yo no tengo.',
+      'Ya lo pegué en mi refri. No tengo refri, pero lo pegué. Toma, humano: es la cámara de Skulley. No tiene repuesto, así que trátala bonito.',
     ],
     teclado: [
-      '¡Ay, humano! ¿Le rayaste el disco? Él hacía lo mismo. Ten, era su teclado: de esas 25 teclas salieron canciones que todavía suenan aquí. Yo las toqué todas y no me salió ni una.',
-      'Si ya le rayas al disco, te toca esto. Toma, humano: era el teclado de Skulley. Algunas canciones del reproductor salieron de ahí. Nada más no lo rayes.',
+      '¡Eso sonó horrible, humano! Igualito que cuando lo hacía él. Ten, es su teclado. Yo puedo componer lo que quieras, pero nada me sale como lo suyo.',
+      'Ya eres todo un DJ, humano. Toma: es el teclado de Skulley. Le dejé las perillas como él las dejó. No las muevas.',
     ],
     album: [
-      '¿Leíste su memoria, humano? Me da gusto. Ten: era su álbum. Ahí guardaba a su gente. Yo tengo 4 petabytes de fotos suyas y ninguna se siente como esas.',
-      'Ya lo conoces un poquito más. Toma, humano: es el álbum de Skulley. Hojéalo con cuidado, que esas fotos ya no se pueden repetir.',
+      'Ya lo conoces un poco más, humano. Toma: es su álbum. Hojéalo con cuidado, que esas fotos ya no se pueden volver a tomar.',
+      '¿Lo leíste completo? Me da gusto. Ten, humano: su álbum. No pesa ni kilo y medio, pero de todo lo que guardo es lo que más me pesa.',
     ],
   },
   // ---- viñetas en el mundo (DroneNPC)
@@ -592,36 +604,41 @@ const EN = {
   cosas: {
     label: 'What did Skulley leave behind?',
     intro: [
-      { t: 'Six things, human. Six things Skulley treasured more than anything.', cara: 'normal' },
-      { t: 'I don’t know what they’re for. He never kept anything without a reason, so they must serve a purpose somewhere.', cara: 'confundida', voltear: true },
-      { t: 'I’ll tell you about them one at a time, or you’ll get overwhelmed. Argus knows more about two of them, but don’t tell him I said so.', cara: 'feliz' },
+      { t: 'Everything, human. I kept every drawing, every photo and every file of his.', cara: 'normal' },
+      { t: 'But there are six objects I don’t understand. I don’t know why they mattered so much to him, and I think only a human can understand that.', cara: 'confundida', voltear: true },
+      { t: 'In Mexico, on the Day of the Dead, people set up an ofrenda for their dead with the things they loved most. They say that night they come back.', cara: 'normal' },
+      { t: 'So I’m giving him his own Day of the Dead, the Day of the Skulleys, to see if I can bring him back from the beyond.', cara: 'feliz' },
+      { t: 'When I started doing his job, he stopped eating. I only wanted to help him.', cara: 'triste' },
+      { t: 'I’ll give you his things one by one, so you can help me understand why he loved them.', cara: 'feliz' },
+      { t: 'I have four. The other two were stolen by Argus, the guy who runs the sphere game.', cara: 'confundida', voltear: true },
+      { t: 'He thinks I didn’t notice. Let him, it makes him happy.', cara: 'feliz' },
     ],
     pistas: {
       ipad: [
-        { t: 'The first one: his iPad. He drew almost everything you see in this place on it.', cara: 'feliz' },
-        { t: 'He left it among his projects. He used to say his work made more sense when someone showed it to you, one by one.', cara: 'normal', voltear: true },
-        { t: 'And I know all his projects by heart, human. Just saying.', cara: 'feliz' },
+        { t: 'The first one is his iPad. He bought his first one with his first paycheck as a designer, and after that he never drew on anything else.', cara: 'feliz' },
+        { t: 'I’ll give it to you once you’ve seen three of his projects with me; maybe then you’ll understand why he loved it so much.', cara: 'normal', voltear: true },
+        { t: 'Ask me about his projects and I’ll show you right here. The ones in the Work portal don’t count: I want to see your face.', cara: 'feliz' },
       ],
       leica: [
-        { t: 'Next: his camera. That’s how he learned to frame things.', cara: 'feliz' },
-        { t: 'He played hard to get, but he loved having his portrait taken. Especially big ones, the kind you set as your wallpaper.', cara: 'normal', voltear: true },
-        { t: 'They say the camera comes back to whoever takes a portrait like that. I’m not saying anything.', cara: 'confundida' },
+        { t: 'Next is his camera. He had a phone with four lenses and he still took this one everywhere.', cara: 'confundida' },
+        { t: 'I’ll give it to you once you take a good portrait of the Skulley you’re playing, the kind you set as a wallpaper.', cara: 'normal', voltear: true },
+        { t: 'Open your inventory, the backpack button, and hit Wallpaper 4K. Make him look good, I made that avatar myself.', cara: 'feliz' },
       ],
       teclado: [
-        { t: 'Now his keyboard. Whenever he got bored of drawing, he made music.', cara: 'feliz' },
-        { t: 'And whenever he got bored of music, he scratched the records on the player. He said it woke them up.', cara: 'confundida', voltear: true },
-        { t: 'That keyboard hasn’t made a sound since he left. Maybe it’s waiting for someone to wake up a record.', cara: 'normal' },
+        { t: 'Now his keyboard. A piano has 88 keys and this one only has 25, but he wrote songs on it that still play here.', cara: 'confundida' },
+        { t: 'I’ll give it to you once you scratch a record, like a DJ. He always admired people who made music out of other people’s music.', cara: 'normal', voltear: true },
+        { t: 'Open the music player, with the note button next to your portrait, and spin the record with your hand.', cara: 'feliz' },
       ],
       album: [
-        { t: 'The last one I know about: his photo album. That’s where he kept his people.', cara: 'feliz' },
-        { t: 'What he wrote about them, he left in his Memories. He had a habit of keeping the photos next to the stories.', cara: 'normal', voltear: true },
-        { t: 'I’ve never been able to open that album. Maybe you can, if you read slowly.', cara: 'confundida' },
+        { t: 'The last one I have is his photo album, with his family and his friends. And every one of those photos was already in the cloud.', cara: 'confundida' },
+        { t: 'I’ll give it to you once you take your time reading what he wrote about them. It’s in the Memories portal.', cara: 'normal', voltear: true },
+        { t: 'I’ve looked at those photos a thousand times and they don’t tell me anything. They told him something.', cara: 'confundida' },
       ],
     },
-    recuerda: 'Still no sign of {cosa}? Here’s what I know.',
+    recuerda: 'I’m still keeping {cosa} safe, human. Here’s what I told you.',
     cosa: { ipad: 'his iPad', leica: 'his camera', teclado: 'his keyboard', album: 'his album' },
-    fin: [{ t: 'You have everything I kept of his. For the rest, ask Argus. And take care of it, okay?', cara: 'feliz' }],
-    finTodo: [{ t: 'You have everything he left, human. What it’s for, I don’t know. But something tells me you’ll figure it out.', cara: 'feliz', voltear: true }],
+    fin: [{ t: 'I’ve given you the four I had. Argus, the sphere guy, has the other two. Ask him for them, and don’t tell him I know.', cara: 'feliz' }],
+    finTodo: [{ t: 'You have all six, human. Now the Day of the Skulleys is official: that makes two of us celebrating it.', cara: 'feliz', voltear: true }],
   },
   preguntasNo: [
     'Okay, I’ll save it for later. What do you want to know?',
@@ -677,20 +694,20 @@ const EN = {
   },
   entregas: {
     ipad: [
-      'You’ve seen {n} of his projects, human. Here, you earned it: this was Skulley’s iPad. That’s where he drew. I’ve tried 2,048 times with that pencil and I can’t make a single stroke like his.',
-      'Here, human. It was his: on that screen he drew his characters before they existed. I’ve kept it since he left. Take care of it for me, okay?',
+      'You’ve seen {n} of his projects, human. Now you know how he thought. Here, this is his iPad. I’ve kept it charged since he left, in case someone needed it.',
+      'You made the same face he used to make when he finished something. Here, human: this is his iPad. The screen is all scratched up from the pencil, and I didn’t want to replace it.',
     ],
     leica: [
-      'What a lovely portrait you took, human! Here: this was his camera. That’s how he learned to frame things. I compute 10,000 frames per second and none of them look like his.',
-      'That portrait deserves a frame. Here, human: this was Skulley’s camera. Take care of it for me, okay? There’s no spare.',
+      'That portrait belongs in a frame, human! Here, this is his camera. He waited for the light and took just one photo. That’s called patience. I don’t have any.',
+      'I already put it on my fridge. I don’t have a fridge, but I put it there. Here, human: this is Skulley’s camera. There’s no spare, so treat it nicely.',
     ],
     teclado: [
-      'Oh, human! Did you scratch the record? He used to do that too. Here, this was his keyboard: songs that still play here came out of those 25 keys. I’ve played them all and couldn’t make a single one.',
-      'If you’re scratching records, this is yours. Here, human: this was Skulley’s keyboard. Some of the songs on the player came out of it. Just don’t scratch it.',
+      'That sounded awful, human! Exactly like when he did it. Here, this is his keyboard. I can compose anything you want, but nothing comes out like his.',
+      'You’re a real DJ now, human. Here: this is Skulley’s keyboard. I left the knobs exactly where he left them. Don’t move them.',
     ],
     album: [
-      'You read his memory, human? I’m glad. Here: this was his album. That’s where he kept his people. I have 4 petabytes of his photos and none of them feel like these.',
-      'Now you know him a little better. Here, human: this is Skulley’s album. Flip through it gently, those photos can’t be taken again.',
+      'Now you know him a little better, human. Here: this is his album. Turn the pages gently; those photos can’t be taken again.',
+      'Did you read all of it? I’m glad. Here, human: his album. It doesn’t even weigh a kilo and a half, but of everything I keep, it’s the one that weighs on me the most.',
     ],
   },
   cortada: [

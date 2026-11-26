@@ -375,14 +375,14 @@ const resources = {
       },
       // La ofrenda (lib/misionesOfrenda.js): te llama de lejos y te da lo que te ganaste.
       ofrenda: {
-        llama: ['Hey, buddy! Come here a sec, I got something for you.', 'Psst! Over here, buddy. Got something for you.', 'Buddy! Don’t pretend you didn’t hear me, come here.'],
+        llama: ['Hey, buddy! Come here a sec, I’ve got your thing.', 'Psst! Over here, buddy. What I promised you, I’ve got it right here.', 'Buddy! Don’t pretend you didn’t hear me, come get your stuff.'],
         cerillos: [
-          'You’re the one burning the petals? Since you like fire so much, take these matches. They were Skulley’s. Just don’t tell M.A.D.R.E. I gave them to you.',
-          'Saw the smoke from here, buddy. Here, these were Skulley’s: he kept them like treasure. He only used one. You’ve burned like 30 petals already, so take care of them.',
+          'I see you like fire, buddy. Here, Skulley’s matches: he treated them like treasure. And if M.A.D.R.E. asks, you don’t know where they came from.',
+          'Saw the smoke from here, buddy. A deal’s a deal: Skulley’s matches. Only one’s burnt, the one he lit. Don’t use them up.',
         ],
         almohada: [
-          'Over a thousand points, buddy! Now that’s playing. Here, this was Skulley’s pillow. You earned it: go take a nap.',
-          'That game wore me out just watching. Here, this was Skulley’s pillow. That one goes all the way behind the portal, okay?',
+          'Over a thousand, buddy! Now that’s playing. Here, Skulley’s pillow. That one goes last, behind the broken portal, once the other five are in place.',
+          'That game wore me out just watching. Here, Skulley’s pillow. It goes all the way behind the portal, and last, okay? The other five first.',
         ],
       },
       // Empujón por invadirle el espacio (distinto del rayo: acá el tema es
@@ -916,14 +916,14 @@ const resources = {
       },
       // La ofrenda (lib/misionesOfrenda.js): te llama de lejos y te da lo que te ganaste.
       ofrenda: {
-        llama: ['¡Ey, compa! Ven tantito, te tengo algo.', '¡Psst! Acá, compa. Tengo algo para ti.', '¡Compa! No te hagas, ven para acá.'],
+        llama: ['¡Ey, compa! Ven tantito, ya tengo lo tuyo.', '¡Psst! Acá, compa. Lo que te prometí, aquí lo tengo.', '¡Compa! No te hagas, ven por lo tuyo.'],
         cerillos: [
-          '¿Tú andas quemando los pétalos? Ya que te gusta el fuego, ten estos cerillos. Eran de Skulley. Nada más no le digas a M.A.D.R.E. que te los di.',
-          'Vi el humo desde acá, compa. Ten, eran de Skulley: los guardaba como tesoro. Solo usó uno. Tú ya quemaste como 30 pétalos, así que cuídalos.',
+          'Ya vi que te gusta la lumbre, compa. Ten, los cerillos de Skulley: los tenía como tesoro. Y si M.A.D.R.E. pregunta, tú no sabes de dónde salieron.',
+          'Vi el humo desde acá, compa. Trato es trato: los cerillos de Skulley. Nomás uno está quemado, el que prendió él. No me los gastes.',
         ],
         almohada: [
-          '¡Pasaste de mil puntos, compa! Eso sí es jugar. Ten, era la almohada de Skulley. Te la ganaste: ve a echarte un sueñito.',
-          'Con esa partida hasta yo me cansé de verte. Toma, era la almohada de Skulley. Esa va hasta atrás del portal, ¿eh?',
+          '¡Pasaste de mil, compa! Eso sí es jugar. Ten, la almohada de Skulley. Esa va al último, atrás del portal, cuando ya estén las otras cinco.',
+          'Con esa partida hasta yo me cansé de verte. Toma, la almohada de Skulley. Esa va hasta atrás del portal, y al último, ¿eh? Primero las otras cinco.',
         ],
       },
       // Empujón por invadirle el espacio (distinto del rayo: acá el tema es

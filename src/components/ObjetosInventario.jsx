@@ -20,7 +20,6 @@ import { playSfx } from '../lib/sfx.js'
 // miniaturas de los chips se pintan una sola vez con un renderer propio que se tira al terminar, y el
 // objeto de la derecha vive en un Canvas chico solo mientras se ve la pestaña.
 
-const FEMENINO = new Set(['leica', 'cerillos', 'almohada'])
 const tieneOfrenda = (id) => ofrendaPuesta(id) || ofrendaEnMano(id)
 const MINI = { tam: 192, lado: 1.3 }
 
@@ -188,8 +187,8 @@ function NombreGlitch({ texto, activo }) {
 function pistaDe(id, h, L) {
   if (misionPedida(id) && h.pista?.[L]) return h.pista[L]
   const madre = ENTREGA[id] === 'madre'
-  if (L === 'en') return madre ? 'M.A.D.R.E. knows something about this. Ask her.' : 'Argus knows something about this. Ask him.'
-  return madre ? 'M.A.D.R.E. sabe algo de esto. Pregúntale.' : 'Argus sabe algo de esto. Pregúntale.'
+  if (L === 'en') return madre ? 'M.A.D.R.E. has this one. Ask her what Skulley left behind.' : 'Argus, the guy who runs the sphere game, has this one. Ask him if he’s got anything of Skulley’s.'
+  return madre ? 'Esto lo tiene M.A.D.R.E. Pregúntale qué dejó Skulley.' : 'Esto lo tiene Argus, el que organiza el juego de las esferas. Pregúntale si tiene algo de Skulley.'
 }
 
 // A la derecha: el nombre grande con glitch y abajo su historia y dónde va.
@@ -203,8 +202,8 @@ export function TextoObjeto({ lang = 'es', id, activo = false, compacta = false 
   const donde = puesta
     ? (L === 'es' ? 'Ya está en la ofrenda.' : "It's already on the ofrenda.")
     : id === 'almohada'
-      ? (L === 'es' ? 'Llévala atrás del portal que no funciona, junto a las barricadas.' : 'Take it behind the broken portal, by the barricades.')
-      : (L === 'es' ? `Llév${FEMENINO.has(id) ? 'ala' : 'alo'} a su piedra, en el portal que no funciona.` : 'Take it to its stone at the broken portal.')
+      ? (L === 'es' ? 'Va al último, atrás del portal que no funciona, junto a las barricadas.' : 'It goes last, behind the broken portal, by the barricades.')
+      : (L === 'es' ? 'Va junto a su piedra, en el portal que no funciona: sigue los pétalos de cempasúchil.' : 'It goes by its stone at the broken portal: follow the marigold petals.')
   return (
     <div className={`@container flex flex-col ${compacta ? 'w-full max-w-sm items-center text-center' : 'w-full'}`}>
       <div className="cc-pieza w-full"><NombreGlitch key={`${id}-${nombre}`} texto={nombre} activo={activo} /></div>

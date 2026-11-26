@@ -44,44 +44,45 @@ export function ganarOfrenda(id) {
 
 // Lo que dice cada objeto en el inventario (Inventario → Objetos, Oscar, 2026-11-25). La del iPad es
 // de Oscar; las demás son borradores para que él las ajuste. Skulley ya no está: van en pasado. `pista`
-// es lo que se lee en su lugar mientras no lo tienes y ya te lo soltaron: la pista, nunca una orden
-// (Oscar). Si todavía no te lo sueltan, el inventario solo dice a quién preguntarle (ENTREGA).
+// es lo que se lee en su lugar mientras no lo tienes y ya te lo soltaron: quién te lo da y qué hay que
+// hacer, dicho claro (Oscar, 2026-11-26: las pistas veladas mandaban a donde no era). Si todavía no te
+// lo sueltan, el inventario solo dice a quién preguntarle (ENTREGA).
 export const HISTORIAS = {
   ipad: {
     nombre: { es: 'iPad', en: 'iPad' },
     es: 'El primer sueldo de Skulley como diseñador se fue en un iPad, y desde entonces fue su herramienta favorita para dibujar.',
     en: "Skulley's first paycheck as a designer went on an iPad, and from then on it was his favorite drawing tool.",
-    pista: { es: 'Lo dejó entre sus proyectos. Decía que su trabajo se entiende mejor cuando alguien te lo enseña, uno por uno.', en: 'He left it among his projects. He used to say his work makes more sense when someone shows it to you, one by one.' },
+    pista: { es: 'M.A.D.R.E. te lo da cuando veas tres de sus proyectos con ella. Pregúntale por ellos.', en: 'M.A.D.R.E. gives it to you once you’ve seen three of his projects with her. Ask her about them.' },
   },
   leica: {
     nombre: { es: 'Cámara', en: 'Camera' },
     es: 'Con esta cámara Skulley aprendió a ver: encuadrar, esperar la luz y disparar una sola vez. Muchas de sus composiciones empezaron como fotos.',
     en: 'With this camera Skulley learned to see: frame it, wait for the light and shoot once. Many of his compositions started as photos.',
-    pista: { es: 'Le encantaba que lo retrataran en grande, de esos retratos que se ponen de fondo de pantalla. Dicen que la cámara regresa con quien le toma uno así.', en: 'He loved big portraits, the kind you set as your wallpaper. They say the camera comes back to whoever takes one like that.' },
+    pista: { es: 'M.A.D.R.E. te la da cuando le tomes un retrato en 4K al Skulley que manejas, con el botón Wallpaper 4K de aquí del inventario.', en: 'M.A.D.R.E. gives it to you once you take a 4K portrait of the Skulley you’re playing, with the Wallpaper 4K button right here in the inventory.' },
   },
   album: {
     nombre: { es: 'Álbum', en: 'Album' },
     es: 'Aquí guardaba a su gente: su familia, sus amigos y quienes lo acompañaron desde el principio. Lo abría cuando se le olvidaba para quién hacía todo esto.',
     en: 'This is where he kept his people: his family, his friends and everyone who was there from the start. He opened it whenever he forgot who all of this was for.',
-    pista: { es: 'Guardaba las fotos de su gente junto a lo que escribía de ellos en sus Memorias.', en: 'He kept the photos of his people next to what he wrote about them in his Memories.' },
+    pista: { es: 'M.A.D.R.E. te lo da cuando leas lo que escribió de su gente, en el portal de Memorias.', en: 'M.A.D.R.E. gives it to you once you read what he wrote about his people, in the Memories portal.' },
   },
   teclado: {
     nombre: { es: 'Teclado', en: 'Keyboard' },
     es: 'Cuando ya no quería dibujar, Skulley componía. De estas 25 teclas salieron canciones que todavía suenan en el reproductor.',
     en: "When he didn't feel like drawing, Skulley wrote music. Songs that still play on the jukebox came out of these 25 keys.",
-    pista: { es: 'No suena desde que se fue. Cuando se aburría de la música, le rayaba los discos al reproductor: decía que así despertaban.', en: 'It hasn\'t made a sound since he left. When he got bored of music, he scratched the records on the player: he said it woke them up.' },
+    pista: { es: 'M.A.D.R.E. te lo da cuando le hagas scratch a un disco en el reproductor de música (el botón de la nota, junto a tu retrato).', en: 'M.A.D.R.E. gives it to you once you scratch a record on the music player (the note button, next to your portrait).' },
   },
   cerillos: {
     nombre: { es: 'Cerillos', en: 'Matches' },
-    es: 'Se la regaló su novia y Skulley la guardó como un tesoro. Solo usó un cerillo: el que ves quemado.',
-    en: 'His girlfriend gave it to him and Skulley kept it like a treasure. He only ever used one match: the burnt one.',
-    pista: { es: 'Argus no se los da a cualquiera: solo a alguien que no le tenga miedo al fuego. Por ahí hay un caminito de pétalos que nadie se atreve a tocar.', en: 'Argus won\'t give them to just anybody: only to someone who isn\'t scared of fire. There\'s a little trail of petals out there nobody dares to touch.' },
+    es: 'Esta caja se la regaló su novia y Skulley la guardó como un tesoro. Solo usó un cerillo: el que ves quemado.',
+    en: 'His girlfriend gave him this box and Skulley kept it like a treasure. He only ever used one match: the burnt one.',
+    pista: { es: 'Argus te los da cuando quemes unos 30 pétalos de cempasúchil con tu bola de fuego.', en: 'Argus gives them to you once you burn about 30 marigold petals with your fireball.' },
   },
   almohada: {
     nombre: { es: 'Almohada', en: 'Pillow' },
     es: 'Donde Skulley soñaba. Muchas de sus mejores ideas llegaron justo antes de quedarse dormido.',
     en: 'Where Skulley dreamed. Many of his best ideas showed up right before he fell asleep.',
-    pista: { es: 'Argus la guarda para quien juegue en serio: una partida de cuatro cifras, no menos.', en: 'Argus keeps it for someone who plays for real: a four-digit game, nothing less.' },
+    pista: { es: 'Argus te la da cuando hagas mil puntos en una partida del juego de las esferas.', en: 'Argus gives it to you once you score a thousand points in one game of spheres.' },
   },
 }
 
