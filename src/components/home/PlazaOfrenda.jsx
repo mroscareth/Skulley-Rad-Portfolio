@@ -11,7 +11,6 @@ import { wallpaperEstado } from '../../lib/wallpaperEscritorio.js'
 import { cine } from '../../lib/cinematicaOfrenda.js'
 import { crearUniformContorno, medirContorno } from '../../lib/contornoPantalla.js'
 import { materialContorno, normalesSuaves } from './ObjetosOfrenda.jsx'
-import { ponerLuzPiso } from '../../lib/pisoPintado.js'
 
 // La plaza de la ofrenda: su oscuridad, sus rayos de luz y sus antorchas. Las
 // estelas con el nombre de cada ofrenda van con el bosque (BosquePintado) y los
@@ -73,8 +72,6 @@ const OSCURO = { empieza: 48, llena: 26, luz: 0.42, ambiente: 0.45, entorno: 0.3
 // en la cinemática del final se oscurece menos: completa, los negros se comían a Skulley y a M.A.D.R.E. en los
 // close ups (Oscar, 2026-11-26)
 const OSCURO_CINE = 0.45
-// La luz de cada antorcha en el piso: radio en metros, fuerza y color (el naranja de su fuego)
-const LUZ_ANTORCHA = { radio: 2.6, fuerza: 0.75, color: new THREE.Color('#ff7a26') }
 
 // Los rayos: de qué altura bajan, cuánto se angosta la punta, cuánto siguen bajo
 // el piso (su orilla de abajo no se ve), dónde se apagan al tocar el piso y el
@@ -434,7 +431,7 @@ export default function PlazaOfrenda({ playerRef, activo = true }) {
     const mc = new THREE.ShaderMaterial({ uniforms: { uEscalaPx: { value: 1 } }, vertexShader: VERT_CHISPA, fragmentShader: FRAG_CHISPA, toneMapped: false })
     const puntos = new THREE.Points(g, mc)
     puntos.frustumCulled = false
-    return { geos, mats, plano, fuegos, colores, tintas, bocas, chispas: { puntos, g, m: mc, vivas: [] }, rayos: armarRayos() }
+    return { geos, mats, plano, fuegos, colores, tintas, chispas: { puntos, g, m: mc, vivas: [] }, rayos: armarRayos() }
   }, [])
 
   useEffect(() => () => {
@@ -467,12 +464,6 @@ export default function PlazaOfrenda({ playerRef, activo = true }) {
       const dprT = state.gl.getPixelRatio()
       for (const t of recursos.tintas) medirContorno(t.grosor, state.camera, state.size, dprT, t.centro, t.alto)
     }
-    // su luz en el piso (pisoPintado.js, casillas 1..6), parpadeando cada una a su ritmo (Oscar, 2026-11-26)
-    recursos.bocas.forEach((b, i) => {
-      const parpadeo = 1 + 0.2 * Math.sin(e.t * 8.3 + i * 1.7) * Math.sin(e.t * 2.9 + i) + 0.1 * Math.sin(e.t * 21.7 + i * 4.1)
-      const tiembla = 0.12 * Math.sin(e.t * 6.1 + i * 2.3)
-      ponerLuzPiso(1 + i, b.x + tiembla, b.z + 0.1 * Math.sin(e.t * 5.3 + i), LUZ_ANTORCHA.radio * (0.92 + 0.08 * parpadeo), cerca ? LUZ_ANTORCHA.fuerza * parpadeo : 0, LUZ_ANTORCHA.color)
-    })
     // La oscuridad de la plaza (en Customize no: ahí la escena es la foto).
     const d = distanciaOfrenda()
     const metaOscuro = wallpaperEstado.fase === 'off'
