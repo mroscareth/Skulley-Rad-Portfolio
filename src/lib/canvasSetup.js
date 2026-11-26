@@ -34,6 +34,14 @@ export function computeCanvasDpr({ degradedMode, isMobilePerf, escala = 1 }) {
   return escala < 1 ? Math.max(0.5, top * escala) : [1, top]
 }
 
+// El DPR del home sin bajar de escalón (lo que da `[1, top]` arriba). La trama de puntos de PostFX mide
+// contra él para verse igual en cualquier escalón: el primer DPR que veía podía ser ya uno bajo, porque el
+// escalón se guarda en la pestaña, y entonces los puntos salían más grandes (Oscar, 2026-11-26).
+export function dprNormal() {
+  const deviceDpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1
+  return Math.max(1, Math.min(deviceDpr, 2))
+}
+
 // Defaults seguros para getContextAttributes() cuando el contexto está
 // perdido. Por spec WebGL, un contexto perdido devuelve null en
 // getContextAttributes() — estos valores son los que Chrome/Firefox usan

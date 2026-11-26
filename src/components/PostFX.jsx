@@ -11,7 +11,7 @@ import { skinLineColor } from '../lib/skinShaders.js'
 import EdgeInkEffect from './fx/EdgeInkEffect.jsx'
 import { useTrama } from './fx/TramaEffect.jsx'
 import { wallpaperEstado } from '../lib/wallpaperEscritorio.js'
-import { hardenContextAttributes } from '../lib/canvasSetup.js'
+import { hardenContextAttributes, dprNormal } from '../lib/canvasSetup.js'
 
 // La burbuja nítida de la profundidad de campo (ver PostFX): el círculo de confusión
 // por la distancia en 3D al foco, con una zona sin desenfoque. Lo que trae profundidad 0
@@ -223,19 +223,14 @@ export default function PostFX({
       return false
     }
   }, [ctxOk, gl])
-  // Keep DotScreen pattern stable when DPR changes (e.g. on click/interact).
-  // If DPR drops, compensate halftone scale with baseDpr/currentDpr.
+  // La trama de puntos mide en pixeles del buffer: con la resolución adaptable abajo se veía más grande.
+  // Se compensa contra el DPR del home sin bajar de escalón (dprNormal), así mide lo mismo en pantalla en
+  // cualquier escalón. Antes la base era el primer DPR que veía, que podía ser ya uno bajo (el escalón se
+  // guarda en la pestaña) y entonces no compensaba nada (Oscar, 2026-11-26).
   const currentDpr = useThree((s) => (s?.viewport?.dpr ?? 1))
-  const baseDprRef = useRef(null)
-  useEffect(() => {
-    if (baseDprRef.current == null && typeof currentDpr === 'number' && currentDpr > 0) {
-      baseDprRef.current = currentDpr
-    }
-  }, [currentDpr])
   const dotDprFactor = useMemo(() => {
-    const base = (typeof baseDprRef.current === 'number' && baseDprRef.current > 0) ? baseDprRef.current : (currentDpr || 1)
     const cur = (typeof currentDpr === 'number' && currentDpr > 0) ? currentDpr : 1
-    return base / cur
+    return dprNormal() / cur
   }, [currentDpr])
 
   const blendMap = useMemo(
