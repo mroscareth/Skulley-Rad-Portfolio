@@ -9,9 +9,10 @@ import { useGlitchRunas } from './useGlitchRunas.js'
 const RESPONDE = 'a,button,input,textarea,select,label,summary,[role="button"],[role="dialog"],[contenteditable="true"]'
 
 // Al pararse en un portal el marquee entra en runas y, ya leído, se glitchea solo a letras y regresa
-// (Oscar, 2026-11-25: "que el usuario vea el efecto y alcance a ver runas"). Cuenta desde que llega al
-// portal: el marquee tarda ~450 ms en entrar, así que las runas se ven completas ~1.3 s.
-export const AUTO_GLITCH_MS = 1750
+// (Oscar, 2026-11-25: "que el usuario vea el efecto y alcance a ver runas", y luego "que cambien más
+// rápido al principio"). Cuenta desde que llega al portal: el marquee tarda ~450 ms en entrar, así que
+// las runas se ven completas ~0.6 s.
+export const AUTO_GLITCH_MS = 1050
 
 /**
  * Devuelve la fase del glitch (null = runas). Un marquee que no deba glitchear
